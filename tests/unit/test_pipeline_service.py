@@ -131,6 +131,25 @@ def test_service_contextualizes_follow_up_query(mock_run):
     assert qa.trace.expanded_query == routed_query
 
 
+@patch("agentic_graph_rag.service.agent_run")
+def test_service_expands_medical_aliases_at_query_entry(mock_run):
+    current_qa = _mock_qa()
+    current_qa.trace = PipelineTrace(trace_id="tr_alias", timestamp="T", query="placeholder")
+    mock_run.return_value = current_qa
+
+    from agentic_graph_rag.service import PipelineService
+
+    svc = PipelineService(driver=MagicMock(), openai_client=MagicMock())
+    qa = svc.query("2型糖尿病的诊断标准是什么？")
+
+    routed_query = mock_run.call_args.args[0]
+    assert "Medical aliases:" in routed_query
+    assert "T2DM" in routed_query
+    assert "Type 2 Diabetes Mellitus" in routed_query
+    assert qa.query == "2型糖尿病的诊断标准是什么？"
+    assert qa.expanded_query == routed_query
+
+
 def test_service_health():
     from agentic_graph_rag.service import PipelineService
 

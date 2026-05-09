@@ -19,6 +19,7 @@ from rag_core.models import (
 from agentic_graph_rag.agent import tools as agent_tools
 from agentic_graph_rag.agent.retrieval_agent import run as agent_run
 from agentic_graph_rag.agent.tool_registry import TOOL_NAMES
+from agentic_graph_rag.medical_aliases import expand_medical_aliases
 from agentic_graph_rag.trace_store import TraceStore, create_trace_store
 
 if TYPE_CHECKING:
@@ -95,7 +96,7 @@ class PipelineService:
             reflection_history_seed,
             recent_turns,
         ) = self._load_session_context(session_id)
-        effective_text = self._contextualize_query(text, recent_turns)
+        effective_text = expand_medical_aliases(self._contextualize_query(text, recent_turns))
         if effective_text != text:
             workflow_memory_seed = list(workflow_memory_seed)
             workflow_memory_seed.append(
