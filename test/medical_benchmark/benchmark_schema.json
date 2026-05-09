@@ -13,43 +13,62 @@
   "retrieval_modes": {
     "vector_search": {
       "description": "基于语义向量的相似度检索",
-      "适用场景": ["simple", "部分relation"],
+      "适用场景": [
+        "simple",
+        "部分relation"
+      ],
       "优势": "语义理解能力强，召回率高",
       "劣势": "精确数值匹配弱，多跳推理能力不足"
     },
     "bm25_search": {
       "description": "基于关键词的BM25检索",
-      "适用场景": ["simple", "精确数值查询"],
+      "适用场景": [
+        "simple",
+        "精确数值查询"
+      ],
       "优势": "关键词精确匹配，数值查询准确",
       "劣势": "语义理解弱，同义词召回差"
     },
     "cypher_traverse": {
       "description": "基于知识图谱的关系遍历",
-      "适用场景": ["relation", "multi_hop"],
+      "适用场景": [
+        "relation",
+        "multi_hop"
+      ],
       "优势": "关系推理能力强，多跳查询准确",
       "劣势": "依赖图谱质量，冷启动困难"
     },
     "hybrid_search": {
       "description": "向量+图谱混合检索",
-      "适用场景": ["multi_hop", "复杂relation"],
+      "适用场景": [
+        "multi_hop",
+        "复杂relation"
+      ],
       "优势": "综合语义和结构信息",
       "劣势": "融合策略复杂，性能开销大"
     },
     "comprehensive_search": {
       "description": "扩大检索范围的全面搜索",
-      "适用场景": ["首次检索不足时的补救"],
+      "适用场景": [
+        "首次检索不足时的补救"
+      ],
       "优势": "召回率最高",
       "劣势": "精确度可能下降，延迟增加"
     },
     "temporal_query": {
       "description": "时序相关的检索",
-      "适用场景": ["temporal"],
+      "适用场景": [
+        "temporal"
+      ],
       "优势": "时间点精确匹配",
       "劣势": "需要时间信息标注"
     },
     "full_document_read": {
       "description": "读取完整文档",
-      "适用场景": ["global", "需要完整列表"],
+      "适用场景": [
+        "global",
+        "需要完整列表"
+      ],
       "优势": "信息完整性最高",
       "劣势": "延迟最高，token消耗大"
     }
@@ -78,16 +97,17 @@
     "self_correction_trigger_rate": {
       "definition": "自纠循环触发的比例",
       "calculation": "触发自纠的问题数 / 总问题数",
-      "expected_range": [0.1, 0.3]
+      "expected_range": [
+        0.1,
+        0.3
+      ]
     },
     "self_correction_success_rate": {
       "definition": "自纠循环成功救回的比例",
       "calculation": "自纠后正确数 / 触发自纠总数",
       "pass_threshold": 0.6
     }
-  }
-}
-,
+  },
   "failure_patterns": {
     "vector_search_failures": [
       {
@@ -149,42 +169,82 @@
   "test_scenarios": {
     "scenario_1_simple_fact": {
       "description": "简单事实查询",
-      "questions": ["Q001", "Q003", "Q007", "Q009", "Q010", "Q013", "Q014", "Q015", "Q018", "Q023"],
+      "questions": [
+        "Q001",
+        "Q003",
+        "Q007",
+        "Q009",
+        "Q010",
+        "Q013",
+        "Q014",
+        "Q015",
+        "Q018",
+        "Q023"
+      ],
       "expected_best_mode": "vector_search",
       "expected_worst_mode": "cypher_traverse",
       "success_criteria": "vector和bm25准确率>95%"
     },
     "scenario_2_relation": {
       "description": "关系查询",
-      "questions": ["Q002", "Q005", "Q011", "Q012", "Q019", "Q020", "Q021", "Q022"],
+      "questions": [
+        "Q002",
+        "Q005",
+        "Q011",
+        "Q012",
+        "Q019",
+        "Q020",
+        "Q021",
+        "Q022"
+      ],
       "expected_best_mode": "hybrid_search",
       "expected_worst_mode": "bm25_search",
       "success_criteria": "hybrid和cypher准确率>85%"
     },
     "scenario_3_multi_hop": {
       "description": "多跳推理",
-      "questions": ["Q004", "Q006", "Q008", "Q016", "Q025", "Q026", "Q027", "Q028"],
+      "questions": [
+        "Q004",
+        "Q006",
+        "Q008",
+        "Q016",
+        "Q025",
+        "Q026",
+        "Q027",
+        "Q028"
+      ],
       "expected_best_mode": "hybrid_search",
       "expected_worst_mode": "vector_search",
       "success_criteria": "hybrid准确率>75%，需要显式推理链"
     },
     "scenario_4_global": {
       "description": "全局总结",
-      "questions": ["Q017", "Q024", "Q030"],
+      "questions": [
+        "Q017",
+        "Q024",
+        "Q030"
+      ],
       "expected_best_mode": "full_document_read",
       "expected_worst_mode": "vector_search",
       "success_criteria": "full_read准确率>90%，信息完整性100%"
     },
     "scenario_5_temporal": {
       "description": "时序查询",
-      "questions": ["Q029"],
+      "questions": [
+        "Q029"
+      ],
       "expected_best_mode": "temporal_query",
       "expected_worst_mode": "vector_search",
       "success_criteria": "temporal准确率>80%"
     },
     "scenario_6_self_correction": {
       "description": "测试自纠循环",
-      "questions": ["Q002", "Q006", "Q025", "Q026"],
+      "questions": [
+        "Q002",
+        "Q006",
+        "Q025",
+        "Q026"
+      ],
       "test_method": "首次使用vector_search（预期失败），观察是否自动升级到hybrid/comprehensive",
       "success_criteria": "自纠后准确率提升>30%"
     }

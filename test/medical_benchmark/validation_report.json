@@ -89,30 +89,11 @@
       "question_id": "q_001_18",
       "validation_status": "pass",
       "validation_notes": "证据充分，药代动力学特性都在文档中，因果推理合理"
-    }
-  ],
-  "rejected_questions": [
-    {
-      "question_id": "q_001_19",
-      "reject_reason": "答案依赖外部推理，文档未明确说明GOLD 2级到3级的治疗升级路径，需要用户自行推断",
-      "suggested_fix": "改为直接对比GOLD 2级和3级在特定条件下的方案差异，不要求推断'升级'逻辑"
     },
-    {
-      "question_id": "q_001_20",
-      "reject_reason": "答案中'疾病恶化'是临床推断而非文档明确陈述，依赖外部医学常识"
-    }
-  ]
-}
-,
     {
       "question_id": "q_001_21",
       "validation_status": "pass",
       "validation_notes": "证据充分，需要判断GOLD分级（25%<30%→GOLD 4级），然后匹配表格，推理链完整"
-    },
-    {
-      "question_id": "q_001_22",
-      "reject_reason": "LABA的起效时间在文档中未提及，答案不完整，无法完全由文档证据支持",
-      "suggested_fix": "删除或改为只对比SABA和LAMA"
     },
     {
       "question_id": "q_001_23",
@@ -125,11 +106,6 @@
       "validation_notes": "证据充分，所有药物及其分类都在文档中"
     },
     {
-      "question_id": "q_001_25",
-      "reject_reason": "问题类型标注为global，但实际上是simple题，单段即可回答，expected_best_route应为vector或bm25而非full_document",
-      "suggested_fix": "改为simple类型，或增加问题复杂度要求汇总更多信息"
-    },
-    {
       "question_id": "q_001_26",
       "validation_status": "pass",
       "validation_notes": "证据充分，表格表头明确列出所有决策因素"
@@ -138,11 +114,6 @@
       "question_id": "q_001_27",
       "validation_status": "pass",
       "validation_notes": "证据充分，mMRC 0-4分完整列表在文档中，趋势推理合理"
-    },
-    {
-      "question_id": "q_001_28",
-      "reject_reason": "答案表述过长且包含推断，文档未明确说明'治疗强度逐步升级'这一概念，依赖外部理解",
-      "suggested_fix": "改为直接列出不同GOLD分级的方案，不要求推断'升级'逻辑"
     },
     {
       "question_id": "q_001_29",
@@ -155,6 +126,32 @@
       "validation_notes": "证据充分，起效时间都在文档中，排序推理合理"
     }
   ],
+  "rejected_questions": [
+    {
+      "question_id": "q_001_19",
+      "reject_reason": "答案依赖外部推理，文档未明确说明GOLD 2级到3级的治疗升级路径，需要用户自行推断",
+      "suggested_fix": "改为直接对比GOLD 2级和3级在特定条件下的方案差异，不要求推断'升级'逻辑"
+    },
+    {
+      "question_id": "q_001_20",
+      "reject_reason": "答案中'疾病恶化'是临床推断而非文档明确陈述，依赖外部医学常识"
+    },
+    {
+      "question_id": "q_001_22",
+      "reject_reason": "LABA的起效时间在文档中未提及，答案不完整，无法完全由文档证据支持",
+      "suggested_fix": "删除或改为只对比SABA和LAMA"
+    },
+    {
+      "question_id": "q_001_25",
+      "reject_reason": "问题类型标注为global，但实际上是simple题，单段即可回答，expected_best_route应为vector或bm25而非full_document",
+      "suggested_fix": "改为simple类型，或增加问题复杂度要求汇总更多信息"
+    },
+    {
+      "question_id": "q_001_28",
+      "reject_reason": "答案表述过长且包含推断，文档未明确说明'治疗强度逐步升级'这一概念，依赖外部理解",
+      "suggested_fix": "改为直接列出不同GOLD分级的方案，不要求推断'升级'逻辑"
+    }
+  ],
   "revision_notes": [
     "global类型问题容易被误标注，部分实际上是simple题，只需单段即可回答",
     "temporal类型问题容易引入外部推断，如'疾病恶化'、'治疗升级'等概念需要医学常识",
@@ -165,8 +162,8 @@
   ],
   "summary_stats": {
     "total_checked": 30,
-    "total_passed": 26,
-    "total_rejected": 4,
+    "total_passed": 25,
+    "total_rejected": 5,
     "reject_by_reason": {
       "依赖外部推理或常识": 3,
       "问题类型标注错误": 1,
