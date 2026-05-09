@@ -14,6 +14,13 @@ data/*.docx
 venv/
 .tmp/
 
+# Local agent / IDE state
+.claude/
+.vscode/
+
+# External benchmark checkout; use scripts to prepare committed medical assets.
+GraphRAG-Benchmark/
+
 # Playwright MCP logs
 .playwright-mcp/
 
@@ -38,3 +45,6 @@ docs/HABR_ARTICLE.md
 # Windows artifacts
 *:Zone.Identifier
 .ace-tool/
+
+# Local command logs
+*.log
