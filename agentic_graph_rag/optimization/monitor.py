@@ -62,7 +62,7 @@ class QueryMonitor:
         try:
             yield ctx
         finally:
-            elapsed = time.monotonic() - start
+            elapsed = max(time.monotonic() - start, 0.0001)
             self.record_query(
                 query_type=query_type,
                 tool_name=tool_name,
