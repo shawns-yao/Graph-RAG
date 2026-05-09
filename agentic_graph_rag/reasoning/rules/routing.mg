@@ -1,33 +1,20 @@
 % Query routing rules — declarative replacement for regex patterns in router.py
 % Keywords map query tokens to categories
 
-% Relation keywords (RU + EN)
-keyword(/relation, "связ").
-keyword(/relation, "отношен").
-keyword(/relation, "соедин").
+% Relation keywords
 keyword(/relation, "relat").
 keyword(/relation, "connect").
 keyword(/relation, "link").
 keyword(/relation, "between").
-keyword(/relation, "между").
 
 % Multi-hop keywords
-keyword(/multi_hop, "цепочк").
-keyword(/multi_hop, "путь").
-keyword(/multi_hop, "сравн").
-keyword(/multi_hop, "через").
 keyword(/multi_hop, "chain").
 keyword(/multi_hop, "path").
 keyword(/multi_hop, "compar").
 keyword(/multi_hop, "through").
 keyword(/multi_hop, "affect").
-keyword(/multi_hop, "влия").
 
 % Global keywords
-keyword(/global, "все").
-keyword(/global, "кажд").
-keyword(/global, "обзор").
-keyword(/global, "список").
 keyword(/global, "all").
 keyword(/global, "every").
 keyword(/global, "overview").
@@ -35,10 +22,6 @@ keyword(/global, "list").
 keyword(/global, "summar").
 
 % Temporal keywords
-keyword(/temporal, "когда").
-keyword(/temporal, "дата").
-keyword(/temporal, "время").
-keyword(/temporal, "истори").
 keyword(/temporal, "when").
 keyword(/temporal, "date").
 keyword(/temporal, "timeline").

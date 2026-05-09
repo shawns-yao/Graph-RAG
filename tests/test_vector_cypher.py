@@ -210,7 +210,9 @@ class TestTraverseGraph:
     @patch("agentic_graph_rag.retrieval.vector_cypher.get_settings")
     def test_uses_settings_max_hops(self, mock_settings):
         cfg = MagicMock()
-        cfg.retrieval.max_hops = 3
+        cfg.retrieval.max_hops = 2
+        cfg.retrieval.graph_cooccurrence_limit = 32
+        cfg.retrieval.graph_passage_limit = 12
         mock_settings.return_value = cfg
 
         driver = _mock_driver()
@@ -228,6 +230,44 @@ class TestTraverseGraph:
 
         traverse_graph(["e1"], driver)
         assert session.run.call_count >= 1
+
+    @patch("agentic_graph_rag.retrieval.vector_cypher.get_settings")
+    def test_traverse_graph_applies_cooccurrence_and_passage_limits(self, mock_settings):
+        cfg = MagicMock()
+        cfg.retrieval.max_hops = 2
+        cfg.retrieval.graph_cooccurrence_limit = 7
+        cfg.retrieval.graph_passage_limit = 5
+        mock_settings.return_value = cfg
+
+        driver = _mock_driver()
+        session = driver.session().__enter__()
+
+        entry_result = MagicMock()
+        entry_result.single.return_value = None
+        session.run.side_effect = [
+            _mock_records([
+                {
+                    "connected_id": "e2",
+                    "connected_name": "Node B",
+                    "connected_type": "Entity",
+                    "src_id": "e1",
+                    "src_name": "Node A",
+                    "rel_type": "RELATED_TO",
+                    "tgt_id": "e2",
+                    "tgt_name": "Node B",
+                }
+            ]),
+            entry_result,
+            _mock_records([]),
+            _mock_records([]),
+        ]
+
+        traverse_graph(["e1"], driver)
+
+        cooccur_call = session.run.call_args_list[2]
+        passage_call = session.run.call_args_list[3]
+        assert cooccur_call.kwargs["cooccurrence_limit"] == 7
+        assert passage_call.kwargs["passage_limit"] == 5
 
 
 # ---------------------------------------------------------------------------

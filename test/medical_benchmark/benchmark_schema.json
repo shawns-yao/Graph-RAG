@@ -1,0 +1,217 @@
+{
+  "evaluation_framework": {
+    "version": "1.0",
+    "purpose": "评估Graph RAG系统在医疗知识检索中的表现",
+    "dimensions": [
+      "retrieval_accuracy",
+      "routing_correctness",
+      "multi_hop_reasoning",
+      "self_correction_effectiveness",
+      "complex_document_handling"
+    ]
+  },
+  "retrieval_modes": {
+    "vector_search": {
+      "description": "基于语义向量的相似度检索",
+      "适用场景": ["simple", "部分relation"],
+      "优势": "语义理解能力强，召回率高",
+      "劣势": "精确数值匹配弱，多跳推理能力不足"
+    },
+    "bm25_search": {
+      "description": "基于关键词的BM25检索",
+      "适用场景": ["simple", "精确数值查询"],
+      "优势": "关键词精确匹配，数值查询准确",
+      "劣势": "语义理解弱，同义词召回差"
+    },
+    "cypher_traverse": {
+      "description": "基于知识图谱的关系遍历",
+      "适用场景": ["relation", "multi_hop"],
+      "优势": "关系推理能力强，多跳查询准确",
+      "劣势": "依赖图谱质量，冷启动困难"
+    },
+    "hybrid_search": {
+      "description": "向量+图谱混合检索",
+      "适用场景": ["multi_hop", "复杂relation"],
+      "优势": "综合语义和结构信息",
+      "劣势": "融合策略复杂，性能开销大"
+    },
+    "comprehensive_search": {
+      "description": "扩大检索范围的全面搜索",
+      "适用场景": ["首次检索不足时的补救"],
+      "优势": "召回率最高",
+      "劣势": "精确度可能下降，延迟增加"
+    },
+    "temporal_query": {
+      "description": "时序相关的检索",
+      "适用场景": ["temporal"],
+      "优势": "时间点精确匹配",
+      "劣势": "需要时间信息标注"
+    },
+    "full_document_read": {
+      "description": "读取完整文档",
+      "适用场景": ["global", "需要完整列表"],
+      "优势": "信息完整性最高",
+      "劣势": "延迟最高，token消耗大"
+    }
+  },
+  "evaluation_metrics": {
+    "retrieval_accuracy": {
+      "definition": "检索结果是否包含正确答案的证据",
+      "calculation": "正确检索数 / 总问题数",
+      "pass_threshold": 0.8
+    },
+    "routing_correctness": {
+      "definition": "路由器是否将问题分配到推荐的检索路径",
+      "calculation": "正确路由数 / 总问题数",
+      "pass_threshold": 0.85
+    },
+    "answer_correctness": {
+      "definition": "生成的答案是否与标准答案一致",
+      "calculation": "使用LLM judge评分（1-5分）",
+      "pass_threshold": 4.0
+    },
+    "multi_hop_success_rate": {
+      "definition": "多跳推理问题的成功率",
+      "calculation": "多跳题正确数 / 多跳题总数",
+      "pass_threshold": 0.75
+    },
+    "self_correction_trigger_rate": {
+      "definition": "自纠循环触发的比例",
+      "calculation": "触发自纠的问题数 / 总问题数",
+      "expected_range": [0.1, 0.3]
+    },
+    "self_correction_success_rate": {
+      "definition": "自纠循环成功救回的比例",
+      "calculation": "自纠后正确数 / 触发自纠总数",
+      "pass_threshold": 0.6
+    }
+  }
+}
+,
+  "failure_patterns": {
+    "vector_search_failures": [
+      {
+        "pattern": "精确数值匹配失败",
+        "example": "Q002: eGFR <30 vs <45的区分",
+        "reason": "语义向量对数值不敏感",
+        "solution": "使用BM25或hybrid"
+      },
+      {
+        "pattern": "多跳推理不足",
+        "example": "Q025: 需要跨段落推理患者数据+药物规范",
+        "reason": "单次检索无法覆盖推理链",
+        "solution": "使用graph或comprehensive"
+      }
+    ],
+    "bm25_failures": [
+      {
+        "pattern": "同义词召回失败",
+        "example": "查询'降压药'无法召回'ACEI'",
+        "reason": "关键词精确匹配，无语义理解",
+        "solution": "使用vector或hybrid"
+      },
+      {
+        "pattern": "长查询性能差",
+        "example": "复杂问句关键词过多导致噪声",
+        "reason": "BM25对查询长度敏感",
+        "solution": "查询改写或使用vector"
+      }
+    ],
+    "graph_failures": [
+      {
+        "pattern": "图谱覆盖不足",
+        "example": "新实体或关系未建模",
+        "reason": "图谱构建不完整",
+        "solution": "fallback到vector"
+      },
+      {
+        "pattern": "单段落即可回答的问题",
+        "example": "Q001: 诊断标准定义",
+        "reason": "图遍历开销大但无必要",
+        "solution": "路由器应识别simple类型"
+      }
+    ],
+    "routing_failures": [
+      {
+        "pattern": "误判问题类型",
+        "example": "将multi_hop误判为simple",
+        "reason": "路由器对复杂度判断不准",
+        "solution": "改进路由规则或使用LLM路由"
+      },
+      {
+        "pattern": "过度保守路由",
+        "example": "simple问题被路由到comprehensive",
+        "reason": "路由器倾向于安全策略",
+        "solution": "调整置信度阈值"
+      }
+    ]
+  },
+  "test_scenarios": {
+    "scenario_1_simple_fact": {
+      "description": "简单事实查询",
+      "questions": ["Q001", "Q003", "Q007", "Q009", "Q010", "Q013", "Q014", "Q015", "Q018", "Q023"],
+      "expected_best_mode": "vector_search",
+      "expected_worst_mode": "cypher_traverse",
+      "success_criteria": "vector和bm25准确率>95%"
+    },
+    "scenario_2_relation": {
+      "description": "关系查询",
+      "questions": ["Q002", "Q005", "Q011", "Q012", "Q019", "Q020", "Q021", "Q022"],
+      "expected_best_mode": "hybrid_search",
+      "expected_worst_mode": "bm25_search",
+      "success_criteria": "hybrid和cypher准确率>85%"
+    },
+    "scenario_3_multi_hop": {
+      "description": "多跳推理",
+      "questions": ["Q004", "Q006", "Q008", "Q016", "Q025", "Q026", "Q027", "Q028"],
+      "expected_best_mode": "hybrid_search",
+      "expected_worst_mode": "vector_search",
+      "success_criteria": "hybrid准确率>75%，需要显式推理链"
+    },
+    "scenario_4_global": {
+      "description": "全局总结",
+      "questions": ["Q017", "Q024", "Q030"],
+      "expected_best_mode": "full_document_read",
+      "expected_worst_mode": "vector_search",
+      "success_criteria": "full_read准确率>90%，信息完整性100%"
+    },
+    "scenario_5_temporal": {
+      "description": "时序查询",
+      "questions": ["Q029"],
+      "expected_best_mode": "temporal_query",
+      "expected_worst_mode": "vector_search",
+      "success_criteria": "temporal准确率>80%"
+    },
+    "scenario_6_self_correction": {
+      "description": "测试自纠循环",
+      "questions": ["Q002", "Q006", "Q025", "Q026"],
+      "test_method": "首次使用vector_search（预期失败），观察是否自动升级到hybrid/comprehensive",
+      "success_criteria": "自纠后准确率提升>30%"
+    }
+  },
+  "distractor_analysis": {
+    "purpose": "测试系统是否被干扰项误导",
+    "high_risk_questions": [
+      {
+        "id": "Q002",
+        "distractor": "eGFR 30-45减量区间",
+        "risk": "可能召回错误的数值阈值"
+      },
+      {
+        "id": "Q011",
+        "distractor": "BMS疗程1个月",
+        "risk": "可能混淆不同支架类型"
+      },
+      {
+        "id": "Q025",
+        "distractor": "eGFR <30禁用（更严格阈值）",
+        "risk": "可能使用错误的禁忌标准"
+      },
+      {
+        "id": "Q027",
+        "distractor": "<50岁阈值不同",
+        "risk": "可能忽略年龄分层"
+      }
+    ]
+  }
+}

@@ -1,0 +1,186 @@
+[
+  {
+    "question_id": "q_001_01",
+    "doc_id": "med_doc_001",
+    "question": "COPD的诊断标准是什么？",
+    "question_type": "simple",
+    "difficulty": "easy",
+    "expected_best_route": "vector",
+    "gold_answer": "使用支气管舒张剂后，FEV1/FVC < 0.70即可确诊COPD。",
+    "gold_evidence": [
+      {
+        "evidence_type": "passage",
+        "section_title": "1. 疾病定义与诊断标准",
+        "evidence_locator": "第1段",
+        "support_snippet": "诊断依据肺功能检查：使用支气管舒张剂后，FEV1/FVC < 0.70即可确诊。"
+      }
+    ],
+    "reasoning_chain": [],
+    "distractors": [],
+    "failure_risk": "低风险",
+    "why_other_routes_may_fail": "bm25也有效，graph无必要"
+  },
+  {
+    "question_id": "q_001_02",
+    "doc_id": "med_doc_001",
+    "question": "GOLD 3级对应的FEV1范围是多少？",
+    "question_type": "simple",
+    "difficulty": "easy",
+    "expected_best_route": "bm25",
+    "gold_answer": "GOLD 3级（重度）对应FEV1为30% ≤ FEV1 < 50%预计值。",
+    "gold_evidence": [
+      {
+        "evidence_type": "passage",
+        "section_title": "1.1 GOLD分级标准",
+        "evidence_locator": "列表第3项",
+        "support_snippet": "GOLD 3级（重度）：30% ≤ FEV1 < 50%预计值"
+      }
+    ],
+    "reasoning_chain": [],
+    "distractors": [
+      "GOLD 2级是50% ≤ FEV1 < 80%",
+      "GOLD 4级是FEV1 < 30%"
+    ],
+    "failure_risk": "中等风险",
+    "why_other_routes_may_fail": "vector可能召回多个GOLD分级，bm25精确匹配更准确"
+  },
+  {
+    "question_id": "q_001_03",
+    "doc_id": "med_doc_001",
+    "question": "CAT评分多少分提示症状负担较重？",
+    "question_type": "simple",
+    "difficulty": "easy",
+    "expected_best_route": "bm25",
+    "gold_answer": "CAT评分≥10分提示症状负担较重。",
+    "gold_evidence": [
+      {
+        "evidence_type": "passage",
+        "section_title": "1.2 症状评估",
+        "evidence_locator": "CAT评分段落",
+        "support_snippet": "CAT评分（COPD评估测试）：总分0-40分，≥10分提示症状负担较重。"
+      }
+    ],
+    "reasoning_chain": [],
+    "distractors": [],
+    "failure_risk": "低风险",
+    "why_other_routes_may_fail": "需要精确数值匹配，bm25最适合"
+  },
+  {
+    "question_id": "q_001_04",
+    "doc_id": "med_doc_001",
+    "question": "沙丁胺醇的起效时间和持续时间分别是多久？",
+    "question_type": "simple",
+    "difficulty": "easy",
+    "expected_best_route": "vector",
+    "gold_answer": "沙丁胺醇起效时间为5-15分钟，持续时间为4-6小时。",
+    "gold_evidence": [
+      {
+        "evidence_type": "passage",
+        "section_title": "2.1 支气管舒张剂",
+        "evidence_locator": "SABA段落",
+        "support_snippet": "起效时间：5-15分钟\n持续时间：4-6小时"
+      }
+    ],
+    "reasoning_chain": [],
+    "distractors": [
+      "LAMA起效时间30-60分钟",
+      "LABA持续时间12-24小时"
+    ],
+    "failure_risk": "中等风险",
+    "why_other_routes_may_fail": "需要同时获取两个时间参数，vector能在同一段落找到"
+  },
+  {
+    "question_id": "q_001_05",
+    "doc_id": "med_doc_001",
+    "question": "mMRC评分3分的具体表现是什么？",
+    "question_type": "simple",
+    "difficulty": "easy",
+    "expected_best_route": "bm25",
+    "gold_answer": "mMRC评分3分表现为平地行走100米或数分钟后需停下来喘气。",
+    "gold_evidence": [
+      {
+        "evidence_type": "passage",
+        "section_title": "1.2 症状评估",
+        "evidence_locator": "mMRC列表",
+        "support_snippet": "3分：平地行走100米或数分钟后需停下来喘气"
+      }
+    ],
+    "reasoning_chain": [],
+    "distractors": [
+      "2分是因呼吸困难而比同龄人走得慢",
+      "4分是不能离开房间"
+    ],
+    "failure_risk": "中等风险",
+    "why_other_routes_may_fail": "需要精确匹配'3分'，bm25最准确"
+  },
+  {
+    "question_id": "q_001_06",
+    "doc_id": "med_doc_001",
+    "question": "噻托溴铵每日使用几次？剂量是多少？",
+    "question_type": "simple",
+    "difficulty": "easy",
+    "expected_best_route": "bm25",
+    "gold_answer": "噻托溴铵18 μg，每日1次。",
+    "gold_evidence": [
+      {
+        "evidence_type": "passage",
+        "section_title": "2.1 支气管舒张剂",
+        "evidence_locator": "LAMA段落",
+        "support_snippet": "噻托溴铵（Tiotropium）：18 μg，每日1次"
+      }
+    ],
+    "reasoning_chain": [],
+    "distractors": [
+      "福莫特罗是每日2次"
+    ],
+    "failure_risk": "低风险",
+    "why_other_routes_may_fail": "精确剂量查询，bm25关键词匹配最佳"
+  },
+  {
+    "question_id": "q_001_07",
+    "doc_id": "med_doc_001",
+    "question": "GOLD 1级患者推荐使用什么治疗方案？",
+    "question_type": "simple",
+    "difficulty": "easy",
+    "expected_best_route": "hybrid",
+    "gold_answer": "GOLD 1级患者推荐SABA按需使用。",
+    "gold_evidence": [
+      {
+        "evidence_type": "table",
+        "section_title": "table_001_1",
+        "evidence_locator": "第1行",
+        "support_snippet": "1级 | 轻 | 0-1次/年 | 任意 | SABA按需"
+      }
+    ],
+    "reasoning_chain": [],
+    "distractors": [
+      "GOLD 2级可用LABA或LAMA"
+    ],
+    "failure_risk": "低风险",
+    "why_other_routes_may_fail": "信息在表格中，hybrid结合表格检索更有效"
+  },
+  {
+    "question_id": "q_001_08",
+    "doc_id": "med_doc_001",
+    "question": "福莫特罗属于哪一类药物？",
+    "question_type": "simple",
+    "difficulty": "easy",
+    "expected_best_route": "vector",
+    "gold_answer": "福莫特罗属于长效β2受体激动剂（LABA）。",
+    "gold_evidence": [
+      {
+        "evidence_type": "passage",
+        "section_title": "2.1 支气管舒张剂",
+        "evidence_locator": "LABA段落",
+        "support_snippet": "长效β2受体激动剂（LABA）：\n- 福莫特罗（Formoterol）"
+      }
+    ],
+    "reasoning_chain": [],
+    "distractors": [
+      "沙丁胺醇是SABA",
+      "噻托溴铵是LAMA"
+    ],
+    "failure_risk": "低风险",
+    "why_other_routes_may_fail": "药物分类查询，vector语义理解有效"
+  }
+]

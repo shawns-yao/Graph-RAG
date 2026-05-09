@@ -1,5 +1,5 @@
 """Tests for trace store backends."""
-from rag_core.models import PipelineTrace
+from rag_core.models import PipelineTrace, WorkflowMemoryEntry
 
 from agentic_graph_rag.trace_store import InMemoryTraceStore, create_trace_store
 
@@ -19,6 +19,45 @@ def test_in_memory_put_and_get():
 def test_in_memory_get_missing():
     store = InMemoryTraceStore()
     assert store.get("nonexistent") is None
+
+
+def test_in_memory_tracks_session_traces_and_memory():
+    store = InMemoryTraceStore()
+    trace_1 = PipelineTrace(
+        trace_id="tr_1",
+        timestamp="T1",
+        query="q1",
+        session_id="sess-1",
+        workflow_memory=[
+            WorkflowMemoryEntry(
+                stage="retrieval",
+                message="vector missed one entity",
+            )
+        ],
+    )
+    trace_2 = PipelineTrace(
+        trace_id="tr_2",
+        timestamp="T2",
+        query="q2",
+        session_id="sess-1",
+        workflow_memory=[
+            WorkflowMemoryEntry(
+                stage="reflection",
+                message="graph path was incomplete",
+            )
+        ],
+    )
+
+    store.put(trace_1)
+    store.put(trace_2)
+
+    traces = store.get_session_traces("sess-1")
+    memory = store.get_session_memory("sess-1")
+    assert [trace.trace_id for trace in traces] == ["tr_1", "tr_2"]
+    assert [entry.message for entry in memory] == [
+        "vector missed one entity",
+        "graph path was incomplete",
+    ]
 
 
 def test_in_memory_eviction():

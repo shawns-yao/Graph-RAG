@@ -8,6 +8,8 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from agentic_graph_rag.trace_explain import explain_trace_payload
+
 if TYPE_CHECKING:
     from agentic_graph_rag.service import PipelineService
 
@@ -19,9 +21,9 @@ def create_mcp_tools(service: PipelineService) -> dict:
     or for direct testing.
     """
 
-    def resolve_intent(query: str, mode: str = "agent_pattern") -> dict:
+    def resolve_intent(query: str, mode: str = "agent_pattern", session_id: str = "") -> dict:
         """Resolve user query via Agentic Graph RAG pipeline."""
-        qa = service.query(query, mode=mode)
+        qa = service.query(query, mode=mode, session_id=session_id)
         return qa.model_dump()
 
     def search_graph(query: str, tool: str = "vector_search") -> dict:
@@ -39,7 +41,7 @@ def create_mcp_tools(service: PipelineService) -> dict:
         trace = service.get_trace(trace_id)
         if trace is None:
             return {"error": f"Trace {trace_id} not found"}
-        return trace.model_dump()
+        return explain_trace_payload(trace)
 
     return {
         "resolve_intent": resolve_intent,
@@ -60,15 +62,16 @@ def mount_mcp(app, service: PipelineService):
         tools = create_mcp_tools(service)
 
         @mcp.tool()
-        def resolve_intent(query: str, mode: str = "agent_pattern") -> dict:
+        def resolve_intent(query: str, mode: str = "agent_pattern", session_id: str = "") -> dict:
             """Resolve user query via Agentic Graph RAG pipeline.
             Returns answer with full provenance trace."""
-            return tools["resolve_intent"](query, mode)
+            return tools["resolve_intent"](query, mode, session_id)
 
         @mcp.tool()
         def search_graph(query: str, tool: str = "vector_search") -> dict:
-            """Search the knowledge graph. Tools: vector_search, cypher_traverse,
-            hybrid_search, comprehensive_search, temporal_query, full_document_read."""
+            """Search the knowledge graph. Tools: vector_search, bm25_search,
+            cypher_traverse, hybrid_search, comprehensive_search, temporal_query,
+            full_document_read."""
             return tools["search_graph"](query, tool)
 
         @mcp.tool()

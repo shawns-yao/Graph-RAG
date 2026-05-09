@@ -25,27 +25,15 @@ class TestClassifyByPatterns:
         assert d.query_type == QueryType.RELATION
         assert d.suggested_tool == "cypher_traverse"
 
-    def test_relation_query_ru(self):
-        d = classify_query_by_patterns("Какая связь между Python и ML?")
-        assert d.query_type == QueryType.RELATION
-
     def test_multi_hop_query(self):
         d = classify_query_by_patterns("Compare Python and Java through their ecosystems")
         assert d.query_type == QueryType.MULTI_HOP
         assert d.suggested_tool == "cypher_traverse"
 
-    def test_multi_hop_chain(self):
-        d = classify_query_by_patterns("Покажи цепочку зависимостей через модули")
-        assert d.query_type == QueryType.MULTI_HOP
-
     def test_global_query(self):
         d = classify_query_by_patterns("Show all entities in the system")
         assert d.query_type == QueryType.GLOBAL
         assert d.suggested_tool == "comprehensive_search"
-
-    def test_global_query_ru(self):
-        d = classify_query_by_patterns("Покажи все сущности")
-        assert d.query_type == QueryType.GLOBAL
 
     def test_temporal_query(self):
         d = classify_query_by_patterns("When was Python created?")
@@ -56,10 +44,6 @@ class TestClassifyByPatterns:
         d = classify_query_by_patterns("What happened in 2024-01?")
         assert d.query_type == QueryType.TEMPORAL
 
-    def test_temporal_query_ru(self):
-        d = classify_query_by_patterns("Когда был создан этот документ?")
-        assert d.query_type == QueryType.TEMPORAL
-
     def test_confidence_increases_with_matches(self):
         d1 = classify_query_by_patterns("relationship")
         d2 = classify_query_by_patterns("relationship between connected entities")
@@ -67,7 +51,7 @@ class TestClassifyByPatterns:
 
     def test_confidence_capped(self):
         d = classify_query_by_patterns(
-            "связь отношения соединяет between link related connected"
+            "relationship link connect between related"
         )
         assert d.confidence <= 0.95
 
@@ -79,6 +63,62 @@ class TestClassifyByPatterns:
     def test_empty_query(self):
         d = classify_query_by_patterns("")
         assert d.query_type == QueryType.SIMPLE
+
+
+# ---------------------------------------------------------------------------
+# classify_query
+# ---------------------------------------------------------------------------
+
+class TestClassifyQueryHardRules:
+    @patch("agentic_graph_rag.agent.router.classify_query_by_llm")
+    def test_hard_rule_prefers_bm25_for_error_codes(self, mock_llm):
+        d = classify_query("ERR-902X on JDK 21", use_llm=True)
+        assert d.query_type == QueryType.SIMPLE
+        assert d.suggested_tool == "bm25_search"
+        assert d.reasoning.startswith("Hard rule:")
+        mock_llm.assert_not_called()
+
+    @patch("agentic_graph_rag.agent.router.classify_query_by_llm")
+    def test_hard_rule_prefers_graph_for_relation_queries(self, mock_llm):
+        d = classify_query("Kafka 和 RabbitMQ 的区别和依赖关系是什么", use_llm=True)
+        assert d.query_type == QueryType.RELATION
+        assert d.suggested_tool == "cypher_traverse"
+        mock_llm.assert_not_called()
+
+    @patch("agentic_graph_rag.agent.router.classify_query_by_llm")
+    def test_hard_rule_relation_beats_lexical_anchor(self, mock_llm):
+        d = classify_query("GOLD 2级患者如果嗜酸性粒细胞≥300/μL且急性加重≥2次/年，应该使用什么方案？", use_llm=True)
+        assert d.query_type == QueryType.RELATION
+        assert d.suggested_tool == "cypher_traverse"
+        mock_llm.assert_not_called()
+
+    @patch("agentic_graph_rag.agent.router.classify_query_by_llm")
+    def test_hard_rule_multihop_beats_lexical_anchor(self, mock_llm):
+        d = classify_query("一个GOLD 2级患者，症状中-重，急性加重≥2次/年，嗜酸性粒细胞80/μL，应该用什么方案？为什么不用含ICS的方案？", use_llm=True)
+        assert d.query_type in {QueryType.RELATION, QueryType.MULTI_HOP}
+        assert d.suggested_tool == "cypher_traverse"
+        mock_llm.assert_not_called()
+
+    @patch("agentic_graph_rag.agent.router.classify_query_by_llm")
+    def test_hard_rule_prefers_comprehensive_for_chinese_global_query(self, mock_llm):
+        d = classify_query("COPD的诊断和分级需要哪些检查指标？这些指标如何使用？", use_llm=True)
+        assert d.query_type == QueryType.GLOBAL
+        assert d.suggested_tool == "comprehensive_search"
+        mock_llm.assert_not_called()
+
+    @patch("agentic_graph_rag.agent.router.classify_query_by_llm")
+    def test_hard_rule_prefers_vector_for_short_factual_query(self, mock_llm):
+        d = classify_query("What causes BCC?", use_llm=True)
+        assert d.query_type == QueryType.SIMPLE
+        assert d.suggested_tool == "vector_search"
+        mock_llm.assert_not_called()
+
+    @patch("agentic_graph_rag.agent.router.classify_query_by_llm")
+    def test_hard_rule_prefers_full_document_for_internal_alias_global_query(self, mock_llm):
+        d = classify_query("describe all decisions for SCL", use_llm=True)
+        assert d.query_type == QueryType.GLOBAL
+        assert d.suggested_tool == "full_document_read"
+        mock_llm.assert_not_called()
 
 
 # ---------------------------------------------------------------------------
@@ -163,6 +203,10 @@ class TestClassifyQuery:
         resp.choices[0].message.content = "temporal"
         client.chat.completions.create.return_value = resp
 
-        d = classify_query("When?", use_llm=True, openai_client=client)
+        d = classify_query(
+            "Explain the internal memory layout behavior in this subsystem",
+            use_llm=True,
+            openai_client=client,
+        )
         assert d.query_type == QueryType.TEMPORAL
         assert d.confidence == 0.85

@@ -34,6 +34,7 @@ class ToolPolicy:
 
 _DEFAULT_TOOL_TIMEOUTS = {
     "vector_search": 10_000,
+    "bm25_search": 10_000,
     "cypher_traverse": 15_000,
     "hybrid_search": 20_000,
     "temporal_query": 15_000,

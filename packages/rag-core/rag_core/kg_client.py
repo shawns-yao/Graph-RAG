@@ -12,6 +12,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from rag_core.config import get_settings
+from rag_core.neo4j_utils import open_neo4j_session
 
 logger = logging.getLogger(__name__)
 
@@ -204,7 +205,7 @@ class KGClient:
         """
 
         facts: list[KGFact] = []
-        with self._driver.session() as session:
+        with open_neo4j_session(self._driver) as session:
             result = session.run(cypher, **params)
             for record in result:
                 fact_text = record["fact"] or f"{record['entity']} -> {record['target']}"
@@ -226,7 +227,7 @@ class KGClient:
         """Count total entities in knowledge graph."""
         if not self._driver:
             return 0
-        with self._driver.session() as session:
+        with open_neo4j_session(self._driver) as session:
             result = session.run(
                 "MATCH (n) WHERE n:Entity OR n:TemporalEvent OR any(l IN labels(n) WHERE l <> 'RagChunk') "
                 "RETURN count(n) AS total"
@@ -238,7 +239,7 @@ class KGClient:
         """Get entities from knowledge graph with COALESCE for Graphiti mismatch."""
         if not self._driver:
             return []
-        with self._driver.session() as session:
+        with open_neo4j_session(self._driver) as session:
             result = session.run(
                 """
                 MATCH (e)
@@ -258,7 +259,7 @@ class KGClient:
         """Get relationships from knowledge graph."""
         if not self._driver:
             return []
-        with self._driver.session() as session:
+        with open_neo4j_session(self._driver) as session:
             result = session.run(
                 """
                 MATCH (s)-[r]->(t)

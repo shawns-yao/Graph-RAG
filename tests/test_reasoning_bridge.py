@@ -104,11 +104,11 @@ class TestReasoningEngine:
         rules_dir.mkdir()
         (rules_dir / "routing.mg").write_text(
             'route_to(/vector_search, Q) :- query_contains(Q, "simple").\n'
-            'route_to(/cypher_traverse, Q) :- query_contains(Q, "связ").\n'
+            'route_to(/cypher_traverse, Q) :- query_contains(Q, "relat").\n'
         )
 
         engine = ReasoningEngine(str(rules_dir))
-        result = engine.classify_query("простой simple запрос")
+        result = engine.classify_query("simple query")
         assert result is not None
         assert result["tool"] == "vector_search"
 

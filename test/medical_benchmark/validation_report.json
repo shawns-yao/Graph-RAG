@@ -1,0 +1,176 @@
+{
+  "validated_questions": [
+    {
+      "question_id": "q_001_01",
+      "validation_status": "pass",
+      "validation_notes": "证据充分，FEV1/FVC < 0.70直接出现在文档中，答案与证据完全一致"
+    },
+    {
+      "question_id": "q_001_02",
+      "validation_status": "pass",
+      "validation_notes": "证据充分，GOLD 3级定义明确，答案准确"
+    },
+    {
+      "question_id": "q_001_03",
+      "validation_status": "pass",
+      "validation_notes": "证据充分，CAT≥10分阈值明确出现在文档中"
+    },
+    {
+      "question_id": "q_001_04",
+      "validation_status": "pass",
+      "validation_notes": "证据充分，沙丁胺醇的两个时间参数都在同一段落中"
+    },
+    {
+      "question_id": "q_001_05",
+      "validation_status": "pass",
+      "validation_notes": "证据充分，mMRC 3分描述准确"
+    },
+    {
+      "question_id": "q_001_06",
+      "validation_status": "pass",
+      "validation_notes": "证据充分，噻托溴铵剂量和频次明确"
+    },
+    {
+      "question_id": "q_001_07",
+      "validation_status": "pass",
+      "validation_notes": "证据充分，表格第1行明确显示GOLD 1级推荐SABA按需"
+    },
+    {
+      "question_id": "q_001_08",
+      "validation_status": "pass",
+      "validation_notes": "证据充分，福莫特罗在LABA段落中明确列出"
+    },
+    {
+      "question_id": "q_001_09",
+      "validation_status": "pass",
+      "validation_notes": "证据充分，表格第4行明确匹配所有条件"
+    },
+    {
+      "question_id": "q_001_10",
+      "validation_status": "pass",
+      "validation_notes": "证据充分，表格第6行明确显示三联方案"
+    },
+    {
+      "question_id": "q_001_11",
+      "validation_status": "pass",
+      "validation_notes": "证据充分，两种药物起效时间都在文档中，对比合理"
+    },
+    {
+      "question_id": "q_001_12",
+      "validation_status": "pass",
+      "validation_notes": "证据充分，key_facts中明确说明嗜酸性粒细胞≥300/μL时考虑ICS"
+    },
+    {
+      "question_id": "q_001_13",
+      "validation_status": "pass",
+      "validation_notes": "证据充分，SABA和LABA持续时间都在文档中"
+    },
+    {
+      "question_id": "q_001_14",
+      "validation_status": "pass",
+      "validation_notes": "证据充分，45%落在30%-50%区间，属于GOLD 3级"
+    },
+    {
+      "question_id": "q_001_15",
+      "validation_status": "pass",
+      "validation_notes": "证据充分，表格前两行明确显示两个级别的治疗差异"
+    },
+    {
+      "question_id": "q_001_16",
+      "validation_status": "pass",
+      "validation_notes": "证据充分，需要数值判断80<100，然后匹配表格第3行，推理链完整"
+    },
+    {
+      "question_id": "q_001_17",
+      "validation_status": "pass",
+      "validation_notes": "证据充分，需要先判断GOLD分级（35%→GOLD 3级），再匹配表格，多跳推理合理"
+    },
+    {
+      "question_id": "q_001_18",
+      "validation_status": "pass",
+      "validation_notes": "证据充分，药代动力学特性都在文档中，因果推理合理"
+    }
+  ],
+  "rejected_questions": [
+    {
+      "question_id": "q_001_19",
+      "reject_reason": "答案依赖外部推理，文档未明确说明GOLD 2级到3级的治疗升级路径，需要用户自行推断",
+      "suggested_fix": "改为直接对比GOLD 2级和3级在特定条件下的方案差异，不要求推断'升级'逻辑"
+    },
+    {
+      "question_id": "q_001_20",
+      "reject_reason": "答案中'疾病恶化'是临床推断而非文档明确陈述，依赖外部医学常识"
+    }
+  ]
+}
+,
+    {
+      "question_id": "q_001_21",
+      "validation_status": "pass",
+      "validation_notes": "证据充分，需要判断GOLD分级（25%<30%→GOLD 4级），然后匹配表格，推理链完整"
+    },
+    {
+      "question_id": "q_001_22",
+      "reject_reason": "LABA的起效时间在文档中未提及，答案不完整，无法完全由文档证据支持",
+      "suggested_fix": "删除或改为只对比SABA和LAMA"
+    },
+    {
+      "question_id": "q_001_23",
+      "validation_status": "pass",
+      "validation_notes": "证据充分，所有指标及其用途都在文档中明确说明"
+    },
+    {
+      "question_id": "q_001_24",
+      "validation_status": "pass",
+      "validation_notes": "证据充分，所有药物及其分类都在文档中"
+    },
+    {
+      "question_id": "q_001_25",
+      "reject_reason": "问题类型标注为global，但实际上是simple题，单段即可回答，expected_best_route应为vector或bm25而非full_document",
+      "suggested_fix": "改为simple类型，或增加问题复杂度要求汇总更多信息"
+    },
+    {
+      "question_id": "q_001_26",
+      "validation_status": "pass",
+      "validation_notes": "证据充分，表格表头明确列出所有决策因素"
+    },
+    {
+      "question_id": "q_001_27",
+      "validation_status": "pass",
+      "validation_notes": "证据充分，mMRC 0-4分完整列表在文档中，趋势推理合理"
+    },
+    {
+      "question_id": "q_001_28",
+      "reject_reason": "答案表述过长且包含推断，文档未明确说明'治疗强度逐步升级'这一概念，依赖外部理解",
+      "suggested_fix": "改为直接列出不同GOLD分级的方案，不要求推断'升级'逻辑"
+    },
+    {
+      "question_id": "q_001_29",
+      "validation_status": "pass",
+      "validation_notes": "证据充分，FEV1范围明确，数值计算合理"
+    },
+    {
+      "question_id": "q_001_30",
+      "validation_status": "pass",
+      "validation_notes": "证据充分，起效时间都在文档中，排序推理合理"
+    }
+  ],
+  "revision_notes": [
+    "global类型问题容易被误标注，部分实际上是simple题，只需单段即可回答",
+    "temporal类型问题容易引入外部推断，如'疾病恶化'、'治疗升级'等概念需要医学常识",
+    "multi_hop类型问题中，部分答案依赖文档未明确提及的信息（如LABA起效时间）",
+    "expected_best_route标注需要更严格，global题不一定都需要full_document",
+    "答案表述应简洁明确，避免过长或含糊的表达",
+    "因果推理类问题需要确保因果关系在文档中有明确支持，不能依赖常识"
+  ],
+  "summary_stats": {
+    "total_checked": 30,
+    "total_passed": 26,
+    "total_rejected": 4,
+    "reject_by_reason": {
+      "依赖外部推理或常识": 3,
+      "问题类型标注错误": 1,
+      "证据不完整": 1
+    }
+  }
+}

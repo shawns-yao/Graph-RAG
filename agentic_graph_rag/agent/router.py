@@ -13,51 +13,27 @@ from typing import TYPE_CHECKING
 from rag_core.config import get_settings, make_openai_client
 from rag_core.models import QueryType, RouterDecision
 
+from agentic_graph_rag.agent.tool_registry import DEFAULT_TOOL_BY_QUERY_TYPE, QUERY_TYPE_BY_TOOL
+from agentic_graph_rag.agent.routing_rules import (
+    GLOBAL_PATTERNS,
+    GLOBAL_QUERY_KEYWORDS,
+    INTERNAL_ALIAS_CONCEPT_PATTERN,
+    INTERNAL_ALIAS_GLOBAL_PATTERN,
+    LEXICAL_PRIORITY_PATTERN,
+    LONG_QUERY_TOKEN_LIMIT,
+    MULTI_HOP_PATTERNS,
+    RELATION_PATTERNS,
+    RELATION_QUERY_KEYWORDS,
+    SHORT_QUERY_TOKEN_LIMIT,
+    TEMPORAL_PATTERNS,
+)
+
 if TYPE_CHECKING:
     from openai import OpenAI
 
     from agentic_graph_rag.reasoning.reasoning_engine import ReasoningEngine
 
 logger = logging.getLogger(__name__)
-
-# ---------------------------------------------------------------------------
-# Pattern-based classification rules
-# ---------------------------------------------------------------------------
-
-_RELATION_PATTERNS = [
-    r"\bсвяз\w*\b", r"\bотношен\w*\b", r"\bсоедин\w*\b",
-    r"\brelat\w*\b", r"\bconnect\w*\b", r"\blink\w*\b",
-    r"\bbetween\b", r"\bмежду\b",
-]
-
-_MULTI_HOP_PATTERNS = [
-    r"\bцепочк\w*\b", r"\bпуть\b", r"\bсравн\w*\b", r"\bчерез\b",
-    r"\bchain\b", r"\bpath\b", r"\bcompar\w*\b", r"\bthrough\b",
-    r"\bhow .+ affect\b", r"\bкак .+ влия\w*\b",
-]
-
-_GLOBAL_PATTERNS = [
-    r"\bвсе\b", r"\bкажд\w*\b", r"\bобзор\b", r"\bсписок\b",
-    r"\ball\b", r"\bevery\b", r"\boverview\b", r"\blist\b", r"\bsummar\w*\b",
-    r"\bпокажи все\b", r"\bshow all\b",
-]
-
-_TEMPORAL_PATTERNS = [
-    r"\bкогда\b", r"\bдата\b", r"\bвремя\b", r"\bисторi?\w*\b",
-    r"\bwhen\b", r"\bdate\b", r"\btime\w*\b", r"\bhistor\w*\b",
-    r"\bbefore\b", r"\bafter\b", r"\bдо\b", r"\bпосле\b",
-    r"\b\d{4}[-/]\d{2}\b",  # date pattern YYYY-MM
-]
-
-# Tool mapping per query type
-_TOOL_MAP: dict[QueryType, str] = {
-    QueryType.SIMPLE: "vector_search",
-    QueryType.RELATION: "cypher_traverse",
-    QueryType.MULTI_HOP: "cypher_traverse",
-    QueryType.GLOBAL: "comprehensive_search",
-    QueryType.TEMPORAL: "temporal_query",
-}
-
 
 def _match_patterns(query: str, patterns: list[str]) -> int:
     """Count how many patterns match in the query."""
@@ -66,6 +42,111 @@ def _match_patterns(query: str, patterns: list[str]) -> int:
         if re.search(pat, query, re.IGNORECASE):
             count += 1
     return count
+
+
+def _normalized_query_tokens(query: str) -> list[str]:
+    """Tokenize user text with a lightweight, deterministic heuristic."""
+    return [token for token in re.split(r"\s+", query.casefold().strip()) if token]
+
+
+def _looks_like_medical_decision_query(query: str) -> bool:
+    """Detect condition-heavy medical treatment selection questions."""
+    lowered = query.casefold()
+    has_decision_intent = any(
+        phrase in lowered
+        for phrase in (
+            "什么方案",
+            "推荐什么",
+            "应该使用",
+            "应该用什么",
+            "治疗方案",
+            "recommended",
+            "which regimen",
+            "which treatment",
+        )
+    )
+    has_condition = any(
+        token in query
+        for token in ("如果", "且", "并且", "≥", "≤", "<", ">", "/μl", "次/年")
+    ) or bool(re.search(r"\b\d+(?:\.\d+)?\b", query))
+    return has_decision_intent and has_condition
+
+
+def _hard_rule_decision(query: str) -> RouterDecision | None:
+    """Apply deterministic routing rules before Mangle/LLM fallback."""
+    lowered_query = query.casefold()
+    normalized_tokens = _normalized_query_tokens(query)
+    relation_keyword_hit = any(keyword in lowered_query for keyword in RELATION_QUERY_KEYWORDS)
+    global_keyword_hit = any(keyword in lowered_query for keyword in GLOBAL_QUERY_KEYWORDS)
+    relation_pattern_hits = _match_patterns(query, RELATION_PATTERNS)
+    multi_hop_pattern_hits = _match_patterns(query, MULTI_HOP_PATTERNS)
+    global_pattern_hits = _match_patterns(query, GLOBAL_PATTERNS)
+
+    if (
+        INTERNAL_ALIAS_CONCEPT_PATTERN.search(query)
+        and INTERNAL_ALIAS_GLOBAL_PATTERN.search(query)
+    ):
+        return RouterDecision(
+            query_type=QueryType.GLOBAL,
+            confidence=0.99,
+            reasoning="Hard rule: internal alias coverage requires full document recall.",
+            suggested_tool="full_document_read",
+        )
+
+    if global_keyword_hit or global_pattern_hits > 0:
+        return RouterDecision(
+            query_type=QueryType.GLOBAL,
+            confidence=0.9,
+            reasoning="Hard rule: global summary intent detected, prefer comprehensive retrieval.",
+            suggested_tool="comprehensive_search",
+        )
+
+    if relation_keyword_hit or multi_hop_pattern_hits > 0 or relation_pattern_hits > 0 or _looks_like_medical_decision_query(query):
+        query_type = QueryType.MULTI_HOP if multi_hop_pattern_hits > 0 else QueryType.RELATION
+        return RouterDecision(
+            query_type=query_type,
+            confidence=0.96 if query_type == QueryType.RELATION else 0.94,
+            reasoning=(
+                "Hard rule: relation keyword detected, prefer graph traversal."
+                if query_type == QueryType.RELATION
+                else "Hard rule: multi-hop reasoning cue detected, prefer graph traversal."
+            ),
+            suggested_tool="cypher_traverse",
+        )
+
+    if LEXICAL_PRIORITY_PATTERN.search(query) and len(normalized_tokens) <= SHORT_QUERY_TOKEN_LIMIT:
+        return RouterDecision(
+            query_type=QueryType.SIMPLE,
+            confidence=0.98,
+            reasoning="Hard rule: lexical anchor detected, prefer BM25 retrieval.",
+            suggested_tool="bm25_search",
+        )
+
+    if _match_patterns(query, TEMPORAL_PATTERNS) > 0:
+        return RouterDecision(
+            query_type=QueryType.TEMPORAL,
+            confidence=0.94,
+            reasoning="Hard rule: temporal anchor detected, prefer temporal retrieval.",
+            suggested_tool="temporal_query",
+        )
+
+    if normalized_tokens and len(normalized_tokens) <= SHORT_QUERY_TOKEN_LIMIT:
+        return RouterDecision(
+            query_type=QueryType.SIMPLE,
+            confidence=0.84,
+            reasoning="Hard rule: short factual query detected, prefer vector retrieval first.",
+            suggested_tool="vector_search",
+        )
+
+    if len(normalized_tokens) >= LONG_QUERY_TOKEN_LIMIT:
+        return RouterDecision(
+            query_type=QueryType.GLOBAL,
+            confidence=0.82,
+            reasoning="Hard rule: long query detected, prefer comprehensive retrieval.",
+            suggested_tool="comprehensive_search",
+        )
+
+    return None
 
 
 # ---------------------------------------------------------------------------
@@ -78,10 +159,10 @@ def classify_query_by_patterns(query: str) -> RouterDecision:
     Returns RouterDecision with confidence based on match count.
     """
     scores: dict[QueryType, int] = {
-        QueryType.TEMPORAL: _match_patterns(query, _TEMPORAL_PATTERNS),
-        QueryType.MULTI_HOP: _match_patterns(query, _MULTI_HOP_PATTERNS),
-        QueryType.RELATION: _match_patterns(query, _RELATION_PATTERNS),
-        QueryType.GLOBAL: _match_patterns(query, _GLOBAL_PATTERNS),
+        QueryType.TEMPORAL: _match_patterns(query, TEMPORAL_PATTERNS),
+        QueryType.MULTI_HOP: _match_patterns(query, MULTI_HOP_PATTERNS),
+        QueryType.RELATION: _match_patterns(query, RELATION_PATTERNS),
+        QueryType.GLOBAL: _match_patterns(query, GLOBAL_PATTERNS),
     }
 
     best_type = max(scores, key=lambda k: scores[k])
@@ -90,7 +171,7 @@ def classify_query_by_patterns(query: str) -> RouterDecision:
     if best_count == 0:
         query_type = QueryType.SIMPLE
         confidence = 0.5
-        reasoning = "No specific patterns matched; defaulting to simple vector search."
+        reasoning = "No specific patterns matched; defaulting to vector retrieval first."
     else:
         query_type = best_type
         confidence = min(0.5 + best_count * 0.2, 0.95)
@@ -100,7 +181,7 @@ def classify_query_by_patterns(query: str) -> RouterDecision:
         query_type=query_type,
         confidence=confidence,
         reasoning=reasoning,
-        suggested_tool=_TOOL_MAP[query_type],
+        suggested_tool=DEFAULT_TOOL_BY_QUERY_TYPE[query_type],
     )
 
 
@@ -149,7 +230,7 @@ def classify_query_by_llm(
             query_type=query_type,
             confidence=0.85,
             reasoning=f"LLM classified as '{raw}'.",
-            suggested_tool=_TOOL_MAP[query_type],
+            suggested_tool=DEFAULT_TOOL_BY_QUERY_TYPE[query_type],
         )
 
     except Exception as e:
@@ -161,15 +242,6 @@ def classify_query_by_llm(
 # Mangle-based classification
 # ---------------------------------------------------------------------------
 
-_MANGLE_TOOL_TO_TYPE: dict[str, QueryType] = {
-    "vector_search": QueryType.SIMPLE,
-    "cypher_traverse": QueryType.RELATION,
-    "comprehensive_search": QueryType.GLOBAL,
-    "full_document_read": QueryType.GLOBAL,
-    "temporal_query": QueryType.TEMPORAL,
-}
-
-
 def _classify_by_mangle(query: str, reasoning: ReasoningEngine) -> RouterDecision | None:
     """Attempt classification via Mangle rules. Returns None if no match."""
     result = reasoning.classify_query(query)
@@ -177,7 +249,7 @@ def _classify_by_mangle(query: str, reasoning: ReasoningEngine) -> RouterDecisio
         return None
 
     tool = result["tool"]
-    query_type = _MANGLE_TOOL_TO_TYPE.get(tool, QueryType.SIMPLE)
+    query_type = QUERY_TYPE_BY_TOOL.get(tool, QueryType.SIMPLE)
 
     return RouterDecision(
         query_type=query_type,
@@ -202,6 +274,10 @@ def classify_query(
     When a ReasoningEngine is provided, Mangle rules are tried first.
     Falls back to patterns (or LLM) if Mangle produces no match.
     """
+    hard_rule_result = _hard_rule_decision(query)
+    if hard_rule_result is not None:
+        return hard_rule_result
+
     if reasoning is not None:
         mangle_result = _classify_by_mangle(query, reasoning)
         if mangle_result is not None:

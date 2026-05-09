@@ -49,7 +49,7 @@ RETRIEVAL PIPELINE:
   Query → Router (3-tier cascade: Mangle 0.7 → LLM 0.85 → Pattern 0.5)
         → Tool Selection (7 tools: vector, cypher, community, hybrid,
                           temporal, comprehensive, full_document_read)
-        → Self-Correction Loop (relevance eval 1-5, escalation chain)
+        → Self-Correction Loop (reflection verdict → answer / rerank / targeted retry)
         → Graph Verifier (contradiction detection)
         → Generator (GPT-4o synthesis + dynamic confidence + citations)
         → PipelineTrace (full structured provenance)
@@ -142,7 +142,7 @@ v14: 96.7% ────────┘  +3.7pp (semantic judge, cross-language r
 
 1. **Failures are rarely retrieval** — global question failures were generation+evaluation, not retrieval (all keywords found in top-30 chunks)
 2. **CoT judge prompt is dangerous** — telling GPT-4o-mini to "list found keywords → count" caused it to literally search for English strings in Russian text (144→48/180 regression)
-3. **Cross-language routing matters** — RU queries about EN-only concepts (Doc2/SCL) need `full_document_read`, not `vector_search` (which returns Doc1)
+3. **Cross-language routing matters** — RU queries about EN-only concepts (Doc2/SCL) often need direct `full_document_read` routing instead of default local recall tools
 4. **Embedding similarity > keyword matching** for paraphrased enumeration answers (threshold 0.65 correctly discriminates right/wrong content)
 
 ---
@@ -189,11 +189,11 @@ v14: 96.7% ────────┘  +3.7pp (semantic judge, cross-language r
 
 **Problem**: First retrieval attempt may return low-quality results.
 
-**Solution**: Evaluate relevance (1-5 scale via LLM), escalate through tool chain:
+**Solution**: Evaluate relevance (1-5 scale via LLM), then choose among answer / rerank / retry:
 ```
-vector_search → cypher_traverse → hybrid_search → comprehensive_search → full_document_read
+attempt → reflection verdict → answer / rerank / targeted retry
 ```
-Each retry rephrases query via LLM. Best results tracked across all attempts. For GLOBAL queries, completeness check triggers additional retrieval.
+Retry planning is not a single hard-coded linear chain. The implementation combines deterministic query heuristics, reflection-recommended tools/providers, and a fallback matrix per current tool. That allows lighter repairs such as reranking, refreshing only part of `hybrid_search`, or stopping early when reflection keeps asking for already-covered gaps. For top-level `GLOBAL` answers, the workflow currently performs at most one additional `comprehensive_search` augmentation pass when low-confidence evidence suggests the answer is incomplete.
 
 ### 5.6 PyMangle Datalog Engine
 

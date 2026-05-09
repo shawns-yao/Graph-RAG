@@ -1,0 +1,853 @@
+[
+  {
+    "sample_id": "ab_cor_001",
+    "doc_id": "med_doc_001",
+    "class": "self_correction_advantage",
+    "question": "COPD患者嗜酸性粒细胞100多应该用什么药？",
+    "question_type": "relation",
+    "gold_answer": "需要结合GOLD分级：GOLD 3-4级用LABA+LAMA+ICS；GOLD 2级用LABA+LAMA。",
+    "gold_evidence": [
+      {
+        "evidence_type": "table",
+        "section_title": "COPD药物治疗选择矩阵",
+        "support_snippet": "嗜酸性粒细胞≥100/μL时，GOLD 3-4级用三联方案，GOLD 2级用LABA+LAMA"
+      }
+    ],
+    "expected_best_route": "self_correction",
+    "expected_weak_routes": [
+      "vector",
+      "bm25"
+    ],
+    "expected_first_failure": "第一次检索可能只找到'嗜酸性粒细胞≥100/μL'的部分信息，忽略GOLD分级的影响",
+    "expected_recovery_strategy": "发现答案不完整后，扩展检索GOLD分级相关条件，或通过rerank提升表格内容权重",
+    "why_this_is_a_good_ab_test": "问题表面简单但实际需要多个条件，第一次容易遗漏GOLD分级",
+    "distractors": [
+      "嗜酸性粒细胞≥300/μL的方案不同"
+    ],
+    "measurable_signal": [
+      "retrieval_recall_gap",
+      "evidence_coverage_gain",
+      "query_rewrite_gain"
+    ]
+  },
+  {
+    "sample_id": "ab_cor_002",
+    "doc_id": "med_doc_001",
+    "class": "self_correction_advantage",
+    "question": "COPD患者老是急性发作怎么办？",
+    "question_type": "relation",
+    "gold_answer": "需要根据GOLD分级和嗜酸性粒细胞水平选择LABA+LAMA、LABA+ICS或三联方案。",
+    "gold_evidence": [
+      {
+        "evidence_type": "table",
+        "section_title": "COPD药物治疗选择矩阵",
+        "support_snippet": "急性加重≥2次/年时，根据GOLD分级和嗜酸性粒细胞选择不同方案"
+      }
+    ],
+    "expected_best_route": "self_correction",
+    "expected_weak_routes": [
+      "vector"
+    ],
+    "expected_first_failure": "第一次检索可能只找到'急性加重'相关信息，但没有具体治疗方案，或只找到部分方案",
+    "expected_recovery_strategy": "发现答案不完整后，重写查询为'急性加重频繁的治疗方案'，或扩大检索范围到治疗章节",
+    "why_this_is_a_good_ab_test": "问题口语化且不完整，第一次容易召回不相关内容",
+    "distractors": [
+      "0-1次/年的治疗方案不同"
+    ],
+    "measurable_signal": [
+      "query_rewrite_gain",
+      "evidence_coverage_gain"
+    ]
+  },
+  {
+    "sample_id": "ab_cor_003",
+    "doc_id": "med_doc_001",
+    "class": "self_correction_advantage",
+    "question": "FEV1百分之四十几是什么程度？需要怎么治疗？",
+    "question_type": "multi_hop",
+    "gold_answer": "FEV1 40%左右是GOLD 3级（重度），治疗需根据症状负担、急性加重史、嗜酸性粒细胞水平选择LABA+LAMA或三联方案。",
+    "gold_evidence": [
+      {
+        "evidence_type": "passage",
+        "section_title": "1.1 GOLD分级标准",
+        "support_snippet": "GOLD 3级：30% ≤ FEV1 < 50%预计值"
+      },
+      {
+        "evidence_type": "table",
+        "section_title": "COPD药物治疗选择矩阵",
+        "support_snippet": "GOLD 3-4级的治疗方案"
+      }
+    ],
+    "expected_best_route": "self_correction",
+    "expected_weak_routes": [
+      "vector"
+    ],
+    "expected_first_failure": "第一次检索可能只找到GOLD分级定义，没有找到治疗方案",
+    "expected_recovery_strategy": "发现只有分级没有治疗后，追加查询'GOLD 3级治疗方案'",
+    "why_this_is_a_good_ab_test": "问题包含两个子问题，第一次容易只回答第一个",
+    "distractors": [
+      "GOLD 2级的治疗不同"
+    ],
+    "measurable_signal": [
+      "evidence_coverage_gain",
+      "query_rewrite_gain"
+    ]
+  },
+  {
+    "sample_id": "ab_cor_004",
+    "doc_id": "med_doc_001",
+    "class": "self_correction_advantage",
+    "question": "哪种药最适合急救？",
+    "question_type": "simple",
+    "gold_answer": "沙丁胺醇（SABA）最适合急救，起效5-15分钟。",
+    "gold_evidence": [
+      {
+        "evidence_type": "passage",
+        "section_title": "2.1 支气管舒张剂",
+        "support_snippet": "沙丁胺醇起效时间：5-15分钟，按需使用"
+      }
+    ],
+    "expected_best_route": "self_correction",
+    "expected_weak_routes": [
+      "vector"
+    ],
+    "expected_first_failure": "第一次检索可能召回多种药物，但没有明确哪种'最适合急救'",
+    "expected_recovery_strategy": "对比各药物起效时间后，确定起效最快的是SABA",
+    "why_this_is_a_good_ab_test": "问题需要对比推理，第一次可能只列举药物而不做判断",
+    "distractors": [
+      "LAMA起效较慢"
+    ],
+    "measurable_signal": [
+      "evidence_coverage_gain",
+      "rerank_gain"
+    ]
+  },
+  {
+    "sample_id": "ab_cor_005",
+    "doc_id": "med_doc_001",
+    "class": "self_correction_advantage",
+    "question": "COPD确诊需要做什么检查？",
+    "question_type": "simple",
+    "gold_answer": "需要做肺功能检查，使用支气管舒张剂后FEV1/FVC < 0.70即可确诊。",
+    "gold_evidence": [
+      {
+        "evidence_type": "passage",
+        "section_title": "1. 疾病定义与诊断标准",
+        "support_snippet": "诊断依据肺功能检查：使用支气管舒张剂后，FEV1/FVC < 0.70即可确诊"
+      }
+    ],
+    "expected_best_route": "self_correction",
+    "expected_weak_routes": [
+      "vector"
+    ],
+    "expected_first_failure": "第一次检索可能只找到'肺功能检查'，没有找到具体阈值",
+    "expected_recovery_strategy": "发现答案不完整后，追加查询'肺功能检查阈值'或'诊断标准'",
+    "why_this_is_a_good_ab_test": "问题简单但答案需要完整，第一次容易不完整",
+    "distractors": [],
+    "measurable_signal": [
+      "evidence_coverage_gain",
+      "query_rewrite_gain"
+    ]
+  },
+  {
+    "sample_id": "ab_cor_006",
+    "doc_id": "med_doc_001",
+    "class": "self_correction_advantage",
+    "question": "COPD分几级？",
+    "question_type": "simple",
+    "gold_answer": "COPD按GOLD标准分4级：1级（轻度）、2级（中度）、3级（重度）、4级（极重度）。",
+    "gold_evidence": [
+      {
+        "evidence_type": "passage",
+        "section_title": "1.1 GOLD分级标准",
+        "support_snippet": "GOLD 1-4级的完整定义"
+      }
+    ],
+    "expected_best_route": "self_correction",
+    "expected_weak_routes": [
+      "vector"
+    ],
+    "expected_first_failure": "第一次检索可能只找到'GOLD分级'概念，没有列出所有级别",
+    "expected_recovery_strategy": "发现答案不完整后，扩展检索'GOLD所有级别'",
+    "why_this_is_a_good_ab_test": "问题简单但需要完整列举，第一次容易不完整",
+    "distractors": [],
+    "measurable_signal": [
+      "evidence_coverage_gain"
+    ]
+  },
+  {
+    "sample_id": "ab_cor_007",
+    "doc_id": "med_doc_001",
+    "class": "self_correction_advantage",
+    "question": "COPD有哪些长效药？",
+    "question_type": "simple",
+    "gold_answer": "LABA（福莫特罗、茚达特罗）和LAMA（噻托溴铵、格隆溴铵）。",
+    "gold_evidence": [
+      {
+        "evidence_type": "passage",
+        "section_title": "2.1 支气管舒张剂",
+        "support_snippet": "LABA和LAMA的所有药物"
+      }
+    ],
+    "expected_best_route": "self_correction",
+    "expected_weak_routes": [
+      "vector"
+    ],
+    "expected_first_failure": "第一次检索可能只找到部分长效药，没有完整列举",
+    "expected_recovery_strategy": "发现答案不完整后，分别查询'LABA有哪些'和'LAMA有哪些'",
+    "why_this_is_a_good_ab_test": "需要完整列举，第一次容易遗漏",
+    "distractors": [
+      "SABA是短效药"
+    ],
+    "measurable_signal": [
+      "evidence_coverage_gain",
+      "query_rewrite_gain"
+    ]
+  },
+  {
+    "sample_id": "ab_cor_008",
+    "doc_id": "med_doc_001",
+    "class": "self_correction_advantage",
+    "question": "症状很重的COPD患者怎么治？",
+    "question_type": "relation",
+    "gold_answer": "需要根据GOLD分级、急性加重史、嗜酸性粒细胞水平选择LABA+LAMA、LABA+ICS或三联方案。",
+    "gold_evidence": [
+      {
+        "evidence_type": "table",
+        "section_title": "COPD药物治疗选择矩阵",
+        "support_snippet": "中-重度症状患者的治疗方案"
+      }
+    ],
+    "expected_best_route": "self_correction",
+    "expected_weak_routes": [
+      "vector"
+    ],
+    "expected_first_failure": "第一次检索可能只找到'症状重'相关信息，没有具体方案，或只找到部分方案",
+    "expected_recovery_strategy": "发现答案不完整后，重写查询为'重度症状治疗方案'，或扩大检索到表格",
+    "why_this_is_a_good_ab_test": "问题描述性强但不具体，第一次容易召回不完整",
+    "distractors": [
+      "轻度症状的治疗不同"
+    ],
+    "measurable_signal": [
+      "query_rewrite_gain",
+      "evidence_coverage_gain",
+      "route_sensitivity"
+    ]
+  },
+  {
+    "sample_id": "ab_cor_009",
+    "doc_id": "med_doc_001",
+    "class": "self_correction_advantage",
+    "question": "COPD用药有什么原则？",
+    "question_type": "global",
+    "gold_answer": "根据GOLD分级、症状负担、急性加重频率、嗜酸性粒细胞水平综合决定，从SABA按需到单药、双联、三联方案逐步升级。",
+    "gold_evidence": [
+      {
+        "evidence_type": "table",
+        "section_title": "COPD药物治疗选择矩阵",
+        "support_snippet": "治疗方案选择的综合原则"
+      }
+    ],
+    "expected_best_route": "self_correction",
+    "expected_weak_routes": [
+      "vector",
+      "bm25"
+    ],
+    "expected_first_failure": "第一次检索可能只找到部分原则或具体方案，没有整体框架",
+    "expected_recovery_strategy": "发现答案碎片化后，重写查询为'治疗方案选择标准'，或扩大检索范围",
+    "why_this_is_a_good_ab_test": "问题宏观，需要整合多个维度，第一次容易碎片化",
+    "distractors": [],
+    "measurable_signal": [
+      "evidence_coverage_gain",
+      "query_rewrite_gain"
+    ]
+  },
+  {
+    "sample_id": "ab_cor_010",
+    "doc_id": "med_doc_001",
+    "class": "self_correction_advantage",
+    "question": "什么时候需要加激素？",
+    "question_type": "relation",
+    "gold_answer": "嗜酸性粒细胞≥300/μL时用LABA+ICS；≥100/μL且GOLD 3-4级时用LABA+LAMA+ICS。",
+    "gold_evidence": [
+      {
+        "evidence_type": "table",
+        "section_title": "COPD药物治疗选择矩阵",
+        "support_snippet": "ICS使用的嗜酸性粒细胞阈值"
+      }
+    ],
+    "expected_best_route": "self_correction",
+    "expected_weak_routes": [
+      "vector"
+    ],
+    "expected_first_failure": "第一次检索可能只找到一个嗜酸性粒细胞阈值，遗漏另一个",
+    "expected_recovery_strategy": "发现有多个阈值后，扩展检索'所有ICS适应症'",
+    "why_this_is_a_good_ab_test": "有两个不同阈值，第一次容易只找到一个，且答案在表格中",
+    "distractors": [
+      "100和300两个阈值容易混淆"
+    ],
+    "measurable_signal": [
+      "evidence_coverage_gain",
+      "route_sensitivity"
+    ]
+  },
+  {
+    "sample_id": "ab_cor_011",
+    "doc_id": "med_doc_001",
+    "class": "self_correction_advantage",
+    "question": "mMRC评分怎么评？",
+    "question_type": "simple",
+    "gold_answer": "mMRC评分0-4分，根据呼吸困难出现的活动强度：0分剧烈活动时，1分快走或爬坡时，2分比同龄人走得慢，3分行走100米需停下，4分不能离开房间或穿衣时。",
+    "gold_evidence": [
+      {
+        "evidence_type": "passage",
+        "section_title": "1.2 症状评估",
+        "support_snippet": "mMRC 0-4分的完整定义"
+      }
+    ],
+    "expected_best_route": "self_correction",
+    "expected_weak_routes": [
+      "vector"
+    ],
+    "expected_first_failure": "第一次检索可能只找到部分mMRC评分，没有完整列举",
+    "expected_recovery_strategy": "发现答案不完整后，扩展检索'mMRC所有级别'",
+    "why_this_is_a_good_ab_test": "需要完整列举所有级别，第一次容易不完整",
+    "distractors": [],
+    "measurable_signal": [
+      "evidence_coverage_gain"
+    ]
+  },
+  {
+    "sample_id": "ab_cor_012",
+    "doc_id": "med_doc_001",
+    "class": "self_correction_advantage",
+    "question": "COPD患者什么情况下用三种药？",
+    "question_type": "relation",
+    "gold_answer": "GOLD 3-4级、重度症状、急性加重≥2次/年、嗜酸性粒细胞≥100/μL时用LABA+LAMA+ICS。",
+    "gold_evidence": [
+      {
+        "evidence_type": "table",
+        "section_title": "COPD药物治疗选择矩阵",
+        "support_snippet": "三联方案的适应症"
+      }
+    ],
+    "expected_best_route": "self_correction",
+    "expected_weak_routes": [
+      "vector"
+    ],
+    "expected_first_failure": "第一次检索可能只找到部分条件，没有完整列举所有必要条件",
+    "expected_recovery_strategy": "发现条件不完整后，扩展检索'三联方案所有适应症'，或提升表格权重",
+    "why_this_is_a_good_ab_test": "需要多个条件组合，第一次容易遗漏，且答案在表格中",
+    "distractors": [
+      "双联方案的条件不同"
+    ],
+    "measurable_signal": [
+      "evidence_coverage_gain",
+      "route_sensitivity"
+    ]
+  },
+  {
+    "sample_id": "ab_cor_013",
+    "doc_id": "med_doc_001",
+    "class": "self_correction_advantage",
+    "question": "COPD的症状评估工具有哪些？",
+    "question_type": "simple",
+    "gold_answer": "mMRC呼吸困难量表和CAT评分（COPD评估测试）。",
+    "gold_evidence": [
+      {
+        "evidence_type": "passage",
+        "section_title": "1.2 症状评估",
+        "support_snippet": "mMRC和CAT两种评估工具"
+      }
+    ],
+    "expected_best_route": "self_correction",
+    "expected_weak_routes": [
+      "vector"
+    ],
+    "expected_first_failure": "第一次检索可能只找到其中一种评估工具",
+    "expected_recovery_strategy": "发现答案不完整后，扩展检索'所有症状评估工具'",
+    "why_this_is_a_good_ab_test": "需要完整列举，第一次容易遗漏",
+    "distractors": [],
+    "measurable_signal": [
+      "evidence_coverage_gain"
+    ]
+  },
+  {
+    "sample_id": "ab_cor_014",
+    "doc_id": "med_doc_001",
+    "class": "self_correction_advantage",
+    "question": "COPD患者嗜酸性粒细胞高怎么办？",
+    "question_type": "relation",
+    "gold_answer": "需要区分阈值：≥300/μL用LABA+ICS；≥100/μL且GOLD 3-4级用三联方案。",
+    "gold_evidence": [
+      {
+        "evidence_type": "table",
+        "section_title": "COPD药物治疗选择矩阵",
+        "support_snippet": "不同嗜酸性粒细胞阈值的治疗方案"
+      }
+    ],
+    "expected_best_route": "self_correction",
+    "expected_weak_routes": [
+      "vector"
+    ],
+    "expected_first_failure": "第一次检索可能只找到一个阈值的方案，或没有区分'高'的具体数值",
+    "expected_recovery_strategy": "发现有多个阈值后，重写查询为'嗜酸性粒细胞不同水平的治疗'",
+    "why_this_is_a_good_ab_test": "问题模糊（'高'没有具体数值），第一次容易不完整，且答案在表格中",
+    "distractors": [
+      "100和300两个阈值容易混淆"
+    ],
+    "measurable_signal": [
+      "query_rewrite_gain",
+      "evidence_coverage_gain",
+      "route_sensitivity"
+    ]
+  },
+  {
+    "sample_id": "ab_cor_015",
+    "doc_id": "med_doc_001",
+    "class": "self_correction_advantage",
+    "question": "COPD治疗药物有哪些类别？",
+    "question_type": "simple",
+    "gold_answer": "支气管舒张剂（SABA、LABA、LAMA）和吸入糖皮质激素（ICS）。",
+    "gold_evidence": [
+      {
+        "evidence_type": "passage",
+        "section_title": "2.1 支气管舒张剂",
+        "support_snippet": "药物类别的完整列表"
+      }
+    ],
+    "expected_best_route": "self_correction",
+    "expected_weak_routes": [
+      "vector"
+    ],
+    "expected_first_failure": "第一次检索可能只找到支气管舒张剂，遗漏ICS",
+    "expected_recovery_strategy": "发现答案不完整后，扩展检索'所有COPD治疗药物类别'",
+    "why_this_is_a_good_ab_test": "需要完整列举药物类别，第一次容易遗漏",
+    "distractors": [],
+    "measurable_signal": [
+      "evidence_coverage_gain"
+    ]
+  },
+  {
+    "sample_id": "ab_cor_016",
+    "doc_id": "med_doc_001",
+    "class": "self_correction_advantage",
+    "question": "GOLD 2级患者怎么治？",
+    "question_type": "relation",
+    "gold_answer": "根据症状负担、急性加重史、嗜酸性粒细胞水平选择LABA或LAMA单药、LABA+LAMA或LABA+ICS。",
+    "gold_evidence": [
+      {
+        "evidence_type": "table",
+        "section_title": "COPD药物治疗选择矩阵",
+        "support_snippet": "GOLD 2级的所有治疗方案"
+      }
+    ],
+    "expected_best_route": "self_correction",
+    "expected_weak_routes": [
+      "vector"
+    ],
+    "expected_first_failure": "第一次检索可能只找到GOLD 2级的部分治疗方案，没有列举所有可能",
+    "expected_recovery_strategy": "发现方案不完整后，扩展检索'GOLD 2级所有治疗选择'，或提升表格权重",
+    "why_this_is_a_good_ab_test": "GOLD 2级有多种方案选择，第一次容易不完整，且答案在表格中",
+    "distractors": [
+      "GOLD 1级和3-4级的方案不同"
+    ],
+    "measurable_signal": [
+      "evidence_coverage_gain",
+      "route_sensitivity"
+    ]
+  },
+  {
+    "sample_id": "ab_cor_017",
+    "doc_id": "med_doc_001",
+    "class": "self_correction_advantage",
+    "question": "COPD患者急性加重少的怎么治？",
+    "question_type": "relation",
+    "gold_answer": "急性加重0-1次/年的患者，GOLD 1级用SABA按需，GOLD 2级用LABA或LAMA单药。",
+    "gold_evidence": [
+      {
+        "evidence_type": "table",
+        "section_title": "COPD药物治疗选择矩阵",
+        "support_snippet": "急性加重0-1次/年的治疗方案"
+      }
+    ],
+    "expected_best_route": "self_correction",
+    "expected_weak_routes": [
+      "vector"
+    ],
+    "expected_first_failure": "第一次检索可能只找到'急性加重少'的概念，没有具体治疗方案，或只找到部分GOLD分级的方案",
+    "expected_recovery_strategy": "发现答案不完整后，重写查询为'急性加重0-1次/年治疗方案'，或扩大检索到表格",
+    "why_this_is_a_good_ab_test": "问题描述性强（'少'），第一次容易不完整，且答案在表格中",
+    "distractors": [
+      "急性加重≥2次/年的方案不同"
+    ],
+    "measurable_signal": [
+      "query_rewrite_gain",
+      "evidence_coverage_gain",
+      "route_sensitivity"
+    ]
+  },
+  {
+    "sample_id": "ab_cor_018",
+    "doc_id": "med_doc_001",
+    "class": "self_correction_advantage",
+    "question": "哪些药物需要每天用两次？",
+    "question_type": "simple",
+    "gold_answer": "福莫特罗12 μg每日2次。",
+    "gold_evidence": [
+      {
+        "evidence_type": "passage",
+        "section_title": "2.1 支气管舒张剂",
+        "support_snippet": "福莫特罗：12 μg，每日2次"
+      }
+    ],
+    "expected_best_route": "self_correction",
+    "expected_weak_routes": [
+      "vector"
+    ],
+    "expected_first_failure": "第一次检索可能召回多种药物的用药频次，但没有筛选出每日2次的",
+    "expected_recovery_strategy": "对比各药物用药频次后，筛选出每日2次的药物",
+    "why_this_is_a_good_ab_test": "需要反向查询（通过属性找实体），第一次容易不精确",
+    "distractors": [
+      "多数药物是每日1次"
+    ],
+    "measurable_signal": [
+      "evidence_coverage_gain",
+      "rerank_gain"
+    ]
+  },
+  {
+    "sample_id": "ab_cor_019",
+    "doc_id": "med_doc_001",
+    "class": "self_correction_advantage",
+    "question": "CAT评分多少算症状重？",
+    "question_type": "simple",
+    "gold_answer": "CAT评分≥10分提示症状负担较重。",
+    "gold_evidence": [
+      {
+        "evidence_type": "passage",
+        "section_title": "1.2 症状评估",
+        "support_snippet": "CAT评分≥10分提示症状负担较重"
+      }
+    ],
+    "expected_best_route": "self_correction",
+    "expected_weak_routes": [
+      "vector"
+    ],
+    "expected_first_failure": "第一次检索可能找到CAT评分范围（0-40分），但没有找到'症状重'的阈值",
+    "expected_recovery_strategy": "发现缺少阈值后，追加查询'CAT评分阈值'或'症状负担较重'",
+    "why_this_is_a_good_ab_test": "问题需要具体阈值，第一次容易只找到评分范围",
+    "distractors": [],
+    "measurable_signal": [
+      "evidence_coverage_gain",
+      "query_rewrite_gain"
+    ]
+  },
+  {
+    "sample_id": "ab_cor_020",
+    "doc_id": "med_doc_001",
+    "class": "self_correction_advantage",
+    "question": "COPD诊断和分级有什么区别？",
+    "question_type": "multi_hop",
+    "gold_answer": "诊断依据FEV1/FVC < 0.70；分级依据FEV1占预计值百分比，分为GOLD 1-4级。",
+    "gold_evidence": [
+      {
+        "evidence_type": "passage",
+        "section_title": "1. 疾病定义与诊断标准",
+        "support_snippet": "诊断标准和分级标准的区别"
+      }
+    ],
+    "expected_best_route": "self_correction",
+    "expected_weak_routes": [
+      "vector"
+    ],
+    "expected_first_failure": "第一次检索可能只找到诊断或分级之一，没有对比两者区别",
+    "expected_recovery_strategy": "发现答案不完整后，分别查询'诊断标准'和'分级标准'，然后对比",
+    "why_this_is_a_good_ab_test": "需要对比两个概念，第一次容易只回答一个",
+    "distractors": [],
+    "measurable_signal": [
+      "evidence_coverage_gain",
+      "query_rewrite_gain"
+    ]
+  },
+  {
+    "sample_id": "ab_cor_021",
+    "doc_id": "med_doc_001",
+    "class": "self_correction_advantage",
+    "question": "支气管舒张剂有哪些？",
+    "question_type": "simple",
+    "gold_answer": "SABA（沙丁胺醇）、LABA（福莫特罗、茚达特罗）、LAMA（噻托溴铵、格隆溴铵）。",
+    "gold_evidence": [
+      {
+        "evidence_type": "passage",
+        "section_title": "2.1 支气管舒张剂",
+        "support_snippet": "所有支气管舒张剂的列表"
+      }
+    ],
+    "expected_best_route": "self_correction",
+    "expected_weak_routes": [
+      "vector"
+    ],
+    "expected_first_failure": "第一次检索可能只找到部分类别或部分药物",
+    "expected_recovery_strategy": "发现答案不完整后，分别查询'SABA有哪些'、'LABA有哪些'、'LAMA有哪些'",
+    "why_this_is_a_good_ab_test": "需要完整列举所有类别和药物，第一次容易不完整",
+    "distractors": [],
+    "measurable_signal": [
+      "evidence_coverage_gain",
+      "query_rewrite_gain"
+    ]
+  },
+  {
+    "sample_id": "ab_cor_022",
+    "doc_id": "med_doc_001",
+    "class": "self_correction_advantage",
+    "question": "COPD患者嗜酸性粒细胞低怎么办？",
+    "question_type": "relation",
+    "gold_answer": "嗜酸性粒细胞<100/μL时，根据GOLD分级和症状选择LABA或LAMA单药，或LABA+LAMA双联。",
+    "gold_evidence": [
+      {
+        "evidence_type": "table",
+        "section_title": "COPD药物治疗选择矩阵",
+        "support_snippet": "嗜酸性粒细胞<100/μL的治疗方案"
+      }
+    ],
+    "expected_best_route": "self_correction",
+    "expected_weak_routes": [
+      "vector"
+    ],
+    "expected_first_failure": "第一次检索可能只找到'嗜酸性粒细胞低'的概念，没有具体治疗方案",
+    "expected_recovery_strategy": "发现答案不完整后，重写查询为'嗜酸性粒细胞<100治疗方案'，或扩大检索到表格",
+    "why_this_is_a_good_ab_test": "问题描述性强（'低'），第一次容易不完整，且答案在表格中",
+    "distractors": [
+      "嗜酸性粒细胞高的方案不同"
+    ],
+    "measurable_signal": [
+      "query_rewrite_gain",
+      "evidence_coverage_gain",
+      "route_sensitivity"
+    ]
+  },
+  {
+    "sample_id": "ab_cor_023",
+    "doc_id": "med_doc_001",
+    "class": "self_correction_advantage",
+    "question": "COPD轻度和重度治疗有什么区别？",
+    "question_type": "multi_hop",
+    "gold_answer": "轻度（GOLD 1级）仅需SABA按需；重度（GOLD 3级）根据嗜酸性粒细胞水平使用LABA+LAMA或三联方案。",
+    "gold_evidence": [
+      {
+        "evidence_type": "table",
+        "section_title": "COPD药物治疗选择矩阵",
+        "support_snippet": "GOLD 1级和GOLD 3级的治疗方案对比"
+      }
+    ],
+    "expected_best_route": "self_correction",
+    "expected_weak_routes": [
+      "vector"
+    ],
+    "expected_first_failure": "第一次检索可能只找到轻度或重度之一的治疗方案",
+    "expected_recovery_strategy": "发现答案不完整后，分别查询'轻度治疗'和'重度治疗'，然后对比",
+    "why_this_is_a_good_ab_test": "需要对比两个级别，第一次容易只回答一个，且答案在表格中",
+    "distractors": [
+      "中度的治疗介于两者之间"
+    ],
+    "measurable_signal": [
+      "evidence_coverage_gain",
+      "query_rewrite_gain",
+      "route_sensitivity"
+    ]
+  },
+  {
+    "sample_id": "ab_cor_024",
+    "doc_id": "med_doc_001",
+    "class": "self_correction_advantage",
+    "question": "COPD患者什么时候需要联合用药？",
+    "question_type": "relation",
+    "gold_answer": "症状中-重度、或急性加重≥2次/年时需要联合用药（LABA+LAMA、LABA+ICS或三联）。",
+    "gold_evidence": [
+      {
+        "evidence_type": "table",
+        "section_title": "COPD药物治疗选择矩阵",
+        "support_snippet": "联合用药的适应症"
+      }
+    ],
+    "expected_best_route": "self_correction",
+    "expected_weak_routes": [
+      "vector"
+    ],
+    "expected_first_failure": "第一次检索可能只找到部分联合用药的条件",
+    "expected_recovery_strategy": "发现条件不完整后，扩展检索'所有联合用药适应症'，或提升表格权重",
+    "why_this_is_a_good_ab_test": "需要整合多个条件，第一次容易不完整，且答案在表格中",
+    "distractors": [
+      "单药治疗的条件不同"
+    ],
+    "measurable_signal": [
+      "evidence_coverage_gain",
+      "route_sensitivity"
+    ]
+  },
+  {
+    "sample_id": "ab_cor_025",
+    "doc_id": "med_doc_001",
+    "class": "self_correction_advantage",
+    "question": "FEV1和FVC有什么关系？",
+    "question_type": "simple",
+    "gold_answer": "FEV1是第一秒用力呼气容积，FVC是用力肺活量，FEV1/FVC < 0.70用于诊断COPD。",
+    "gold_evidence": [
+      {
+        "evidence_type": "passage",
+        "section_title": "1. 疾病定义与诊断标准",
+        "support_snippet": "FEV1和FVC的关系及诊断应用"
+      }
+    ],
+    "expected_best_route": "self_correction",
+    "expected_weak_routes": [
+      "vector"
+    ],
+    "expected_first_failure": "第一次检索可能只找到FEV1或FVC的定义，没有说明两者关系",
+    "expected_recovery_strategy": "发现答案不完整后，追加查询'FEV1/FVC比值'或'诊断标准'",
+    "why_this_is_a_good_ab_test": "需要说明两个指标的关系，第一次容易只定义单个指标",
+    "distractors": [],
+    "measurable_signal": [
+      "evidence_coverage_gain",
+      "query_rewrite_gain"
+    ]
+  },
+  {
+    "sample_id": "ab_cor_026",
+    "doc_id": "med_doc_001",
+    "class": "self_correction_advantage",
+    "question": "COPD患者症状评估包括哪些方面？",
+    "question_type": "simple",
+    "gold_answer": "包括呼吸困难评估（mMRC量表）和症状负担评估（CAT评分）。",
+    "gold_evidence": [
+      {
+        "evidence_type": "passage",
+        "section_title": "1.2 症状评估",
+        "support_snippet": "症状评估的两个维度"
+      }
+    ],
+    "expected_best_route": "self_correction",
+    "expected_weak_routes": [
+      "vector"
+    ],
+    "expected_first_failure": "第一次检索可能只找到其中一个评估维度",
+    "expected_recovery_strategy": "发现答案不完整后，扩展检索'所有症状评估方法'",
+    "why_this_is_a_good_ab_test": "需要完整列举评估维度，第一次容易遗漏",
+    "distractors": [],
+    "measurable_signal": [
+      "evidence_coverage_gain"
+    ]
+  },
+  {
+    "sample_id": "ab_cor_027",
+    "doc_id": "med_doc_001",
+    "class": "self_correction_advantage",
+    "question": "COPD治疗方案选择需要考虑哪些因素？",
+    "question_type": "global",
+    "gold_answer": "需要考虑GOLD分级、症状负担、急性加重频率、嗜酸性粒细胞水平。",
+    "gold_evidence": [
+      {
+        "evidence_type": "table",
+        "section_title": "COPD药物治疗选择矩阵",
+        "support_snippet": "治疗方案选择的所有考虑因素"
+      }
+    ],
+    "expected_best_route": "self_correction",
+    "expected_weak_routes": [
+      "vector"
+    ],
+    "expected_first_failure": "第一次检索可能只找到部分因素",
+    "expected_recovery_strategy": "发现因素不完整后，扩展检索'治疗方案选择标准'，或提升表格权重",
+    "why_this_is_a_good_ab_test": "需要完整列举所有因素，第一次容易不完整，且答案在表格中",
+    "distractors": [],
+    "measurable_signal": [
+      "evidence_coverage_gain",
+      "route_sensitivity"
+    ]
+  },
+  {
+    "sample_id": "ab_cor_028",
+    "doc_id": "med_doc_001",
+    "class": "self_correction_advantage",
+    "question": "COPD有哪些别名？",
+    "question_type": "simple",
+    "gold_answer": "COPD的别名包括慢性阻塞性肺疾病、慢阻肺。",
+    "gold_evidence": [
+      {
+        "evidence_type": "passage",
+        "section_title": "key_entities",
+        "support_snippet": "COPD的所有别名"
+      }
+    ],
+    "expected_best_route": "self_correction",
+    "expected_weak_routes": [
+      "vector"
+    ],
+    "expected_first_failure": "第一次检索可能只找到部分别名",
+    "expected_recovery_strategy": "发现答案不完整后，扩展检索'COPD所有名称'",
+    "why_this_is_a_good_ab_test": "需要完整列举别名，第一次容易遗漏",
+    "distractors": [],
+    "measurable_signal": [
+      "evidence_coverage_gain"
+    ]
+  },
+  {
+    "sample_id": "ab_cor_029",
+    "doc_id": "med_doc_001",
+    "class": "self_correction_advantage",
+    "question": "GOLD 1级患者需要长期用药吗？为什么？",
+    "question_type": "multi_hop",
+    "gold_answer": "GOLD 1级患者仅需SABA按需，不需要长期用药，因为症状轻且急性加重少。",
+    "gold_evidence": [
+      {
+        "evidence_type": "table",
+        "section_title": "COPD药物治疗选择矩阵",
+        "support_snippet": "GOLD 1级推荐SABA按需"
+      }
+    ],
+    "expected_best_route": "self_correction",
+    "expected_weak_routes": [
+      "vector"
+    ],
+    "expected_first_failure": "第一次检索可能只找到'GOLD 1级用SABA按需'，没有解释原因",
+    "expected_recovery_strategy": "发现缺少原因后，追加查询'GOLD 1级特点'或'为什么只需按需用药'",
+    "why_this_is_a_good_ab_test": "问题包含两个子问题（是否需要+原因），第一次容易只回答第一个，且答案在表格中",
+    "distractors": [
+      "GOLD 2级需要长期用药"
+    ],
+    "measurable_signal": [
+      "evidence_coverage_gain",
+      "query_rewrite_gain",
+      "route_sensitivity"
+    ]
+  },
+  {
+    "sample_id": "ab_cor_030",
+    "doc_id": "med_doc_001",
+    "class": "self_correction_advantage",
+    "question": "COPD药物治疗的目标是什么？",
+    "question_type": "global",
+    "gold_answer": "根据文档内容推断，治疗目标包括缓解症状、减少急性加重、改善肺功能，通过分级和个体化治疗实现。",
+    "gold_evidence": [
+      {
+        "evidence_type": "passage",
+        "section_title": "全文",
+        "support_snippet": "从诊断、分级、症状评估到治疗方案的整体逻辑"
+      }
+    ],
+    "expected_best_route": "self_correction",
+    "expected_weak_routes": [
+      "vector",
+      "bm25"
+    ],
+    "expected_first_failure": "第一次检索可能找不到明确的'治疗目标'陈述，因为文档没有专门章节",
+    "expected_recovery_strategy": "发现没有直接答案后，从治疗方案的设计逻辑推断目标，或扩大检索范围整合多个章节",
+    "why_this_is_a_good_ab_test": "问题需要推理而非直接查找，第一次容易找不到答案",
+    "distractors": [],
+    "measurable_signal": [
+      "evidence_coverage_gain",
+      "query_rewrite_gain"
+    ]
+  }
+]

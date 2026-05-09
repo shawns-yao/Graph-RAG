@@ -1,0 +1,862 @@
+[
+  {
+    "sample_id": "ab_lex_001",
+    "doc_id": "med_doc_001",
+    "class": "lexical_advantage",
+    "question": "Tiotropium的剂量？",
+    "question_type": "simple",
+    "gold_answer": "噻托溴铵18 μg，每日1次。",
+    "gold_evidence": [
+      {
+        "evidence_type": "passage",
+        "section_title": "2.1 支气管舒张剂",
+        "support_snippet": "噻托溴铵（Tiotropium）：18 μg，每日1次"
+      }
+    ],
+    "expected_best_route": "bm25",
+    "expected_weak_routes": [
+      "vector"
+    ],
+    "expected_first_failure": "vector可能无法精确匹配英文药名Tiotropium",
+    "expected_recovery_strategy": "bm25精确匹配英文药名",
+    "why_this_is_a_good_ab_test": "使用英文药名而非中文，测试字面匹配能力",
+    "distractors": [
+      "Glycopyrronium是50 μg"
+    ],
+    "measurable_signal": [
+      "retrieval_recall_gap",
+      "route_sensitivity"
+    ]
+  },
+  {
+    "sample_id": "ab_lex_002",
+    "doc_id": "med_doc_001",
+    "class": "lexical_advantage",
+    "question": "FEV1/FVC < 0.70是什么意思？",
+    "question_type": "simple",
+    "gold_answer": "FEV1/FVC < 0.70即可确诊COPD。",
+    "gold_evidence": [
+      {
+        "evidence_type": "passage",
+        "section_title": "1. 疾病定义与诊断标准",
+        "support_snippet": "使用支气管舒张剂后，FEV1/FVC < 0.70即可确诊"
+      }
+    ],
+    "expected_best_route": "bm25",
+    "expected_weak_routes": [
+      "vector"
+    ],
+    "expected_first_failure": "vector可能无法精确匹配数值和符号",
+    "expected_recovery_strategy": "bm25精确匹配公式",
+    "why_this_is_a_good_ab_test": "包含精确数值和符号，需要字面匹配",
+    "distractors": [],
+    "measurable_signal": [
+      "retrieval_recall_gap",
+      "route_sensitivity"
+    ]
+  },
+  {
+    "sample_id": "ab_lex_003",
+    "doc_id": "med_doc_001",
+    "class": "lexical_advantage",
+    "question": "Salbutamol起效时间？",
+    "question_type": "simple",
+    "gold_answer": "沙丁胺醇起效时间5-15分钟。",
+    "gold_evidence": [
+      {
+        "evidence_type": "passage",
+        "section_title": "2.1 支气管舒张剂",
+        "support_snippet": "沙丁胺醇（Salbutamol）起效时间：5-15分钟"
+      }
+    ],
+    "expected_best_route": "bm25",
+    "expected_weak_routes": [
+      "vector"
+    ],
+    "expected_first_failure": "vector可能无法精确匹配英文药名",
+    "expected_recovery_strategy": "bm25精确匹配Salbutamol",
+    "why_this_is_a_good_ab_test": "使用英文药名",
+    "distractors": [
+      "Formoterol持续时间不同"
+    ],
+    "measurable_signal": [
+      "retrieval_recall_gap",
+      "route_sensitivity"
+    ]
+  },
+  {
+    "sample_id": "ab_lex_004",
+    "doc_id": "med_doc_001",
+    "class": "lexical_advantage",
+    "question": "GOLD 4级的FEV1阈值？",
+    "question_type": "simple",
+    "gold_answer": "GOLD 4级：FEV1 < 30%预计值。",
+    "gold_evidence": [
+      {
+        "evidence_type": "passage",
+        "section_title": "1.1 GOLD分级标准",
+        "support_snippet": "GOLD 4级（极重度）：FEV1 < 30%预计值"
+      }
+    ],
+    "expected_best_route": "bm25",
+    "expected_weak_routes": [
+      "vector"
+    ],
+    "expected_first_failure": "vector可能召回其他GOLD分级",
+    "expected_recovery_strategy": "bm25精确匹配'GOLD 4级'",
+    "why_this_is_a_good_ab_test": "包含精确分级编号和数值",
+    "distractors": [
+      "GOLD 3级是30%-50%"
+    ],
+    "measurable_signal": [
+      "retrieval_recall_gap",
+      "route_sensitivity"
+    ]
+  },
+  {
+    "sample_id": "ab_lex_005",
+    "doc_id": "med_doc_001",
+    "class": "lexical_advantage",
+    "question": "mMRC 4分的定义？",
+    "question_type": "simple",
+    "gold_answer": "mMRC 4分：因严重呼吸困难而不能离开房间，或穿脱衣服时出现呼吸困难。",
+    "gold_evidence": [
+      {
+        "evidence_type": "passage",
+        "section_title": "1.2 症状评估",
+        "support_snippet": "4分：因严重呼吸困难而不能离开房间，或穿脱衣服时出现呼吸困难"
+      }
+    ],
+    "expected_best_route": "bm25",
+    "expected_weak_routes": [
+      "vector"
+    ],
+    "expected_first_failure": "vector可能召回其他mMRC评分",
+    "expected_recovery_strategy": "bm25精确匹配'mMRC 4分'",
+    "why_this_is_a_good_ab_test": "包含精确评分编号",
+    "distractors": [
+      "mMRC 3分是行走100米"
+    ],
+    "measurable_signal": [
+      "retrieval_recall_gap",
+      "route_sensitivity"
+    ]
+  },
+  {
+    "sample_id": "ab_lex_006",
+    "doc_id": "med_doc_001",
+    "class": "lexical_advantage",
+    "question": "LABA+ICS适用于嗜酸性粒细胞多少？",
+    "question_type": "relation",
+    "gold_answer": "嗜酸性粒细胞≥300/μL时推荐LABA+ICS。",
+    "gold_evidence": [
+      {
+        "evidence_type": "table",
+        "section_title": "COPD药物治疗选择矩阵",
+        "support_snippet": "GOLD 2级，中-重度症状，≥2次/年急性加重，嗜酸性粒细胞≥300/μL，推荐LABA+ICS"
+      }
+    ],
+    "expected_best_route": "bm25",
+    "expected_weak_routes": [
+      "vector"
+    ],
+    "expected_first_failure": "vector可能无法精确匹配'LABA+ICS'这个缩写组合",
+    "expected_recovery_strategy": "bm25精确匹配药物缩写",
+    "why_this_is_a_good_ab_test": "包含药物缩写和精确数值，且答案在表格中",
+    "distractors": [
+      "≥100/μL时用三联方案"
+    ],
+    "measurable_signal": [
+      "retrieval_recall_gap",
+      "route_sensitivity"
+    ]
+  },
+  {
+    "sample_id": "ab_lex_007",
+    "doc_id": "med_doc_001",
+    "class": "lexical_advantage",
+    "question": "Formoterol的剂量和频次？",
+    "question_type": "simple",
+    "gold_answer": "福莫特罗12 μg，每日2次。",
+    "gold_evidence": [
+      {
+        "evidence_type": "passage",
+        "section_title": "2.1 支气管舒张剂",
+        "support_snippet": "福莫特罗（Formoterol）：12 μg，每日2次"
+      }
+    ],
+    "expected_best_route": "bm25",
+    "expected_weak_routes": [
+      "vector"
+    ],
+    "expected_first_failure": "vector可能无法精确匹配英文药名",
+    "expected_recovery_strategy": "bm25精确匹配Formoterol",
+    "why_this_is_a_good_ab_test": "使用英文药名",
+    "distractors": [
+      "Indacaterol是每日1次"
+    ],
+    "measurable_signal": [
+      "retrieval_recall_gap",
+      "route_sensitivity"
+    ]
+  },
+  {
+    "sample_id": "ab_lex_008",
+    "doc_id": "med_doc_001",
+    "class": "lexical_advantage",
+    "question": "CAT ≥10分说明什么？",
+    "question_type": "simple",
+    "gold_answer": "CAT评分≥10分提示症状负担较重。",
+    "gold_evidence": [
+      {
+        "evidence_type": "passage",
+        "section_title": "1.2 症状评估",
+        "support_snippet": "CAT评分：总分0-40分，≥10分提示症状负担较重"
+      }
+    ],
+    "expected_best_route": "bm25",
+    "expected_weak_routes": [
+      "vector"
+    ],
+    "expected_first_failure": "vector可能无法精确匹配'≥10分'这个阈值",
+    "expected_recovery_strategy": "bm25精确匹配数值和符号",
+    "why_this_is_a_good_ab_test": "包含精确数值阈值",
+    "distractors": [],
+    "measurable_signal": [
+      "retrieval_recall_gap",
+      "route_sensitivity"
+    ]
+  },
+  {
+    "sample_id": "ab_lex_009",
+    "doc_id": "med_doc_001",
+    "class": "lexical_advantage",
+    "question": "Glycopyrronium的用法？",
+    "question_type": "simple",
+    "gold_answer": "格隆溴铵50 μg，每日1次。",
+    "gold_evidence": [
+      {
+        "evidence_type": "passage",
+        "section_title": "2.1 支气管舒张剂",
+        "support_snippet": "格隆溴铵（Glycopyrronium）：50 μg，每日1次"
+      }
+    ],
+    "expected_best_route": "bm25",
+    "expected_weak_routes": [
+      "vector"
+    ],
+    "expected_first_failure": "vector可能无法精确匹配罕见英文药名",
+    "expected_recovery_strategy": "bm25精确匹配Glycopyrronium",
+    "why_this_is_a_good_ab_test": "使用罕见英文药名",
+    "distractors": [
+      "Tiotropium是18 μg"
+    ],
+    "measurable_signal": [
+      "retrieval_recall_gap",
+      "route_sensitivity"
+    ]
+  },
+  {
+    "sample_id": "ab_lex_010",
+    "doc_id": "med_doc_001",
+    "class": "lexical_advantage",
+    "question": "GOLD 1级的FEV1范围？",
+    "question_type": "simple",
+    "gold_answer": "GOLD 1级：FEV1 ≥ 80%预计值。",
+    "gold_evidence": [
+      {
+        "evidence_type": "passage",
+        "section_title": "1.1 GOLD分级标准",
+        "support_snippet": "GOLD 1级（轻度）：FEV1 ≥ 80%预计值"
+      }
+    ],
+    "expected_best_route": "bm25",
+    "expected_weak_routes": [
+      "vector"
+    ],
+    "expected_first_failure": "vector可能召回其他GOLD分级",
+    "expected_recovery_strategy": "bm25精确匹配'GOLD 1级'",
+    "why_this_is_a_good_ab_test": "包含精确分级编号和数值",
+    "distractors": [
+      "GOLD 2级是50%-80%"
+    ],
+    "measurable_signal": [
+      "retrieval_recall_gap",
+      "route_sensitivity"
+    ]
+  },
+  {
+    "sample_id": "ab_lex_011",
+    "doc_id": "med_doc_001",
+    "class": "lexical_advantage",
+    "question": "SABA每日不超过多少次？",
+    "question_type": "simple",
+    "gold_answer": "SABA每日不超过8次。",
+    "gold_evidence": [
+      {
+        "evidence_type": "passage",
+        "section_title": "2.1 支气管舒张剂",
+        "support_snippet": "沙丁胺醇：100-200 μg/次，按需使用，每日不超过8次"
+      }
+    ],
+    "expected_best_route": "bm25",
+    "expected_weak_routes": [
+      "vector"
+    ],
+    "expected_first_failure": "vector可能无法精确匹配'SABA'缩写和数值",
+    "expected_recovery_strategy": "bm25精确匹配SABA和8次",
+    "why_this_is_a_good_ab_test": "包含药物缩写和精确数值",
+    "distractors": [],
+    "measurable_signal": [
+      "retrieval_recall_gap",
+      "route_sensitivity"
+    ]
+  },
+  {
+    "sample_id": "ab_lex_012",
+    "doc_id": "med_doc_001",
+    "class": "lexical_advantage",
+    "question": "Indacaterol的剂量？",
+    "question_type": "simple",
+    "gold_answer": "茚达特罗150 μg，每日1次。",
+    "gold_evidence": [
+      {
+        "evidence_type": "passage",
+        "section_title": "2.1 支气管舒张剂",
+        "support_snippet": "茚达特罗（Indacaterol）：150 μg，每日1次"
+      }
+    ],
+    "expected_best_route": "bm25",
+    "expected_weak_routes": [
+      "vector"
+    ],
+    "expected_first_failure": "vector可能无法精确匹配罕见英文药名",
+    "expected_recovery_strategy": "bm25精确匹配Indacaterol",
+    "why_this_is_a_good_ab_test": "使用罕见英文药名",
+    "distractors": [
+      "Formoterol是12 μg"
+    ],
+    "measurable_signal": [
+      "retrieval_recall_gap",
+      "route_sensitivity"
+    ]
+  },
+  {
+    "sample_id": "ab_lex_013",
+    "doc_id": "med_doc_001",
+    "class": "lexical_advantage",
+    "question": "GOLD 2级的FEV1范围？",
+    "question_type": "simple",
+    "gold_answer": "GOLD 2级：50% ≤ FEV1 < 80%预计值。",
+    "gold_evidence": [
+      {
+        "evidence_type": "passage",
+        "section_title": "1.1 GOLD分级标准",
+        "support_snippet": "GOLD 2级（中度）：50% ≤ FEV1 < 80%预计值"
+      }
+    ],
+    "expected_best_route": "bm25",
+    "expected_weak_routes": [
+      "vector"
+    ],
+    "expected_first_failure": "vector可能召回其他GOLD分级",
+    "expected_recovery_strategy": "bm25精确匹配'GOLD 2级'",
+    "why_this_is_a_good_ab_test": "包含精确分级编号和数值范围",
+    "distractors": [
+      "GOLD 3级是30%-50%"
+    ],
+    "measurable_signal": [
+      "retrieval_recall_gap",
+      "route_sensitivity"
+    ]
+  },
+  {
+    "sample_id": "ab_lex_014",
+    "doc_id": "med_doc_001",
+    "class": "lexical_advantage",
+    "question": "mMRC 0分的定义？",
+    "question_type": "simple",
+    "gold_answer": "mMRC 0分：仅在剧烈活动时出现呼吸困难。",
+    "gold_evidence": [
+      {
+        "evidence_type": "passage",
+        "section_title": "1.2 症状评估",
+        "support_snippet": "0分：仅在剧烈活动时出现呼吸困难"
+      }
+    ],
+    "expected_best_route": "bm25",
+    "expected_weak_routes": [
+      "vector"
+    ],
+    "expected_first_failure": "vector可能召回其他mMRC评分",
+    "expected_recovery_strategy": "bm25精确匹配'mMRC 0分'",
+    "why_this_is_a_good_ab_test": "包含精确评分编号",
+    "distractors": [
+      "mMRC 1分是快走或爬坡"
+    ],
+    "measurable_signal": [
+      "retrieval_recall_gap",
+      "route_sensitivity"
+    ]
+  },
+  {
+    "sample_id": "ab_lex_015",
+    "doc_id": "med_doc_001",
+    "class": "lexical_advantage",
+    "question": "LABA+LAMA适用于哪些患者？",
+    "question_type": "relation",
+    "gold_answer": "GOLD 2级中-重度症状且急性加重≥2次/年、嗜酸性粒细胞<100/μL，或GOLD 3-4级重度症状且急性加重≥2次/年、嗜酸性粒细胞<100/μL。",
+    "gold_evidence": [
+      {
+        "evidence_type": "table",
+        "section_title": "COPD药物治疗选择矩阵",
+        "support_snippet": "GOLD 2级或3-4级，中-重度症状，≥2次/年急性加重，嗜酸性粒细胞<100/μL，推荐LABA+LAMA"
+      }
+    ],
+    "expected_best_route": "bm25",
+    "expected_weak_routes": [
+      "vector"
+    ],
+    "expected_first_failure": "vector可能无法精确匹配'LABA+LAMA'这个缩写组合",
+    "expected_recovery_strategy": "bm25精确匹配药物缩写",
+    "why_this_is_a_good_ab_test": "包含药物缩写，且答案在表格中",
+    "distractors": [
+      "LABA+ICS用于嗜酸性粒细胞≥300/μL"
+    ],
+    "measurable_signal": [
+      "retrieval_recall_gap",
+      "route_sensitivity"
+    ]
+  },
+  {
+    "sample_id": "ab_lex_016",
+    "doc_id": "med_doc_001",
+    "class": "lexical_advantage",
+    "question": "GOLD 3级的FEV1范围？",
+    "question_type": "simple",
+    "gold_answer": "GOLD 3级：30% ≤ FEV1 < 50%预计值。",
+    "gold_evidence": [
+      {
+        "evidence_type": "passage",
+        "section_title": "1.1 GOLD分级标准",
+        "support_snippet": "GOLD 3级（重度）：30% ≤ FEV1 < 50%预计值"
+      }
+    ],
+    "expected_best_route": "bm25",
+    "expected_weak_routes": [
+      "vector"
+    ],
+    "expected_first_failure": "vector可能召回其他GOLD分级",
+    "expected_recovery_strategy": "bm25精确匹配'GOLD 3级'",
+    "why_this_is_a_good_ab_test": "包含精确分级编号和数值范围",
+    "distractors": [
+      "GOLD 2级是50%-80%"
+    ],
+    "measurable_signal": [
+      "retrieval_recall_gap",
+      "route_sensitivity"
+    ]
+  },
+  {
+    "sample_id": "ab_lex_017",
+    "doc_id": "med_doc_001",
+    "class": "lexical_advantage",
+    "question": "mMRC 1分的定义？",
+    "question_type": "simple",
+    "gold_answer": "mMRC 1分：平地快走或爬缓坡时出现呼吸困难。",
+    "gold_evidence": [
+      {
+        "evidence_type": "passage",
+        "section_title": "1.2 症状评估",
+        "support_snippet": "1分：平地快走或爬缓坡时出现呼吸困难"
+      }
+    ],
+    "expected_best_route": "bm25",
+    "expected_weak_routes": [
+      "vector"
+    ],
+    "expected_first_failure": "vector可能召回其他mMRC评分",
+    "expected_recovery_strategy": "bm25精确匹配'mMRC 1分'",
+    "why_this_is_a_good_ab_test": "包含精确评分编号",
+    "distractors": [
+      "mMRC 2分是比同龄人走得慢"
+    ],
+    "measurable_signal": [
+      "retrieval_recall_gap",
+      "route_sensitivity"
+    ]
+  },
+  {
+    "sample_id": "ab_lex_018",
+    "doc_id": "med_doc_001",
+    "class": "lexical_advantage",
+    "question": "LAMA起效时间？",
+    "question_type": "simple",
+    "gold_answer": "LAMA起效时间30-60分钟。",
+    "gold_evidence": [
+      {
+        "evidence_type": "passage",
+        "section_title": "2.1 支气管舒张剂",
+        "support_snippet": "LAMA起效时间：30-60分钟"
+      }
+    ],
+    "expected_best_route": "bm25",
+    "expected_weak_routes": [
+      "vector"
+    ],
+    "expected_first_failure": "vector可能无法精确匹配'LAMA'缩写",
+    "expected_recovery_strategy": "bm25精确匹配LAMA",
+    "why_this_is_a_good_ab_test": "包含药物类别缩写",
+    "distractors": [
+      "SABA起效5-15分钟"
+    ],
+    "measurable_signal": [
+      "retrieval_recall_gap",
+      "route_sensitivity"
+    ]
+  },
+  {
+    "sample_id": "ab_lex_019",
+    "doc_id": "med_doc_001",
+    "class": "lexical_advantage",
+    "question": "mMRC 2分的定义？",
+    "question_type": "simple",
+    "gold_answer": "mMRC 2分：因呼吸困难而比同龄人走得慢，或需停下来休息。",
+    "gold_evidence": [
+      {
+        "evidence_type": "passage",
+        "section_title": "1.2 症状评估",
+        "support_snippet": "2分：因呼吸困难而比同龄人走得慢，或需停下来休息"
+      }
+    ],
+    "expected_best_route": "bm25",
+    "expected_weak_routes": [
+      "vector"
+    ],
+    "expected_first_failure": "vector可能召回其他mMRC评分",
+    "expected_recovery_strategy": "bm25精确匹配'mMRC 2分'",
+    "why_this_is_a_good_ab_test": "包含精确评分编号",
+    "distractors": [
+      "mMRC 3分是行走100米"
+    ],
+    "measurable_signal": [
+      "retrieval_recall_gap",
+      "route_sensitivity"
+    ]
+  },
+  {
+    "sample_id": "ab_lex_020",
+    "doc_id": "med_doc_001",
+    "class": "lexical_advantage",
+    "question": "mMRC 3分的定义？",
+    "question_type": "simple",
+    "gold_answer": "mMRC 3分：平地行走100米或数分钟后需停下来喘气。",
+    "gold_evidence": [
+      {
+        "evidence_type": "passage",
+        "section_title": "1.2 症状评估",
+        "support_snippet": "3分：平地行走100米或数分钟后需停下来喘气"
+      }
+    ],
+    "expected_best_route": "bm25",
+    "expected_weak_routes": [
+      "vector"
+    ],
+    "expected_first_failure": "vector可能召回其他mMRC评分",
+    "expected_recovery_strategy": "bm25精确匹配'mMRC 3分'和'100米'",
+    "why_this_is_a_good_ab_test": "包含精确评分编号和距离数值",
+    "distractors": [
+      "mMRC 2分是比同龄人走得慢"
+    ],
+    "measurable_signal": [
+      "retrieval_recall_gap",
+      "route_sensitivity"
+    ]
+  },
+  {
+    "sample_id": "ab_lex_021",
+    "doc_id": "med_doc_001",
+    "class": "lexical_advantage",
+    "question": "LABA+LAMA+ICS适用于哪些患者？",
+    "question_type": "relation",
+    "gold_answer": "GOLD 3-4级、重度症状、急性加重≥2次/年、嗜酸性粒细胞≥100/μL的患者。",
+    "gold_evidence": [
+      {
+        "evidence_type": "table",
+        "section_title": "COPD药物治疗选择矩阵",
+        "support_snippet": "GOLD 3-4级，重度症状，≥2次/年急性加重，嗜酸性粒细胞≥100/μL，推荐LABA+LAMA+ICS"
+      }
+    ],
+    "expected_best_route": "bm25",
+    "expected_weak_routes": [
+      "vector"
+    ],
+    "expected_first_failure": "vector可能无法精确匹配'LABA+LAMA+ICS'这个三联缩写",
+    "expected_recovery_strategy": "bm25精确匹配药物缩写组合",
+    "why_this_is_a_good_ab_test": "包含复杂药物缩写组合，且答案在表格中",
+    "distractors": [
+      "LABA+ICS用于嗜酸性粒细胞≥300/μL"
+    ],
+    "measurable_signal": [
+      "retrieval_recall_gap",
+      "route_sensitivity"
+    ]
+  },
+  {
+    "sample_id": "ab_lex_022",
+    "doc_id": "med_doc_001",
+    "class": "lexical_advantage",
+    "question": "SABA持续时间？",
+    "question_type": "simple",
+    "gold_answer": "SABA持续时间4-6小时。",
+    "gold_evidence": [
+      {
+        "evidence_type": "passage",
+        "section_title": "2.1 支气管舒张剂",
+        "support_snippet": "沙丁胺醇持续时间：4-6小时"
+      }
+    ],
+    "expected_best_route": "bm25",
+    "expected_weak_routes": [
+      "vector"
+    ],
+    "expected_first_failure": "vector可能无法精确匹配'SABA'缩写",
+    "expected_recovery_strategy": "bm25精确匹配SABA",
+    "why_this_is_a_good_ab_test": "包含药物类别缩写",
+    "distractors": [
+      "LABA持续12-24小时"
+    ],
+    "measurable_signal": [
+      "retrieval_recall_gap",
+      "route_sensitivity"
+    ]
+  },
+  {
+    "sample_id": "ab_lex_023",
+    "doc_id": "med_doc_001",
+    "class": "lexical_advantage",
+    "question": "LABA持续时间？",
+    "question_type": "simple",
+    "gold_answer": "LABA持续时间12-24小时。",
+    "gold_evidence": [
+      {
+        "evidence_type": "passage",
+        "section_title": "2.1 支气管舒张剂",
+        "support_snippet": "LABA持续时间：12-24小时"
+      }
+    ],
+    "expected_best_route": "bm25",
+    "expected_weak_routes": [
+      "vector"
+    ],
+    "expected_first_failure": "vector可能无法精确匹配'LABA'缩写",
+    "expected_recovery_strategy": "bm25精确匹配LABA",
+    "why_this_is_a_good_ab_test": "包含药物类别缩写",
+    "distractors": [
+      "SABA持续4-6小时"
+    ],
+    "measurable_signal": [
+      "retrieval_recall_gap",
+      "route_sensitivity"
+    ]
+  },
+  {
+    "sample_id": "ab_lex_024",
+    "doc_id": "med_doc_001",
+    "class": "lexical_advantage",
+    "question": "LAMA持续时间？",
+    "question_type": "simple",
+    "gold_answer": "LAMA持续时间24小时。",
+    "gold_evidence": [
+      {
+        "evidence_type": "passage",
+        "section_title": "2.1 支气管舒张剂",
+        "support_snippet": "LAMA持续时间：24小时"
+      }
+    ],
+    "expected_best_route": "bm25",
+    "expected_weak_routes": [
+      "vector"
+    ],
+    "expected_first_failure": "vector可能无法精确匹配'LAMA'缩写",
+    "expected_recovery_strategy": "bm25精确匹配LAMA",
+    "why_this_is_a_good_ab_test": "包含药物类别缩写",
+    "distractors": [
+      "LABA持续12-24小时"
+    ],
+    "measurable_signal": [
+      "retrieval_recall_gap",
+      "route_sensitivity"
+    ]
+  },
+  {
+    "sample_id": "ab_lex_025",
+    "doc_id": "med_doc_001",
+    "class": "lexical_advantage",
+    "question": "嗜酸性粒细胞≥300/μL时推荐什么方案？",
+    "question_type": "relation",
+    "gold_answer": "嗜酸性粒细胞≥300/μL时推荐LABA+ICS。",
+    "gold_evidence": [
+      {
+        "evidence_type": "table",
+        "section_title": "COPD药物治疗选择矩阵",
+        "support_snippet": "GOLD 2级，中-重度症状，≥2次/年急性加重，嗜酸性粒细胞≥300/μL，推荐LABA+ICS"
+      }
+    ],
+    "expected_best_route": "bm25",
+    "expected_weak_routes": [
+      "vector"
+    ],
+    "expected_first_failure": "vector可能无法精确匹配'≥300/μL'这个精确阈值",
+    "expected_recovery_strategy": "bm25精确匹配数值和单位",
+    "why_this_is_a_good_ab_test": "包含精确数值阈值和单位，且答案在表格中",
+    "distractors": [
+      "≥100/μL时用三联方案"
+    ],
+    "measurable_signal": [
+      "retrieval_recall_gap",
+      "route_sensitivity"
+    ]
+  },
+  {
+    "sample_id": "ab_lex_026",
+    "doc_id": "med_doc_001",
+    "class": "lexical_advantage",
+    "question": "嗜酸性粒细胞≥100/μL且GOLD 3-4级时推荐什么方案？",
+    "question_type": "relation",
+    "gold_answer": "嗜酸性粒细胞≥100/μL且GOLD 3-4级时推荐LABA+LAMA+ICS。",
+    "gold_evidence": [
+      {
+        "evidence_type": "table",
+        "section_title": "COPD药物治疗选择矩阵",
+        "support_snippet": "GOLD 3-4级，重度症状，≥2次/年急性加重，嗜酸性粒细胞≥100/μL，推荐LABA+LAMA+ICS"
+      }
+    ],
+    "expected_best_route": "bm25",
+    "expected_weak_routes": [
+      "vector"
+    ],
+    "expected_first_failure": "vector可能无法精确匹配'≥100/μL'和'GOLD 3-4级'的组合",
+    "expected_recovery_strategy": "bm25精确匹配数值、单位和分级",
+    "why_this_is_a_good_ab_test": "包含多个精确条件组合，且答案在表格中",
+    "distractors": [
+      "≥300/μL时用LABA+ICS"
+    ],
+    "measurable_signal": [
+      "retrieval_recall_gap",
+      "route_sensitivity"
+    ]
+  },
+  {
+    "sample_id": "ab_lex_027",
+    "doc_id": "med_doc_001",
+    "class": "lexical_advantage",
+    "question": "Salbutamol剂量范围？",
+    "question_type": "simple",
+    "gold_answer": "沙丁胺醇100-200 μg/次。",
+    "gold_evidence": [
+      {
+        "evidence_type": "passage",
+        "section_title": "2.1 支气管舒张剂",
+        "support_snippet": "沙丁胺醇（Salbutamol）：100-200 μg/次"
+      }
+    ],
+    "expected_best_route": "bm25",
+    "expected_weak_routes": [
+      "vector"
+    ],
+    "expected_first_failure": "vector可能无法精确匹配英文药名和剂量范围",
+    "expected_recovery_strategy": "bm25精确匹配Salbutamol和数值",
+    "why_this_is_a_good_ab_test": "包含英文药名和精确剂量范围",
+    "distractors": [
+      "Formoterol是12 μg"
+    ],
+    "measurable_signal": [
+      "retrieval_recall_gap",
+      "route_sensitivity"
+    ]
+  },
+  {
+    "sample_id": "ab_lex_028",
+    "doc_id": "med_doc_001",
+    "class": "lexical_advantage",
+    "question": "FEV1是什么的缩写？",
+    "question_type": "simple",
+    "gold_answer": "FEV1是第一秒用力呼气容积的缩写。",
+    "gold_evidence": [
+      {
+        "evidence_type": "passage",
+        "section_title": "key_entities",
+        "support_snippet": "FEV1别名：第一秒用力呼气容积"
+      }
+    ],
+    "expected_best_route": "bm25",
+    "expected_weak_routes": [
+      "vector"
+    ],
+    "expected_first_failure": "vector可能无法精确匹配'FEV1'这个缩写",
+    "expected_recovery_strategy": "bm25精确匹配FEV1",
+    "why_this_is_a_good_ab_test": "查询医学缩写的全称",
+    "distractors": [
+      "FVC是用力肺活量"
+    ],
+    "measurable_signal": [
+      "retrieval_recall_gap",
+      "route_sensitivity"
+    ]
+  },
+  {
+    "sample_id": "ab_lex_029",
+    "doc_id": "med_doc_001",
+    "class": "lexical_advantage",
+    "question": "ICS是什么的缩写？",
+    "question_type": "simple",
+    "gold_answer": "ICS是吸入糖皮质激素的缩写。",
+    "gold_evidence": [
+      {
+        "evidence_type": "passage",
+        "section_title": "key_entities",
+        "support_snippet": "ICS别名：吸入糖皮质激素"
+      }
+    ],
+    "expected_best_route": "bm25",
+    "expected_weak_routes": [
+      "vector"
+    ],
+    "expected_first_failure": "vector可能无法精确匹配'ICS'这个缩写",
+    "expected_recovery_strategy": "bm25精确匹配ICS",
+    "why_this_is_a_good_ab_test": "查询医学缩写的全称",
+    "distractors": [],
+    "measurable_signal": [
+      "retrieval_recall_gap",
+      "route_sensitivity"
+    ]
+  },
+  {
+    "sample_id": "ab_lex_030",
+    "doc_id": "med_doc_001",
+    "class": "lexical_advantage",
+    "question": "AECOPD是什么的缩写？",
+    "question_type": "simple",
+    "gold_answer": "AECOPD是急性加重的缩写。",
+    "gold_evidence": [
+      {
+        "evidence_type": "passage",
+        "section_title": "key_entities",
+        "support_snippet": "急性加重别名：AECOPD"
+      }
+    ],
+    "expected_best_route": "bm25",
+    "expected_weak_routes": [
+      "vector"
+    ],
+    "expected_first_failure": "vector可能无法精确匹配'AECOPD'这个罕见缩写",
+    "expected_recovery_strategy": "bm25精确匹配AECOPD",
+    "why_this_is_a_good_ab_test": "查询罕见医学缩写",
+    "distractors": [],
+    "measurable_signal": [
+      "retrieval_recall_gap",
+      "route_sensitivity"
+    ]
+  }
+]

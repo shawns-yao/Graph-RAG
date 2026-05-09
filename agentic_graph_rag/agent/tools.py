@@ -10,7 +10,22 @@ import logging
 from typing import TYPE_CHECKING
 
 from rag_core.config import get_settings
-from rag_core.models import Chunk, GraphContext, SearchResult
+from rag_core.llm_resilience import LLMCallController
+from rag_core.reranker import rerank
+from rag_core.models import Chunk, GraphContext, QueryType, SearchResult
+from rag_core.neo4j_utils import open_neo4j_session
+
+from agentic_graph_rag.retrieval.fusion import FusionEngine, resolve_channel_weights
+from agentic_graph_rag.retrieval.orchestrator import RetrievalOrchestrator
+from agentic_graph_rag.retrieval.providers import (
+    BM25RetrievalProvider,
+    GraphRetrievalProvider,
+    RetrievalRequest,
+    VectorRetrievalProvider,
+    attach_passage_embeddings,
+    fetch_passage_embeddings,
+    graph_context_to_search_results,
+)
 
 if TYPE_CHECKING:
     from neo4j import Driver
@@ -26,7 +41,20 @@ logger = logging.getLogger(__name__)
 def _embed_query(query: str, openai_client: OpenAI) -> list[float]:
     """Embed query text using OpenAI embeddings."""
     cfg = get_settings()
-    response = openai_client.embeddings.create(
+    controller = LLMCallController(
+        max_retries=cfg.benchmark.llm_max_retries,
+        initial_backoff_seconds=cfg.benchmark.llm_initial_backoff_seconds,
+        max_backoff_seconds=cfg.benchmark.llm_max_backoff_seconds,
+        jitter_seconds=cfg.benchmark.llm_jitter_seconds,
+        max_consecutive_failures=max(2, cfg.benchmark.llm_max_retries + 1),
+        total_budget_seconds=max(
+            5.0,
+            cfg.benchmark.llm_read_timeout_seconds * max(1, cfg.benchmark.llm_max_retries + 1),
+        ),
+    )
+    response = controller.call(
+        "query_embedding",
+        openai_client.embeddings.create,
         model=cfg.openai.embedding_model,
         input=query,
         dimensions=cfg.openai.embedding_dimensions,
@@ -36,16 +64,7 @@ def _embed_query(query: str, openai_client: OpenAI) -> list[float]:
 
 def _graph_context_to_results(ctx: GraphContext, source: str) -> list[SearchResult]:
     """Convert GraphContext passages into SearchResult list."""
-    results = []
-    for i, passage in enumerate(ctx.passages):
-        chunk_id = ctx.source_ids[i] if i < len(ctx.source_ids) else ""
-        results.append(SearchResult(
-            chunk=Chunk(id=chunk_id, content=passage),
-            score=1.0 / (i + 1),  # rank-based score
-            rank=i + 1,
-            source=source,
-        ))
-    return results
+    return graph_context_to_search_results(ctx, source=source)
 
 
 # ---------------------------------------------------------------------------
@@ -58,20 +77,17 @@ def vector_search(
     openai_client: OpenAI,
     top_k: int | None = None,
 ) -> list[SearchResult]:
-    """Simple vector similarity search on PhraseNodes.
-
-    Uses VectorCypher find_entry_points but returns passages directly.
-    """
-    from agentic_graph_rag.retrieval.vector_cypher import search as vc_search
-
+    """Simple dense retrieval through the vector provider."""
     cfg = get_settings()
     if top_k is None:
         top_k = cfg.retrieval.top_k_vector
 
-    embedding = _embed_query(query, openai_client)
-    ctx = vc_search(embedding, driver, top_k=top_k, max_hops=1)
-
-    return _graph_context_to_results(ctx, source="vector")
+    request = RetrievalRequest(
+        query=query,
+        query_embedding=_embed_query(query, openai_client),
+        top_k=top_k,
+    )
+    return VectorRetrievalProvider(driver).retrieve(request)
 
 
 # ---------------------------------------------------------------------------
@@ -84,20 +100,24 @@ def cypher_traverse(
     openai_client: OpenAI,
     top_k: int | None = None,
     max_hops: int | None = None,
+    entry_top_k: int | None = None,
 ) -> list[SearchResult]:
-    """VectorCypher retrieval — vector entry + deep graph traversal."""
-    from agentic_graph_rag.retrieval.vector_cypher import search as vc_search
-
+    """Graph retrieval provider returning serialized path-aware context."""
     cfg = get_settings()
     if top_k is None:
         top_k = cfg.retrieval.top_k_vector
     if max_hops is None:
         max_hops = cfg.retrieval.max_hops
+    if entry_top_k is None:
+        entry_top_k = cfg.retrieval.graph_entry_top_k
 
-    embedding = _embed_query(query, openai_client)
-    ctx = vc_search(embedding, driver, top_k=top_k, max_hops=max_hops)
-
-    return _graph_context_to_results(ctx, source="graph")
+    request = RetrievalRequest(
+        query=query,
+        query_embedding=_embed_query(query, openai_client),
+        top_k=top_k,
+        filters={"max_hops": max_hops, "entry_top_k": entry_top_k},
+    )
+    return GraphRetrievalProvider(driver).retrieve(request)
 
 
 # ---------------------------------------------------------------------------
@@ -119,36 +139,48 @@ def community_search(
 
 
 # ---------------------------------------------------------------------------
-# 4. Hybrid search (vector + graph merge via cosine re-ranking)
+# 4. Sparse retrieval + hybrid fusion
 # ---------------------------------------------------------------------------
+
+def bm25_search(
+    query: str,
+    driver: Driver,
+    openai_client: OpenAI,
+    top_k: int | None = None,
+) -> list[SearchResult]:
+    """Sparse lexical retrieval via the BM25 provider."""
+    del openai_client  # interface parity with other tools
+
+    cfg = get_settings()
+    if top_k is None:
+        top_k = cfg.retrieval.top_k_bm25
+
+    return BM25RetrievalProvider(driver).retrieve(
+        RetrievalRequest(query=query, top_k=top_k)
+    )
+
+
+def _get_channel_weights(
+    query_type: QueryType | str | None = None,
+    overrides: dict[str, float] | None = None,
+) -> dict[str, float]:
+    """Resolve per-channel fusion weights from query type and optional overrides."""
+    return resolve_channel_weights(query_type, overrides)
 
 def _fetch_passage_embeddings(
     chunk_ids: list[str],
     driver: Driver,
 ) -> dict[str, list[float]]:
     """Fetch PassageNode embeddings from Neo4j for given chunk IDs."""
-    from agentic_graph_rag.indexing.dual_node import PASSAGE_LABEL
+    return fetch_passage_embeddings(chunk_ids, driver)
 
-    if not chunk_ids:
-        return {}
 
-    emb_map: dict[str, list[float]] = {}
-    with driver.session() as session:
-        result = session.run(
-            f"""
-            MATCH (pa:{PASSAGE_LABEL})
-            WHERE pa.chunk_id IN $chunk_ids
-            RETURN pa.chunk_id AS chunk_id, pa.embedding AS embedding
-            """,
-            chunk_ids=chunk_ids,
-        )
-        for record in result:
-            cid = record["chunk_id"]
-            emb = record["embedding"]
-            if cid and emb:
-                emb_map[cid] = list(emb)
-
-    return emb_map
+def _attach_passage_embeddings(
+    results: list[SearchResult],
+    driver: Driver,
+) -> list[SearchResult]:
+    """Attach stored PassageNode embeddings onto SearchResult chunks in-place."""
+    return attach_passage_embeddings(results, driver)
 
 
 def hybrid_search(
@@ -156,99 +188,56 @@ def hybrid_search(
     driver: Driver,
     openai_client: OpenAI,
     top_k: int | None = None,
+    query_type: QueryType | str | None = None,
+    channel_weights: dict[str, float] | None = None,
+    seed_results: dict[str, list[SearchResult]] | None = None,
+    enabled_providers: list[str] | None = None,
+    provider_results: dict[str, list[SearchResult]] | None = None,
+    rerank_enabled: bool = True,
 ) -> list[SearchResult]:
-    """Hybrid retrieval: vector + graph results merged via cosine re-ranking.
-
-    Collects passages from both vector search and graph traversal,
-    deduplicates, then re-ranks by actual cosine similarity to the query
-    embedding using stored PassageNode embeddings.
-    """
+    """Hybrid retrieval delegated to provider orchestrator and fusion engine."""
     cfg = get_settings()
     if top_k is None:
         top_k = cfg.retrieval.top_k_final
 
-    cfg_r = cfg.retrieval
-    vector_results = vector_search(query, driver, openai_client, top_k=cfg_r.top_k_vector)
-    graph_results = cypher_traverse(query, driver, openai_client, top_k=cfg_r.top_k_vector)
-
-    # Deduplicate by chunk id or content prefix
-    seen: dict[str, SearchResult] = {}
-    for r in vector_results + graph_results:
-        key = r.chunk.id or r.chunk.content[:80]
-        if key not in seen:
-            seen[key] = r
-
-    if not seen:
-        return []
-
-    # Get query embedding for re-ranking
     query_emb = _embed_query(query, openai_client)
-
-    # Fetch PassageNode embeddings for cosine re-ranking
-    chunk_ids = [r.chunk.id for r in seen.values() if r.chunk.id]
-    emb_map = _fetch_passage_embeddings(chunk_ids, driver)
-
-    # Score each passage by cosine similarity to query
-    scored: list[tuple[float, str, SearchResult]] = []
-    for key, r in seen.items():
-        cid = r.chunk.id
-        if cid and cid in emb_map:
-            sim = _cosine_similarity(query_emb, emb_map[cid])
-        else:
-            # Fallback: keep original rank-based score, scaled down
-            sim = r.score * 0.3
-        scored.append((sim, key, r))
-
-    scored.sort(key=lambda x: x[0], reverse=True)
-
-    merged = []
-    for rank, (sim, _key, r) in enumerate(scored[:top_k], start=1):
-        merged.append(SearchResult(
-            chunk=r.chunk,
-            score=sim,
-            rank=rank,
-            source="hybrid",
-        ))
-
-    logger.info("Hybrid search: %d unique passages, returning top %d by cosine similarity",
-                len(seen), len(merged))
-    return merged
+    orchestrator = RetrievalOrchestrator(
+        driver,
+        providers=[
+            VectorRetrievalProvider(driver),
+            BM25RetrievalProvider(driver),
+            GraphRetrievalProvider(driver),
+        ],
+    )
+    results = orchestrator.search(
+        query=query,
+        query_embedding=query_emb,
+        top_k=top_k,
+        query_type=query_type,
+        channel_weights=channel_weights,
+        seed_results=seed_results,
+        enabled_providers=enabled_providers,
+        provider_results=provider_results,
+        rerank_enabled=rerank_enabled,
+        provider_top_k={
+            "vector": cfg.retrieval.top_k_vector,
+            "bm25": cfg.retrieval.top_k_bm25,
+            "graph": cfg.retrieval.top_k_vector,
+        },
+        provider_filters={"graph": {"max_hops": cfg.retrieval.max_hops}},
+    )
+    logger.info("Hybrid search returned %d results", len(results))
+    return results
 
 
 def _rrf_merge(
-    list_a: list[SearchResult],
-    list_b: list[SearchResult],
+    *result_lists: list[SearchResult],
     top_k: int = 5,
     k: int = 60,
+    weights: dict[str, float] | None = None,
 ) -> list[SearchResult]:
-    """Reciprocal Rank Fusion merge of two result lists."""
-    scores: dict[str, float] = {}
-    result_map: dict[str, SearchResult] = {}
-
-    for rank, r in enumerate(list_a, start=1):
-        key = r.chunk.id or r.chunk.content[:50]
-        scores[key] = scores.get(key, 0.0) + 1.0 / (k + rank)
-        result_map[key] = r
-
-    for rank, r in enumerate(list_b, start=1):
-        key = r.chunk.id or r.chunk.content[:50]
-        scores[key] = scores.get(key, 0.0) + 1.0 / (k + rank)
-        if key not in result_map:
-            result_map[key] = r
-
-    sorted_keys = sorted(scores, key=lambda x: scores[x], reverse=True)[:top_k]
-
-    merged = []
-    for i, key in enumerate(sorted_keys):
-        result = result_map[key]
-        merged.append(SearchResult(
-            chunk=result.chunk,
-            score=scores[key],
-            rank=i + 1,
-            source="hybrid",
-        ))
-
-    return merged
+    """Reciprocal Rank Fusion merge of one or more result lists."""
+    return FusionEngine(rrf_k=k).fuse(*result_lists, top_k=top_k, weights=weights)
 
 
 # ---------------------------------------------------------------------------
@@ -289,7 +278,7 @@ def temporal_query(
     query_emb = _embed_query(query, openai_client)
     temporal_re = _get_temporal_re()
 
-    with driver.session() as session:
+    with open_neo4j_session(driver) as session:
         result = session.run(
             f"""
             MATCH (pa:{PASSAGE_LABEL})
@@ -332,7 +321,7 @@ def temporal_query(
             ),
             score=sim,
             rank=rank,
-            source="temporal",
+            source="vector",
         ))
 
     logger.info("Temporal query: %d passages (temporal-boosted)", len(results))
@@ -368,7 +357,7 @@ def full_document_read(
 
     query_emb = _embed_query(query, openai_client)
 
-    with driver.session() as session:
+    with open_neo4j_session(driver) as session:
         result = session.run(
             f"""
             MATCH (pa:{PASSAGE_LABEL})
@@ -403,7 +392,7 @@ def full_document_read(
             ),
             score=sim,
             rank=rank,
-            source="full_read",
+            source="vector",
         ))
 
     logger.info("Full document read: %d passages (ranked by similarity)", len(results))
@@ -421,27 +410,27 @@ def comprehensive_search(
     top_k: int | None = None,
 ) -> list[SearchResult]:
     """Comprehensive retrieval: LLM generates sub-queries + keyword extraction,
-    each → vector search, merge via RRF. Also includes full_document_read passages.
+    each → retrieval, merge via RRF. Also includes full_document_read passages.
 
     Designed for GLOBAL queries ("list all", "summarize all") where a single
     top-k pass misses components.
     """
     cfg = get_settings()
     if top_k is None:
-        top_k = 25  # large for comprehensive coverage
+        top_k = max(cfg.retrieval.top_k_final, 8)
 
     # Detect enumeration count for dynamic sub-query generation
-    n_sub = _detect_enumeration_count(query)
+    n_sub = min(3, _detect_enumeration_count(query))
     sub_queries = _generate_sub_queries(query, openai_client, cfg.openai.llm_model_mini, n=n_sub)
 
     # Fan-out: run vector search for each sub-query
     all_results: list[list[SearchResult]] = []
     for sq in sub_queries:
-        results = vector_search(sq, driver, openai_client, top_k=cfg.retrieval.top_k_vector)
+        results = vector_search(sq, driver, openai_client, top_k=min(cfg.retrieval.top_k_vector, 4))
         all_results.append(results)
 
-    # Full document read — larger top_k for enumerations
-    full_top_k = 40 if n_sub > 5 else 20
+    # Full document read — keep narrow and similarity-ranked
+    full_top_k = min(max(top_k, 4), 8)
     full_results = full_document_read(query, driver, openai_client, top_k=full_top_k)
     all_results.append(full_results)
 
@@ -453,9 +442,9 @@ def comprehensive_search(
     for i in range(1, len(all_results)):
         merged = _rrf_merge(merged, all_results[i], top_k=top_k)
 
-    # Also merge with original query results for safety
-    original_results = vector_search(query, driver, openai_client, top_k=cfg.retrieval.top_k_vector)
-    merged = _rrf_merge(merged, original_results, top_k=top_k)
+    # Single final re-rank via cosine over the merged pool
+    query_emb = _embed_query(query, openai_client)
+    merged = rerank(query, merged, top_k=top_k, query_embedding=query_emb)
 
     logger.info("Comprehensive search: %d results from %d sub-queries + full_read", len(merged), len(sub_queries))
     return merged

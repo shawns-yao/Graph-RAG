@@ -13,8 +13,10 @@ from typing import Any
 
 import httpx
 import streamlit as st
+from agentic_graph_rag.trace_explain import explain_trace_payload
 from rag_core.config import get_settings
 from rag_core.i18n import get_translator
+from rag_core.models import Chunk
 
 # ---------------------------------------------------------------------------
 # Page config
@@ -109,6 +111,34 @@ if "last_qa" not in st.session_state:
     st.session_state.last_qa = None
 if "last_trace" not in st.session_state:
     st.session_state.last_trace = None
+if "last_trace_payload" not in st.session_state:
+    st.session_state.last_trace_payload = None
+
+
+def _build_local_trace_payload(trace_data: dict[str, Any] | None) -> dict[str, Any] | None:
+    """Build explain payload locally when API explain endpoint is unavailable."""
+    if not trace_data:
+        return None
+    try:
+        from rag_core.models import PipelineTrace
+
+        trace = PipelineTrace.model_validate(trace_data)
+        return explain_trace_payload(trace)
+    except Exception:
+        return {"trace": trace_data, "explain": {}}
+
+
+def _fetch_trace_payload_from_api(trace_id: str) -> dict[str, Any] | None:
+    """Fetch structured trace explain payload from API."""
+    try:
+        response = httpx.get(
+            f"{API_URL}/api/v1/trace/{trace_id}/explain",
+            timeout=30.0,
+        )
+        response.raise_for_status()
+        return response.json()
+    except Exception:
+        return None
 
 # ---------------------------------------------------------------------------
 # Tabs
@@ -172,18 +202,26 @@ with tab_ingest:
             client = _get_openai_client()
             store = _get_vector_store()
 
-            from rag_core.chunker import chunk_text
+            from rag_core.chunker import chunk_document, chunk_document_for_graph
             from rag_core.embedder import embed_chunks
             from rag_core.enricher import enrich_chunks
-            from rag_core.loader import load_file
+            from rag_core.loader import load_document
 
             progress = st.progress(0, text=t("ingest_loading"))
-            text = load_file(file_path, use_gpu=use_gpu)
+            document = load_document(file_path, use_gpu=use_gpu)
+            text = document.markdown
             st.info(t("ingest_chars_loaded", chars=len(text)))
             progress.progress(15, text=t("ingest_chunking"))
 
             cfg = get_settings()
-            chunks = chunk_text(text, cfg.indexing.chunk_size, cfg.indexing.chunk_overlap)
+            chunks = chunk_document(
+                document,
+                parent_chunk_size=cfg.indexing.parent_chunk_size,
+                child_chunk_size=cfg.indexing.chunk_size,
+                child_chunk_overlap=cfg.indexing.chunk_overlap,
+                context_chars=cfg.indexing.context_window_chars,
+            )
+            graph_chunks = chunk_document_for_graph(document)
             st.info(t("ingest_chunks_created", count=len(chunks)))
             progress.progress(30, text=t("ingest_enriching"))
 
@@ -209,9 +247,15 @@ with tab_ingest:
                 graph_label = "Building graph..." if lang == "en" else "Построение графа..."
                 progress.progress(70, text=graph_label)
 
-                embeddings = [c.embedding for c in chunks]
+                graph_embed_inputs = [
+                    Chunk.model_validate(chunk.model_dump())
+                    for chunk in graph_chunks
+                ]
+                if graph_embed_inputs:
+                    graph_embed_inputs = embed_chunks(graph_embed_inputs)
+                embeddings = [c.embedding for c in graph_embed_inputs]
                 entities, relationships, skeletal, peripheral = build_skeleton_index(
-                    chunks, embeddings, openai_client=client,
+                    graph_embed_inputs, embeddings, openai_client=client,
                 )
 
                 ent_label = (
@@ -293,6 +337,10 @@ with tab_search:
                 qa = QAResult.model_validate(data)
                 st.session_state.last_qa = qa
                 st.session_state.last_trace = data.get("trace")
+                trace_id = data.get("trace", {}).get("trace_id")
+                st.session_state.last_trace_payload = (
+                    _fetch_trace_payload_from_api(trace_id) if trace_id else None
+                ) or _build_local_trace_payload(data.get("trace"))
 
             except (httpx.ConnectError, httpx.HTTPStatusError):
                 # Fallback to direct Python if API not available
@@ -324,6 +372,7 @@ with tab_search:
                 # Build trace from qa.trace if available
                 if qa.trace:
                     st.session_state.last_trace = qa.trace.model_dump()
+                    st.session_state.last_trace_payload = explain_trace_payload(qa.trace)
                 else:
                     trace_dict: dict[str, Any] = {"query": query, "mode": mode}
                     if qa.router_decision:
@@ -332,6 +381,7 @@ with tab_search:
                             "decision": qa.router_decision.model_dump(),
                         }
                     st.session_state.last_trace = trace_dict
+                    st.session_state.last_trace_payload = _build_local_trace_payload(trace_dict)
 
         # Display answer
         qa = st.session_state.last_qa
@@ -416,34 +466,49 @@ with tab_graph:
 with tab_trace:
     st.header(t("trace_header"))
 
+    trace_payload = st.session_state.get("last_trace_payload")
     trace_data = st.session_state.get("last_trace")
-    if trace_data is None:
+    trace_raw = trace_payload.get("trace", trace_data) if trace_payload else trace_data
+    trace_explain = trace_payload.get("explain", {}) if trace_payload else {}
+    if trace_raw is None:
         st.info(t("trace_no_data"))
     else:
         # Router decision
-        if trace_data.get("router_step"):
+        router_view = trace_explain.get("router")
+        router_step = trace_raw.get("router_step", {})
+        if router_view or router_step:
             st.subheader(t("trace_routing"))
-            rs = trace_data["router_step"]
-            d = rs.get("decision", {})
+            rs = router_view or {
+                "method": router_step.get("method", "—"),
+                "duration_ms": router_step.get("duration_ms", 0),
+                "query_type": router_step.get("decision", {}).get("query_type", "—"),
+                "confidence": router_step.get("decision", {}).get("confidence", 0),
+                "suggested_tool": router_step.get("decision", {}).get("suggested_tool", "—"),
+                "reasoning": router_step.get("decision", {}).get("reasoning", ""),
+                "rules_fired": router_step.get("rules_fired", []),
+            }
             col1, col2, col3, col4 = st.columns(4)
             with col1:
                 st.metric("Method", rs.get("method", "—"))
             with col2:
-                st.metric(t("trace_query_type"), d.get("query_type", "—"))
+                st.metric(t("trace_query_type"), rs.get("query_type", "—"))
             with col3:
-                st.metric(t("trace_confidence"), f"{d.get('confidence', 0):.0%}")
+                st.metric(t("trace_confidence"), f"{rs.get('confidence', 0):.0%}")
             with col4:
-                st.metric(t("trace_tool"), d.get("suggested_tool", "—"))
+                st.metric(t("trace_tool"), rs.get("suggested_tool", "—"))
             if rs.get("rules_fired"):
                 st.caption(f"Rules: {', '.join(rs['rules_fired'])}")
-            st.caption(f"{t('trace_reasoning')}: {d.get('reasoning', '')}")
+            st.caption(f"{t('trace_reasoning')}: {rs.get('reasoning', '')}")
             st.caption(f"Duration: {rs.get('duration_ms', 0)}ms")
 
         # Tool steps
-        if trace_data.get("tool_steps"):
+        retrieval_view = trace_explain.get("retrieval", {})
+        if trace_raw.get("tool_steps"):
             st.divider()
             st.subheader("Tool Steps")
-            for i, step in enumerate(trace_data["tool_steps"], 1):
+            explained_steps = retrieval_view.get("steps", [])
+            for i, step in enumerate(trace_raw["tool_steps"], 1):
+                explained = explained_steps[i - 1] if i - 1 < len(explained_steps) else {}
                 with st.container(border=True):
                     c1, c2, c3, c4 = st.columns(4)
                     with c1:
@@ -455,22 +520,58 @@ with tab_trace:
                         st.metric("Relevance", f"{score:.1f}/5.0")
                     with c4:
                         st.metric("Duration", f"{step.get('duration_ms', 0)}ms")
+                    if explained.get("providers"):
+                        provider_rows = []
+                        for provider in explained["providers"]:
+                            provider_rows.append({
+                                "Provider": provider.get("source", "—"),
+                                "Status": provider.get("status", "idle"),
+                                "Results": provider.get("results_count", 0),
+                                "Top Score": provider.get("top_score", 0.0),
+                                "Avg Score": provider.get("average_score", 0.0),
+                                "Top Chunks": ", ".join(provider.get("top_chunk_ids", [])),
+                            })
+                        st.dataframe(provider_rows, use_container_width=True, hide_index=True)
+                    if explained.get("empty_sources"):
+                        st.caption(f"Empty sources: {', '.join(explained['empty_sources'])}")
+
+        provider_summary = retrieval_view.get("provider_summary", [])
+        if provider_summary:
+            st.divider()
+            st.subheader("Provider Summary")
+            summary_rows = []
+            for item in provider_summary:
+                summary_rows.append({
+                    "Provider": item.get("source", "—"),
+                    "Executed": item.get("executed_steps", 0),
+                    "Reused": item.get("reused_steps", 0),
+                    "Empty": item.get("empty_steps", 0),
+                    "Total Results": item.get("total_results", 0),
+                    "Max Top Score": item.get("max_top_score", 0.0),
+                    "Top Chunks": ", ".join(item.get("top_chunk_ids", [])),
+                })
+            st.dataframe(summary_rows, use_container_width=True, hide_index=True)
+            likely_gaps = retrieval_view.get("likely_gaps", [])
+            if likely_gaps:
+                st.warning(f"Likely gaps: {', '.join(likely_gaps)}")
 
         # Escalation steps
-        if trace_data.get("escalation_steps"):
+        escalation_steps = trace_explain.get("escalations") or trace_raw.get("escalation_steps")
+        if escalation_steps:
             st.divider()
             st.subheader("Escalations")
-            for esc in trace_data["escalation_steps"]:
+            for esc in escalation_steps:
                 dur = f" ({esc['duration_ms']}ms)" if esc.get("duration_ms") else ""
                 st.warning(
                     f"**{esc['from_tool']}** → **{esc['to_tool']}**: {esc.get('reason', '')}{dur}"
                 )
 
         # Generator step
-        if trace_data.get("generator_step"):
+        generator_step = trace_explain.get("generation") or trace_raw.get("generator_step")
+        if generator_step:
             st.divider()
             st.subheader("Generator")
-            gs = trace_data["generator_step"]
+            gs = generator_step
             c1, c2, c3, c4 = st.columns(4)
             with c1:
                 st.metric("Model", gs.get("model", "—"))
@@ -484,10 +585,10 @@ with tab_trace:
 
         # Summary — latency breakdown
         st.divider()
-        total_ms = trace_data.get("total_duration_ms", 0)
-        router_ms = trace_data.get("router_step", {}).get("duration_ms", 0) if trace_data.get("router_step") else 0
-        tool_ms = sum(s.get("duration_ms", 0) for s in trace_data.get("tool_steps", []))
-        gen_ms = trace_data.get("generator_step", {}).get("duration_ms", 0) if trace_data.get("generator_step") else 0
+        total_ms = trace_raw.get("total_duration_ms", 0)
+        router_ms = router_step.get("duration_ms", 0) if router_step else 0
+        tool_ms = sum(s.get("duration_ms", 0) for s in trace_raw.get("tool_steps", []))
+        gen_ms = generator_step.get("duration_ms", 0) if generator_step else 0
         other_ms = max(0, total_ms - router_ms - tool_ms - gen_ms)
 
         c1, c2, c3, c4, c5 = st.columns(5)
@@ -502,11 +603,11 @@ with tab_trace:
         with c5:
             st.metric("Other", f"{other_ms}ms")
 
-        st.caption(f"Trace ID: {trace_data.get('trace_id', '—')}")
+        st.caption(f"Trace ID: {trace_raw.get('trace_id', '—')}")
 
         # Raw JSON (expandable)
         with st.expander("Raw Trace JSON"):
-            st.json(trace_data)
+            st.json(trace_payload or trace_raw)
 
 
 # ===================== TAB 5: BENCHMARK ===================================
@@ -516,8 +617,8 @@ with tab_bench:
 
     bench_modes = st.multiselect(
         t("bench_mode"),
-        ["vector", "cypher", "hybrid", "agent_pattern", "agent_llm", "agent_mangle"],
-        default=["vector", "hybrid", "agent_pattern"],
+        ["vector_only", "bm25_only", "graph_only", "hybrid", "hybrid_rerank"],
+        default=["vector_only", "hybrid", "hybrid_rerank"],
     )
 
     if st.button(t("bench_run"), disabled=not bench_modes):
@@ -551,6 +652,9 @@ with tab_bench:
                             t("bench_col_status"): "PASS" if r["passed"] else "FAIL",
                             t("bench_col_confidence"): f"{r['confidence']:.2f}",
                             t("bench_col_retries"): r["retries"],
+                            "P@5": f"{r.get('precision_at_k', 0.0):.2f}",
+                            "R@5": f"{r.get('recall_at_k', 0.0):.2f}",
+                            "MRR": f"{r.get('reciprocal_rank', 0.0):.2f}",
                             t("bench_col_question"): r["question"][:80],
                         })
                     st.dataframe(rows, use_container_width=True)

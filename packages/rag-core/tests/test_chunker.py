@@ -2,10 +2,14 @@
 
 from rag_core.chunker import (
     MAX_EPISODE_CHARS,
+    chunk_document,
+    chunk_document_for_graph,
     chunk_text,
     sanitize_for_graphiti,
     split_large_content,
 )
+from rag_core.loader import DocumentResult
+from rag_core.models import DocumentBlock
 
 
 class TestSanitizeForGraphiti:
@@ -81,3 +85,163 @@ class TestChunkText:
         text = ("A" * 100) + "\n\n" + ("B" * 100) + "\n\n" + ("C" * 100)
         chunks = chunk_text(text, chunk_size=120, chunk_overlap=20)
         assert len(chunks) >= 2
+
+
+class TestStructuredChunking:
+    def test_chunk_document_falls_back_without_blocks(self):
+        document = DocumentResult(markdown="hello world")
+        chunks = chunk_document(document, child_chunk_size=100, child_chunk_overlap=0)
+        assert len(chunks) == 1
+        assert chunks[0].content == "hello world"
+
+    def test_chunk_document_builds_parent_child_context(self):
+        document = DocumentResult(
+            markdown="ignored",
+            blocks=[
+                DocumentBlock(
+                    block_type="paragraph",
+                    text="Alpha " * 20,
+                    heading_path=["Intro", "Overview"],
+                    order_index=0,
+                ),
+                DocumentBlock(
+                    block_type="paragraph",
+                    text="Beta " * 20,
+                    heading_path=["Intro", "Overview"],
+                    order_index=1,
+                ),
+            ],
+        )
+        chunks = chunk_document(
+            document,
+            parent_chunk_size=400,
+            child_chunk_size=80,
+            child_chunk_overlap=10,
+            context_chars=100,
+            hierarchical=True,
+        )
+        assert len(chunks) >= 2
+        assert all(chunk.metadata["parent_chunk_id"] for chunk in chunks)
+        assert all(chunk.metadata["heading_path"] == ["Intro", "Overview"] for chunk in chunks)
+        assert "Section: Intro > Overview" in chunks[0].context
+
+    def test_chunk_document_keeps_tables_atomic(self):
+        document = DocumentResult(
+            markdown="ignored",
+            blocks=[
+                DocumentBlock(
+                    block_type="table",
+                    text="| A | B |\n| --- | --- |\n| 1 | 2 |\n| 3 | 4 |",
+                    heading_path=["Data"],
+                    order_index=0,
+                )
+            ],
+        )
+        chunks = chunk_document(
+            document,
+            parent_chunk_size=50,
+            child_chunk_size=10,
+            child_chunk_overlap=0,
+        )
+        assert len(chunks) == 1
+        assert chunks[0].content.startswith("| A | B |")
+
+    def test_chunk_document_for_graph_skips_table_and_code(self):
+        document = DocumentResult(
+            markdown="X" * 7000,
+            blocks=[
+                DocumentBlock(
+                    block_type="table",
+                    text="| A | B |",
+                    heading_path=["Data"],
+                    order_index=0,
+                ),
+                DocumentBlock(
+                    block_type="code",
+                    text="print('x')",
+                    heading_path=["Impl"],
+                    order_index=1,
+                ),
+                DocumentBlock(
+                    block_type="paragraph",
+                    text="Neo4j connects GraphRAG with PageRank and FastAPI.",
+                    heading_path=["Intro"],
+                    order_index=2,
+                ),
+            ],
+        )
+        chunks = chunk_document_for_graph(document)
+        assert len(chunks) == 1
+        assert chunks[0].metadata["graph_chunk_type"] == "skeleton_candidate"
+        assert chunks[0].metadata["block_type"] == "paragraph"
+
+    def test_chunk_document_for_graph_marks_peripheral_when_entities_sparse(self):
+        document = DocumentResult(
+            markdown="X" * 7000,
+            blocks=[
+                DocumentBlock(
+                    block_type="paragraph",
+                    text="simple explanation without many anchors.",
+                    heading_path=["Notes"],
+                    order_index=0,
+                ),
+            ],
+        )
+        chunks = chunk_document_for_graph(document)
+        assert len(chunks) == 1
+        assert chunks[0].metadata["graph_chunk_type"] == "peripheral_candidate"
+
+    def test_chunk_document_for_graph_respects_sentence_boundaries(self):
+        document = DocumentResult(
+            markdown="ignored",
+            blocks=[
+                DocumentBlock(
+                    block_type="paragraph",
+                    text=(
+                        "Neo4j supports GraphRAG with FastAPI. "
+                        "PageRank links Entity nodes with Passage nodes. "
+                        "DeepSeek powers extraction."
+                    ),
+                    heading_path=["Graph"],
+                    order_index=0,
+                ),
+            ],
+        )
+        chunks = chunk_document_for_graph(document)
+        assert chunks
+        assert all(not chunk.content.endswith("Fast") for chunk in chunks)
+
+    def test_chunk_document_for_graph_uses_markdown_fallback_for_short_documents(self):
+        markdown = (
+            "## COPD\n\n"
+            "COPD diagnosis requires spirometry after bronchodilator use. "
+            "GOLD grading depends on FEV1 percentage predicted.\n\n"
+            "Treatment selection depends on exacerbation risk and eosinophils."
+        )
+        document = DocumentResult(
+            markdown=markdown,
+            blocks=[
+                DocumentBlock(
+                    block_type="paragraph",
+                    text="COPD diagnosis requires spirometry after bronchodilator use.",
+                    heading_path=["COPD"],
+                    order_index=0,
+                ),
+                DocumentBlock(
+                    block_type="paragraph",
+                    text="GOLD grading depends on FEV1 percentage predicted.",
+                    heading_path=["COPD"],
+                    order_index=1,
+                ),
+                DocumentBlock(
+                    block_type="paragraph",
+                    text="Treatment selection depends on exacerbation risk and eosinophils.",
+                    heading_path=["COPD"],
+                    order_index=2,
+                ),
+            ],
+        )
+        chunks = chunk_document_for_graph(document)
+        assert len(chunks) == 1
+        assert "COPD diagnosis requires spirometry" in chunks[0].content
+        assert "graph_chunk_type" not in chunks[0].metadata

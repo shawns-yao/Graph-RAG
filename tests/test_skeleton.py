@@ -7,13 +7,20 @@ import numpy as np
 from rag_core.models import Chunk, Entity
 
 from agentic_graph_rag.indexing.skeleton import (
+    _merge_entities,
     _parse_extraction_response,
+    _rank_chunks_for_skeleton_selection,
     build_knn_graph,
     build_skeleton_index,
     compute_pagerank,
+    extract_candidate_entities,
     extract_entities_full,
     extract_keywords,
+    filter_low_information_chunks,
+    infer_document_type,
     link_peripheral_keywords,
+    resolve_pagerank_damping,
+    resolve_skeleton_beta,
     select_skeletal_chunks,
 )
 
@@ -51,7 +58,7 @@ class TestBuildKnnGraph:
 
     def test_two_chunks(self):
         chunks = _make_chunks(2)
-        embs = _make_embeddings(2)
+        embs = [[1.0, 0.0], [0.95, 0.05]]
         g = build_knn_graph(chunks, embs, k=5)
         assert g.number_of_nodes() == 2
         # k=5 but only 1 neighbour available → 1 edge per node = 2 edges
@@ -73,6 +80,17 @@ class TestBuildKnnGraph:
         for _, _, data in g.edges(data=True):
             assert "weight" in data
             assert -1.0 <= data["weight"] <= 1.0
+
+    def test_filters_low_similarity_edges(self):
+        chunks = _make_chunks(3)
+        embs = [
+            [1.0, 0.0],
+            [0.95, 0.05],
+            [-1.0, 0.0],
+        ]
+        g = build_knn_graph(chunks, embs, k=2)
+        assert g.has_edge(0, 1)
+        assert not g.has_edge(0, 2)
 
     @patch("agentic_graph_rag.indexing.skeleton.get_settings")
     def test_uses_settings_k(self, mock_settings):
@@ -165,19 +183,155 @@ class TestSelectSkeletalChunks:
         skeletal, peripheral = select_skeletal_chunks(chunks, scores)
         assert len(skeletal) == 5
 
+    @patch("agentic_graph_rag.indexing.skeleton.get_settings")
+    def test_dynamic_beta_for_short_docs(self, mock_settings):
+        cfg = MagicMock()
+        cfg.indexing.skeleton_beta = 0.25
+        cfg.indexing.skeleton_beta_short_doc = 1.0
+        cfg.indexing.skeleton_beta_medium_doc = 0.5
+        cfg.indexing.skeleton_beta_long_doc = 0.3
+        cfg.indexing.skeleton_short_doc_max_chunks = 8
+        cfg.indexing.skeleton_medium_doc_max_chunks = 24
+        mock_settings.return_value = cfg
+
+        assert resolve_skeleton_beta(_make_chunks(4)) == 0.5
+
+    @patch("agentic_graph_rag.indexing.skeleton.get_settings")
+    def test_dynamic_beta_for_long_docs(self, mock_settings):
+        cfg = MagicMock()
+        cfg.indexing.skeleton_beta = 0.25
+        cfg.indexing.skeleton_beta_short_doc = 1.0
+        cfg.indexing.skeleton_beta_medium_doc = 0.5
+        cfg.indexing.skeleton_beta_long_doc = 0.3
+        cfg.indexing.skeleton_short_doc_max_chunks = 8
+        cfg.indexing.skeleton_medium_doc_max_chunks = 24
+        mock_settings.return_value = cfg
+
+        assert resolve_skeleton_beta(_make_chunks(40)) == 0.3
+
+    def test_short_docs_cap_skeletal_count(self):
+        chunks = _make_chunks(8)
+        scores = {i: float(8 - i) for i in range(8)}
+        skeletal, peripheral = select_skeletal_chunks(chunks, scores, beta=1.0)
+        assert len(skeletal) == 4
+        assert len(peripheral) == 4
+
+    @patch("agentic_graph_rag.indexing.skeleton.get_settings")
+    def test_entity_density_can_promote_graph_chunk(self, mock_settings):
+        cfg = MagicMock()
+        cfg.indexing.skeleton_beta = 0.5
+        cfg.indexing.skeleton_entity_density_weight = 0.6
+        mock_settings.return_value = cfg
+        chunks = [
+            Chunk(
+                id="c0",
+                content="general notes",
+                metadata={"graph_entity_count": 1, "graph_chunk_type": "peripheral_candidate"},
+            ),
+            Chunk(
+                id="c1",
+                content="Neo4j GraphRAG FastAPI PageRank",
+                metadata={"graph_entity_count": 4, "graph_chunk_type": "skeleton_candidate"},
+            ),
+        ]
+        scores = _rank_chunks_for_skeleton_selection(chunks, {0: 1.0, 1: 0.2})
+        assert scores[1] > scores[0]
+
+
+class TestFilterLowInformationChunks:
+    def test_filters_low_signal_chunks_before_knn(self):
+        chunks = [
+            Chunk(id="c1", content="目录"),
+            Chunk(id="c2", content="目录"),
+            Chunk(id="c4", content="目录"),
+            Chunk(id="c3", content="二型糖尿病 胰岛素 治疗 方案"),
+        ]
+        embeddings = [[1.0, 0.0], [1.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
+
+        kept_chunks, kept_embeddings, dropped_chunks = filter_low_information_chunks(
+            chunks,
+            embeddings,
+        )
+
+        assert [chunk.id for chunk in kept_chunks] == ["c3"]
+        assert kept_embeddings == [[0.0, 1.0]]
+        assert [chunk.id for chunk in dropped_chunks] == ["c1", "c2", "c4"]
+        assert all(chunk.metadata["low_information_chunk"] is True for chunk in dropped_chunks)
+
 
 # ---------------------------------------------------------------------------
 # _parse_extraction_response
 # ---------------------------------------------------------------------------
 
 class TestParseExtractionResponse:
+    def test_parses_json_entities_and_relationships(self):
+        text = """
+        {
+          "entities": [
+            {
+              "chunk_id": "c1",
+              "name": "COVID-19",
+              "type": "Disease",
+              "description": "Respiratory illness",
+              "confidence": 0.95
+            }
+          ],
+          "relationships": [
+            {
+              "chunk_id": "c1",
+              "from": "COVID-19",
+              "to": "SARS-CoV-2",
+              "type": "caused_by",
+              "confidence": 0.92
+            }
+          ]
+        }
+        """
+        entities, rels = _parse_extraction_response(
+            text,
+            candidate_entities_by_chunk={"c1": ["COVID-19"]},
+        )
+        assert len(entities) == 1
+        assert entities[0].metadata["confidence"] == 0.95
+        assert entities[0].metadata["aliases"] == ["COVID-19"]
+        assert len(rels) == 1
+        assert rels[0].metadata["confidence"] == 0.92
+        assert entities[0].entity_confidence == 0.95
+
     def test_parses_entities(self):
         text = "ENTITY: COVID-19 | Disease | Respiratory illness\nENTITY: WHO | Organization | World Health"
-        entities, rels = _parse_extraction_response(text, "c1")
+        entities, rels = _parse_extraction_response(text, "c1", candidate_entities=["WHO"])
         assert len(entities) == 2
         assert entities[0].name == "COVID-19"
         assert entities[0].entity_type == "Disease"
         assert entities[0].description == "Respiratory illness"
+        assert entities[1].metadata["aliases"] == ["WHO"]
+
+    def test_resolves_medical_abbreviation_aliases_only(self):
+        text = """
+        {
+          "entities": [
+            {
+              "chunk_id": "c1",
+              "name": "Diabetes Mellitus",
+              "type": "Disease"
+            },
+            {
+              "chunk_id": "c1",
+              "name": "苹果公司",
+              "type": "Organization"
+            }
+          ],
+          "relationships": []
+        }
+        """
+        entities, _rels = _parse_extraction_response(
+            text,
+            candidate_entities_by_chunk={"c1": ["DM", "Apple"]},
+        )
+        alias_map = {entity.name: entity.metadata["aliases"] for entity in entities}
+        assert "DM" in alias_map["Diabetes Mellitus"]
+        assert alias_map["苹果公司"] == []
 
     def test_parses_relationships(self):
         text = "RELATIONSHIP: COVID-19 | caused_by | SARS-CoV-2"
@@ -224,10 +378,28 @@ class TestExtractEntitiesFull:
         client = MagicMock()
         resp = MagicMock()
         resp.choices = [MagicMock()]
-        resp.choices[0].message.content = (
-            "ENTITY: Machine Learning | Field | AI subfield\n"
-            "RELATIONSHIP: ML | part_of | AI"
-        )
+        resp.choices[0].message.content = """
+        {
+          "entities": [
+            {
+              "chunk_id": "c1",
+              "name": "Machine Learning",
+              "type": "Field",
+              "description": "AI subfield",
+              "confidence": 0.91
+            }
+          ],
+          "relationships": [
+            {
+              "chunk_id": "c1",
+              "from": "ML",
+              "to": "AI",
+              "type": "part_of",
+              "confidence": 0.88
+            }
+          ]
+        }
+        """
         client.chat.completions.create.return_value = resp
 
         chunks = [Chunk(id="c1", content="Machine Learning is part of AI")]
@@ -235,7 +407,36 @@ class TestExtractEntitiesFull:
 
         assert len(entities) == 1
         assert len(rels) == 1
-        client.chat.completions.create.assert_called_once()
+
+
+class TestMergeEntities:
+    def test_merge_entities_considers_type(self):
+        entities = [
+            Entity(name="Apple", entity_type="Fruit", entity_confidence=0.9),
+            Entity(name="Apple", entity_type="Company", entity_confidence=0.85),
+        ]
+        merged = _merge_entities(entities)
+        assert len(merged) == 2
+
+    def test_merge_entities_keeps_highest_confidence(self):
+        entities = [
+            Entity(
+                name="Cancer",
+                entity_type="Disease",
+                entity_confidence=0.95,
+                metadata={"source_chunk": "c1"},
+            ),
+            Entity(
+                name="Cancer",
+                entity_type="Disease",
+                entity_confidence=0.81,
+                metadata={"source_chunk": "c2"},
+            ),
+        ]
+        merged = _merge_entities(entities)
+        assert len(merged) == 1
+        assert merged[0].entity_confidence == 0.95
+        assert merged[0].metadata["confidence"] == 0.95
 
     def test_handles_api_error(self):
         client = MagicMock()
@@ -247,6 +448,42 @@ class TestExtractEntitiesFull:
         assert rels == []
 
 
+class TestDocumentTypeAndCandidates:
+    def test_infers_medical(self):
+        chunks = [Chunk(id="c1", content="content", metadata={"section_title": "Diagnosis and Treatment"})]
+        assert infer_document_type(chunks) == "medical"
+
+    def test_infers_paper(self):
+        chunks = [Chunk(id="c1", content="content", metadata={"section_title": "Abstract"})]
+        assert infer_document_type(chunks) == "paper"
+
+    def test_infers_technical(self):
+        chunks = [Chunk(id="c1", content="content", metadata={"section_title": "API Architecture"})]
+        assert infer_document_type(chunks) == "technical"
+
+    @patch("agentic_graph_rag.indexing.skeleton.get_settings")
+    def test_resolves_paper_damping(self, mock_settings):
+        cfg = MagicMock()
+        cfg.indexing.pagerank_damping = 0.85
+        cfg.indexing.pagerank_damping_technical = 0.8
+        cfg.indexing.pagerank_damping_paper = 0.9
+        mock_settings.return_value = cfg
+
+        chunks = [Chunk(id="c1", content="content", metadata={"section_title": "Methodology"})]
+        assert resolve_pagerank_damping(chunks) == 0.9
+
+    def test_extract_candidate_entities(self):
+        text = "GraphRAG uses Neo4j and PageRank in OpenAI pipelines."
+        candidates = extract_candidate_entities(text)
+        assert "GraphRAG" in candidates
+        assert "Neo4j" in candidates
+
+    def test_extract_candidate_entities_finds_medical_terms(self):
+        text = "The patient developed meningitis and bacteremia after surgery."
+        candidates = extract_candidate_entities(text)
+        assert "meningitis" in [item.lower() for item in candidates]
+
+
 # ---------------------------------------------------------------------------
 # link_peripheral_keywords
 # ---------------------------------------------------------------------------
@@ -256,22 +493,29 @@ class TestLinkPeripheralKeywords:
         assert link_peripheral_keywords([], []) == []
 
     def test_links_matching_entities(self):
-        entities = [Entity(id="e1", name="Python", entity_type="Language")]
+        entities = [Entity(id="e1", name="Insulin", entity_type="Drug")]
         chunks = [
-            Chunk(id="c1", content="Python is great"),
+            Chunk(id="c1", content="Insulin is effective"),
             Chunk(id="c2", content="Java is also good"),
         ]
         rels = link_peripheral_keywords(chunks, entities)
         assert len(rels) == 1
-        assert rels[0].source == "Python"
+        assert rels[0].source == "Insulin"
         assert rels[0].target == "c1"
         assert rels[0].relation_type == "MENTIONED_IN"
 
     def test_case_insensitive(self):
-        entities = [Entity(id="e1", name="PYTHON")]
-        chunks = [Chunk(id="c1", content="python is great")]
+        entities = [Entity(id="e1", name="INSULIN", entity_type="Drug")]
+        chunks = [Chunk(id="c1", content="insulin is effective")]
         rels = link_peripheral_keywords(chunks, entities)
         assert len(rels) == 1
+
+    def test_uses_same_alias_normalization_as_primary_linking(self):
+        entities = [Entity(id="e1", name="Type 2 Diabetes", entity_type="Disease", metadata={"aliases": ["Type-2-Diabetes"]})]
+        chunks = [Chunk(id="c1", content="Type 2 Diabetes requires long-term monitoring")]
+        rels = link_peripheral_keywords(chunks, entities)
+        assert len(rels) == 1
+        assert rels[0].source == "Type 2 Diabetes"
 
     def test_skips_short_names(self):
         entities = [Entity(id="e1", name="A")]
@@ -281,12 +525,42 @@ class TestLinkPeripheralKeywords:
 
     def test_multiple_matches(self):
         entities = [
-            Entity(id="e1", name="Python"),
-            Entity(id="e2", name="ML"),
+            Entity(id="e1", name="Insulin", entity_type="Drug"),
+            Entity(id="e2", name="Glucose", entity_type="Biomarker"),
         ]
-        chunks = [Chunk(id="c1", content="Python for ML is popular")]
+        chunks = [Chunk(id="c1", content="Insulin reduced glucose levels")]
         rels = link_peripheral_keywords(chunks, entities)
         assert len(rels) == 2
+
+    def test_only_links_medically_salient_entities(self):
+        entities = [
+            Entity(id="e1", name="General Study", entity_type="Concept"),
+            Entity(id="e2", name="Insulin", entity_type="Drug"),
+        ]
+        chunks = [Chunk(id="c1", content="General Study compared outcomes and insulin dosing")]
+        rels = link_peripheral_keywords(chunks, entities)
+        assert len(rels) == 1
+        assert rels[0].source == "Insulin"
+
+    def test_promotes_high_confidence_aliases_from_peripheral_hits(self):
+        entities = [
+            Entity(
+                id="e1",
+                name="Diabetes Mellitus",
+                entity_type="Disease",
+                metadata={"candidate_entities": ["DM"]},
+            )
+        ]
+        chunks = [
+            Chunk(id="c1", content="DM management requires follow-up"),
+            Chunk(id="c2", content="DM treatment needs monitoring"),
+        ]
+        rels = link_peripheral_keywords(chunks, entities)
+        assert len(rels) == 2
+        assert "DM" in entities[0].metadata["aliases"]
+        assert "learned_aliases" not in entities[0].metadata
+        assert "alias_counts" not in entities[0].metadata
+        assert "alias_evidence" not in entities[0].metadata
 
 
 # ---------------------------------------------------------------------------
@@ -342,9 +616,65 @@ class TestBuildSkeletonIndex:
             chunks, embs, openai_client=client
         )
 
-        # beta=0.25 → 2 skeletal chunks (8 * 0.25 = 2)
-        assert len(skeletal) == 2
-        assert len(peripheral) == 6
+        # short documents now cap skeletal extraction to avoid full-width LLM passes
+        assert len(skeletal) == 4
+        assert len(peripheral) == 4
         assert len(entities) >= 1  # at least something extracted
-        # LLM called for each skeletal chunk
-        assert client.chat.completions.create.call_count == 2
+        # Only skeletal chunks trigger deep extraction calls
+        assert client.chat.completions.create.call_count == 4
+
+    @patch("agentic_graph_rag.indexing.skeleton.get_settings")
+    @patch("agentic_graph_rag.indexing.skeleton.extract_entities_full")
+    def test_short_docs_keep_all_chunks(self, mock_extract, mock_settings):
+        cfg = MagicMock()
+        cfg.indexing.knn_k = 2
+        cfg.indexing.pagerank_damping = 0.85
+        cfg.indexing.pagerank_damping_technical = 0.8
+        cfg.indexing.pagerank_damping_paper = 0.9
+        cfg.indexing.skeleton_beta = 0.25
+        cfg.indexing.skeleton_beta_short_doc = 1.0
+        cfg.indexing.skeleton_beta_medium_doc = 0.5
+        cfg.indexing.skeleton_beta_long_doc = 0.3
+        cfg.indexing.skeleton_short_doc_max_chunks = 8
+        cfg.indexing.skeleton_medium_doc_max_chunks = 24
+        mock_settings.return_value = cfg
+        mock_extract.return_value = ([], [])
+
+        chunks = _make_chunks(4)
+        embs = _make_embeddings(4)
+        entities, rels, skeletal, peripheral = build_skeleton_index(chunks, embs, openai_client=MagicMock())
+
+        assert entities == []
+        assert rels == []
+        assert len(skeletal) == 2
+        assert len(peripheral) == 2
+
+    @patch("agentic_graph_rag.indexing.skeleton.persist_entity_alias_metadata")
+    @patch("agentic_graph_rag.indexing.skeleton.get_settings")
+    @patch("agentic_graph_rag.indexing.skeleton.extract_entities_full")
+    def test_persists_medical_aliases_when_driver_present(self, mock_extract, mock_settings, mock_persist):
+        cfg = MagicMock()
+        cfg.indexing.knn_k = 2
+        cfg.indexing.pagerank_damping = 0.85
+        cfg.indexing.pagerank_damping_technical = 0.8
+        cfg.indexing.pagerank_damping_paper = 0.9
+        cfg.indexing.skeleton_beta = 0.25
+        cfg.indexing.skeleton_beta_short_doc = 1.0
+        cfg.indexing.skeleton_beta_medium_doc = 0.5
+        cfg.indexing.skeleton_beta_long_doc = 0.3
+        cfg.indexing.skeleton_short_doc_max_chunks = 8
+        cfg.indexing.skeleton_medium_doc_max_chunks = 24
+        mock_settings.return_value = cfg
+        mock_extract.return_value = (
+            [Entity(id="e1", name="Diabetes Mellitus", entity_type="Disease")],
+            [],
+        )
+
+        chunks = _make_chunks(4)
+        embs = _make_embeddings(4)
+        driver = MagicMock()
+
+        build_skeleton_index(chunks, embs, openai_client=MagicMock(), driver=driver)
+
+        mock_persist.assert_called_once()
+        assert mock_persist.call_args.args[1] is driver

@@ -1,0 +1,839 @@
+[
+  {
+    "sample_id": "ab_gra_001",
+    "doc_id": "med_doc_001",
+    "class": "graph_advantage",
+    "question": "GOLD 3级患者如果嗜酸性粒细胞≥100/μL且频繁急性加重应该用什么药？",
+    "question_type": "multi_hop",
+    "gold_answer": "LABA+LAMA+ICS三联方案。",
+    "gold_evidence": [
+      {
+        "evidence_type": "table",
+        "section_title": "COPD药物治疗选择矩阵",
+        "support_snippet": "GOLD 3-4级，重度症状，≥2次/年急性加重，嗜酸性粒细胞≥100/μL，推荐LABA+LAMA+ICS"
+      }
+    ],
+    "expected_best_route": "graph",
+    "expected_weak_routes": [
+      "vector",
+      "bm25"
+    ],
+    "expected_first_failure": "单段召回可能只找到GOLD 3级定义或嗜酸性粒细胞阈值，无法整合多个条件",
+    "expected_recovery_strategy": "graph通过实体关系链：GOLD 3级 -> 治疗方案 <- 嗜酸性粒细胞≥100/μL <- 急性加重≥2次/年",
+    "why_this_is_a_good_ab_test": "需要整合GOLD分级、嗜酸性粒细胞水平、急性加重史三个条件，单段召回不稳定",
+    "distractors": [
+      "GOLD 2级的治疗方案不同",
+      "嗜酸性粒细胞≥300/μL用LABA+ICS"
+    ],
+    "measurable_signal": [
+      "retrieval_recall_gap",
+      "evidence_coverage_gain",
+      "route_sensitivity"
+    ]
+  },
+  {
+    "sample_id": "ab_gra_002",
+    "doc_id": "med_doc_001",
+    "class": "graph_advantage",
+    "question": "沙丁胺醇和噻托溴铵在起效时间和持续时间上有什么区别？",
+    "question_type": "multi_hop",
+    "gold_answer": "沙丁胺醇起效5-15分钟、持续4-6小时；噻托溴铵起效30-60分钟、持续24小时。",
+    "gold_evidence": [
+      {
+        "evidence_type": "passage",
+        "section_title": "2.1 支气管舒张剂",
+        "support_snippet": "沙丁胺醇起效时间：5-15分钟，持续时间：4-6小时；噻托溴铵起效时间：30-60分钟，持续时间：24小时"
+      }
+    ],
+    "expected_best_route": "graph",
+    "expected_weak_routes": [
+      "vector"
+    ],
+    "expected_first_failure": "vector可能只召回其中一种药物的信息",
+    "expected_recovery_strategy": "graph通过药物实体关系扩展，同时获取两种药物的起效和持续时间",
+    "why_this_is_a_good_ab_test": "需要对比两种药物的多个属性，需要跨实体整合",
+    "distractors": [
+      "LABA的时间参数不同"
+    ],
+    "measurable_signal": [
+      "evidence_coverage_gain",
+      "route_sensitivity"
+    ]
+  },
+  {
+    "sample_id": "ab_gra_003",
+    "doc_id": "med_doc_001",
+    "class": "graph_advantage",
+    "question": "GOLD 2级患者如果嗜酸性粒细胞≥300/μL且频繁急性加重应该用什么药？",
+    "question_type": "multi_hop",
+    "gold_answer": "LABA+ICS。",
+    "gold_evidence": [
+      {
+        "evidence_type": "table",
+        "section_title": "COPD药物治疗选择矩阵",
+        "support_snippet": "GOLD 2级，中-重度症状，≥2次/年急性加重，嗜酸性粒细胞≥300/μL，推荐LABA+ICS"
+      }
+    ],
+    "expected_best_route": "graph",
+    "expected_weak_routes": [
+      "vector",
+      "bm25"
+    ],
+    "expected_first_failure": "单段召回可能只找到部分条件，无法整合GOLD分级、嗜酸性粒细胞、急性加重史",
+    "expected_recovery_strategy": "graph通过实体关系链整合多个条件",
+    "why_this_is_a_good_ab_test": "需要整合三个条件，且答案在表格中",
+    "distractors": [
+      "嗜酸性粒细胞<100/μL用LABA+LAMA"
+    ],
+    "measurable_signal": [
+      "retrieval_recall_gap",
+      "evidence_coverage_gain",
+      "route_sensitivity"
+    ]
+  },
+  {
+    "sample_id": "ab_gra_004",
+    "doc_id": "med_doc_001",
+    "class": "graph_advantage",
+    "question": "哪些药物属于LABA类？它们的用法有什么不同？",
+    "question_type": "multi_hop",
+    "gold_answer": "福莫特罗12 μg每日2次，茚达特罗150 μg每日1次。",
+    "gold_evidence": [
+      {
+        "evidence_type": "passage",
+        "section_title": "2.1 支气管舒张剂",
+        "support_snippet": "福莫特罗：12 μg，每日2次；茚达特罗：150 μg，每日1次"
+      }
+    ],
+    "expected_best_route": "graph",
+    "expected_weak_routes": [
+      "vector"
+    ],
+    "expected_first_failure": "vector可能只召回其中一种LABA",
+    "expected_recovery_strategy": "graph通过药物类别关系扩展，获取所有LABA及其用法",
+    "why_this_is_a_good_ab_test": "需要通过药物类别关系找到所有成员并对比",
+    "distractors": [
+      "LAMA类药物不同"
+    ],
+    "measurable_signal": [
+      "evidence_coverage_gain",
+      "route_sensitivity"
+    ]
+  },
+  {
+    "sample_id": "ab_gra_005",
+    "doc_id": "med_doc_001",
+    "class": "graph_advantage",
+    "question": "哪些药物属于LAMA类？它们的用法有什么不同？",
+    "question_type": "multi_hop",
+    "gold_answer": "噻托溴铵18 μg每日1次，格隆溴铵50 μg每日1次。",
+    "gold_evidence": [
+      {
+        "evidence_type": "passage",
+        "section_title": "2.1 支气管舒张剂",
+        "support_snippet": "噻托溴铵：18 μg，每日1次；格隆溴铵：50 μg，每日1次"
+      }
+    ],
+    "expected_best_route": "graph",
+    "expected_weak_routes": [
+      "vector"
+    ],
+    "expected_first_failure": "vector可能只召回其中一种LAMA",
+    "expected_recovery_strategy": "graph通过药物类别关系扩展，获取所有LAMA及其用法",
+    "why_this_is_a_good_ab_test": "需要通过药物类别关系找到所有成员并对比",
+    "distractors": [
+      "LABA类药物不同"
+    ],
+    "measurable_signal": [
+      "evidence_coverage_gain",
+      "route_sensitivity"
+    ]
+  },
+  {
+    "sample_id": "ab_gra_006",
+    "doc_id": "med_doc_001",
+    "class": "graph_advantage",
+    "question": "从GOLD 1级到GOLD 4级，FEV1阈值是如何变化的？",
+    "question_type": "multi_hop",
+    "gold_answer": "GOLD 1级：≥80%；GOLD 2级：50%-80%；GOLD 3级：30%-50%；GOLD 4级：<30%。",
+    "gold_evidence": [
+      {
+        "evidence_type": "passage",
+        "section_title": "1.1 GOLD分级标准",
+        "support_snippet": "GOLD 1-4级的FEV1阈值依次递减"
+      }
+    ],
+    "expected_best_route": "graph",
+    "expected_weak_routes": [
+      "vector"
+    ],
+    "expected_first_failure": "vector可能只召回部分GOLD分级",
+    "expected_recovery_strategy": "graph通过GOLD分级体系关系，获取所有级别的FEV1阈值",
+    "why_this_is_a_good_ab_test": "需要整合所有GOLD分级的信息",
+    "distractors": [],
+    "measurable_signal": [
+      "evidence_coverage_gain",
+      "route_sensitivity"
+    ]
+  },
+  {
+    "sample_id": "ab_gra_007",
+    "doc_id": "med_doc_001",
+    "class": "graph_advantage",
+    "question": "mMRC评分从0分到4分分别对应什么症状？",
+    "question_type": "multi_hop",
+    "gold_answer": "0分：剧烈活动时；1分：快走或爬坡时；2分：比同龄人走得慢；3分：行走100米需停下；4分：不能离开房间或穿衣时。",
+    "gold_evidence": [
+      {
+        "evidence_type": "passage",
+        "section_title": "1.2 症状评估",
+        "support_snippet": "mMRC 0-4分的完整定义"
+      }
+    ],
+    "expected_best_route": "graph",
+    "expected_weak_routes": [
+      "vector"
+    ],
+    "expected_first_failure": "vector可能只召回部分mMRC评分",
+    "expected_recovery_strategy": "graph通过mMRC评分体系关系，获取所有级别的定义",
+    "why_this_is_a_good_ab_test": "需要整合所有mMRC评分的信息",
+    "distractors": [],
+    "measurable_signal": [
+      "evidence_coverage_gain",
+      "route_sensitivity"
+    ]
+  },
+  {
+    "sample_id": "ab_gra_008",
+    "doc_id": "med_doc_001",
+    "class": "graph_advantage",
+    "question": "GOLD 1级患者和GOLD 3-4级患者的治疗方案有什么区别？",
+    "question_type": "multi_hop",
+    "gold_answer": "GOLD 1级仅需SABA按需；GOLD 3-4级根据嗜酸性粒细胞水平使用LABA+LAMA或LABA+LAMA+ICS。",
+    "gold_evidence": [
+      {
+        "evidence_type": "table",
+        "section_title": "COPD药物治疗选择矩阵",
+        "support_snippet": "GOLD 1级推荐SABA按需；GOLD 3-4级推荐LABA+LAMA或三联方案"
+      }
+    ],
+    "expected_best_route": "graph",
+    "expected_weak_routes": [
+      "vector"
+    ],
+    "expected_first_failure": "vector可能只召回其中一个分级的治疗方案",
+    "expected_recovery_strategy": "graph通过GOLD分级关系扩展，对比不同级别的治疗方案",
+    "why_this_is_a_good_ab_test": "需要跨GOLD分级对比治疗方案，且答案在表格中",
+    "distractors": [
+      "GOLD 2级的方案介于两者之间"
+    ],
+    "measurable_signal": [
+      "evidence_coverage_gain",
+      "route_sensitivity"
+    ]
+  },
+  {
+    "sample_id": "ab_gra_009",
+    "doc_id": "med_doc_001",
+    "class": "graph_advantage",
+    "question": "嗜酸性粒细胞水平如何影响COPD的治疗方案选择？",
+    "question_type": "multi_hop",
+    "gold_answer": "嗜酸性粒细胞<100/μL用LABA+LAMA；≥100/μL且GOLD 3-4级用三联方案；≥300/μL用LABA+ICS。",
+    "gold_evidence": [
+      {
+        "evidence_type": "table",
+        "section_title": "COPD药物治疗选择矩阵",
+        "support_snippet": "不同嗜酸性粒细胞阈值对应不同治疗方案"
+      }
+    ],
+    "expected_best_route": "graph",
+    "expected_weak_routes": [
+      "vector"
+    ],
+    "expected_first_failure": "vector可能只召回部分嗜酸性粒细胞阈值的信息",
+    "expected_recovery_strategy": "graph通过嗜酸性粒细胞关系链，整合所有阈值对应的治疗方案",
+    "why_this_is_a_good_ab_test": "需要整合多个嗜酸性粒细胞阈值及其对应方案，且答案在表格中",
+    "distractors": [
+      "100和300两个阈值容易混淆"
+    ],
+    "measurable_signal": [
+      "evidence_coverage_gain",
+      "route_sensitivity"
+    ]
+  },
+  {
+    "sample_id": "ab_gra_010",
+    "doc_id": "med_doc_001",
+    "class": "graph_advantage",
+    "question": "急性加重频率如何影响COPD的治疗方案？",
+    "question_type": "multi_hop",
+    "gold_answer": "0-1次/年用单药LABA或LAMA；≥2次/年根据嗜酸性粒细胞水平使用LABA+LAMA、LABA+ICS或三联方案。",
+    "gold_evidence": [
+      {
+        "evidence_type": "table",
+        "section_title": "COPD药物治疗选择矩阵",
+        "support_snippet": "急性加重0-1次/年和≥2次/年对应不同治疗方案"
+      }
+    ],
+    "expected_best_route": "graph",
+    "expected_weak_routes": [
+      "vector"
+    ],
+    "expected_first_failure": "vector可能只召回部分急性加重频率的信息",
+    "expected_recovery_strategy": "graph通过急性加重关系链，整合不同频率对应的治疗方案",
+    "why_this_is_a_good_ab_test": "需要整合急性加重频率与治疗方案的关系，且答案在表格中",
+    "distractors": [],
+    "measurable_signal": [
+      "evidence_coverage_gain",
+      "route_sensitivity"
+    ]
+  },
+  {
+    "sample_id": "ab_gra_011",
+    "doc_id": "med_doc_001",
+    "class": "graph_advantage",
+    "question": "SABA、LABA、LAMA在起效时间上有什么区别？",
+    "question_type": "multi_hop",
+    "gold_answer": "SABA起效5-15分钟，LAMA起效30-60分钟，LABA起效时间未明确说明。",
+    "gold_evidence": [
+      {
+        "evidence_type": "passage",
+        "section_title": "2.1 支气管舒张剂",
+        "support_snippet": "SABA起效时间：5-15分钟；LAMA起效时间：30-60分钟"
+      }
+    ],
+    "expected_best_route": "graph",
+    "expected_weak_routes": [
+      "vector"
+    ],
+    "expected_first_failure": "vector可能只召回部分药物类别的起效时间",
+    "expected_recovery_strategy": "graph通过药物类别关系扩展，对比所有类别的起效时间",
+    "why_this_is_a_good_ab_test": "需要跨药物类别对比起效时间",
+    "distractors": [],
+    "measurable_signal": [
+      "evidence_coverage_gain",
+      "route_sensitivity"
+    ]
+  },
+  {
+    "sample_id": "ab_gra_012",
+    "doc_id": "med_doc_001",
+    "class": "graph_advantage",
+    "question": "SABA、LABA、LAMA在持续时间上有什么区别？",
+    "question_type": "multi_hop",
+    "gold_answer": "SABA持续4-6小时，LABA持续12-24小时，LAMA持续24小时。",
+    "gold_evidence": [
+      {
+        "evidence_type": "passage",
+        "section_title": "2.1 支气管舒张剂",
+        "support_snippet": "SABA持续时间：4-6小时；LABA持续时间：12-24小时；LAMA持续时间：24小时"
+      }
+    ],
+    "expected_best_route": "graph",
+    "expected_weak_routes": [
+      "vector"
+    ],
+    "expected_first_failure": "vector可能只召回部分药物类别的持续时间",
+    "expected_recovery_strategy": "graph通过药物类别关系扩展，对比所有类别的持续时间",
+    "why_this_is_a_good_ab_test": "需要跨药物类别对比持续时间",
+    "distractors": [],
+    "measurable_signal": [
+      "evidence_coverage_gain",
+      "route_sensitivity"
+    ]
+  },
+  {
+    "sample_id": "ab_gra_013",
+    "doc_id": "med_doc_001",
+    "class": "graph_advantage",
+    "question": "COPD诊断需要哪些检查指标？这些指标的阈值是多少？",
+    "question_type": "multi_hop",
+    "gold_answer": "需要肺功能检查，FEV1/FVC < 0.70即可确诊；FEV1占预计值百分比用于GOLD分级。",
+    "gold_evidence": [
+      {
+        "evidence_type": "passage",
+        "section_title": "1. 疾病定义与诊断标准",
+        "support_snippet": "诊断依据肺功能检查：FEV1/FVC < 0.70；GOLD分级依据FEV1占预计值百分比"
+      }
+    ],
+    "expected_best_route": "graph",
+    "expected_weak_routes": [
+      "vector"
+    ],
+    "expected_first_failure": "vector可能只召回诊断标准或分级标准之一",
+    "expected_recovery_strategy": "graph通过COPD诊断关系链，整合诊断和分级所需的所有指标",
+    "why_this_is_a_good_ab_test": "需要整合诊断和分级两个维度的检查指标",
+    "distractors": [],
+    "measurable_signal": [
+      "evidence_coverage_gain",
+      "route_sensitivity"
+    ]
+  },
+  {
+    "sample_id": "ab_gra_014",
+    "doc_id": "med_doc_001",
+    "class": "graph_advantage",
+    "question": "COPD患者的症状评估包括哪些工具？各自的阈值是什么？",
+    "question_type": "multi_hop",
+    "gold_answer": "mMRC呼吸困难量表（0-4分）和CAT评分（0-40分，≥10分提示症状负担较重）。",
+    "gold_evidence": [
+      {
+        "evidence_type": "passage",
+        "section_title": "1.2 症状评估",
+        "support_snippet": "mMRC评分0-4分；CAT评分0-40分，≥10分提示症状负担较重"
+      }
+    ],
+    "expected_best_route": "graph",
+    "expected_weak_routes": [
+      "vector"
+    ],
+    "expected_first_failure": "vector可能只召回其中一种评估工具",
+    "expected_recovery_strategy": "graph通过症状评估关系链，整合所有评估工具及其阈值",
+    "why_this_is_a_good_ab_test": "需要整合多种症状评估工具",
+    "distractors": [],
+    "measurable_signal": [
+      "evidence_coverage_gain",
+      "route_sensitivity"
+    ]
+  },
+  {
+    "sample_id": "ab_gra_015",
+    "doc_id": "med_doc_001",
+    "class": "graph_advantage",
+    "question": "哪些因素决定COPD患者是否需要使用ICS？",
+    "question_type": "multi_hop",
+    "gold_answer": "嗜酸性粒细胞水平（≥100/μL或≥300/μL）、GOLD分级（2级或3-4级）、急性加重频率（≥2次/年）。",
+    "gold_evidence": [
+      {
+        "evidence_type": "table",
+        "section_title": "COPD药物治疗选择矩阵",
+        "support_snippet": "嗜酸性粒细胞≥300/μL用LABA+ICS；≥100/μL且GOLD 3-4级用三联方案"
+      }
+    ],
+    "expected_best_route": "graph",
+    "expected_weak_routes": [
+      "vector"
+    ],
+    "expected_first_failure": "vector可能只召回部分决定因素",
+    "expected_recovery_strategy": "graph通过ICS使用关系链，整合所有相关因素",
+    "why_this_is_a_good_ab_test": "需要整合多个决定因素，且答案在表格中",
+    "distractors": [],
+    "measurable_signal": [
+      "evidence_coverage_gain",
+      "route_sensitivity"
+    ]
+  },
+  {
+    "sample_id": "ab_gra_016",
+    "doc_id": "med_doc_001",
+    "class": "graph_advantage",
+    "question": "COPD治疗中有哪些联合用药方案？各适用于什么情况？",
+    "question_type": "multi_hop",
+    "gold_answer": "LABA+LAMA适用于嗜酸性粒细胞<100/μL；LABA+ICS适用于嗜酸性粒细胞≥300/μL；LABA+LAMA+ICS适用于GOLD 3-4级且嗜酸性粒细胞≥100/μL。",
+    "gold_evidence": [
+      {
+        "evidence_type": "table",
+        "section_title": "COPD药物治疗选择矩阵",
+        "support_snippet": "不同联合方案对应不同患者特征"
+      }
+    ],
+    "expected_best_route": "graph",
+    "expected_weak_routes": [
+      "vector"
+    ],
+    "expected_first_failure": "vector可能只召回部分联合方案",
+    "expected_recovery_strategy": "graph通过治疗方案关系链，整合所有联合方案及其适应症",
+    "why_this_is_a_good_ab_test": "需要整合所有联合方案及其适用条件，且答案在表格中",
+    "distractors": [],
+    "measurable_signal": [
+      "evidence_coverage_gain",
+      "route_sensitivity"
+    ]
+  },
+  {
+    "sample_id": "ab_gra_017",
+    "doc_id": "med_doc_001",
+    "class": "graph_advantage",
+    "question": "福莫特罗和茚达特罗在剂量和用药频次上有什么区别？",
+    "question_type": "multi_hop",
+    "gold_answer": "福莫特罗12 μg每日2次，茚达特罗150 μg每日1次。",
+    "gold_evidence": [
+      {
+        "evidence_type": "passage",
+        "section_title": "2.1 支气管舒张剂",
+        "support_snippet": "福莫特罗：12 μg，每日2次；茚达特罗：150 μg，每日1次"
+      }
+    ],
+    "expected_best_route": "graph",
+    "expected_weak_routes": [
+      "vector"
+    ],
+    "expected_first_failure": "vector可能只召回其中一种药物",
+    "expected_recovery_strategy": "graph通过LABA类药物关系，对比两种药物的剂量和频次",
+    "why_this_is_a_good_ab_test": "需要对比同类药物的不同属性",
+    "distractors": [],
+    "measurable_signal": [
+      "evidence_coverage_gain",
+      "route_sensitivity"
+    ]
+  },
+  {
+    "sample_id": "ab_gra_018",
+    "doc_id": "med_doc_001",
+    "class": "graph_advantage",
+    "question": "噻托溴铵和格隆溴铵在剂量上有什么区别？",
+    "question_type": "multi_hop",
+    "gold_answer": "噻托溴铵18 μg每日1次，格隆溴铵50 μg每日1次。",
+    "gold_evidence": [
+      {
+        "evidence_type": "passage",
+        "section_title": "2.1 支气管舒张剂",
+        "support_snippet": "噻托溴铵：18 μg，每日1次；格隆溴铵：50 μg，每日1次"
+      }
+    ],
+    "expected_best_route": "graph",
+    "expected_weak_routes": [
+      "vector"
+    ],
+    "expected_first_failure": "vector可能只召回其中一种药物",
+    "expected_recovery_strategy": "graph通过LAMA类药物关系，对比两种药物的剂量",
+    "why_this_is_a_good_ab_test": "需要对比同类药物的剂量差异",
+    "distractors": [],
+    "measurable_signal": [
+      "evidence_coverage_gain",
+      "route_sensitivity"
+    ]
+  },
+  {
+    "sample_id": "ab_gra_019",
+    "doc_id": "med_doc_001",
+    "class": "graph_advantage",
+    "question": "GOLD 2级患者在不同嗜酸性粒细胞水平下的治疗方案有什么区别？",
+    "question_type": "multi_hop",
+    "gold_answer": "嗜酸性粒细胞<100/μL用LABA+LAMA；≥300/μL用LABA+ICS；中间水平根据具体情况选择。",
+    "gold_evidence": [
+      {
+        "evidence_type": "table",
+        "section_title": "COPD药物治疗选择矩阵",
+        "support_snippet": "GOLD 2级在不同嗜酸性粒细胞水平下的治疗方案"
+      }
+    ],
+    "expected_best_route": "graph",
+    "expected_weak_routes": [
+      "vector"
+    ],
+    "expected_first_failure": "vector可能只召回部分嗜酸性粒细胞阈值的方案",
+    "expected_recovery_strategy": "graph通过GOLD 2级关系链，整合不同嗜酸性粒细胞水平的治疗方案",
+    "why_this_is_a_good_ab_test": "需要在固定GOLD分级下对比不同嗜酸性粒细胞水平的方案，且答案在表格中",
+    "distractors": [
+      "GOLD 3-4级的方案不同"
+    ],
+    "measurable_signal": [
+      "evidence_coverage_gain",
+      "route_sensitivity"
+    ]
+  },
+  {
+    "sample_id": "ab_gra_020",
+    "doc_id": "med_doc_001",
+    "class": "graph_advantage",
+    "question": "COPD的诊断、分级、症状评估、治疗方案之间是如何关联的？",
+    "question_type": "global",
+    "gold_answer": "诊断依据FEV1/FVC < 0.70；分级依据FEV1占预计值百分比；症状评估使用mMRC和CAT；治疗方案根据GOLD分级、症状负担、急性加重史、嗜酸性粒细胞水平综合决定。",
+    "gold_evidence": [
+      {
+        "evidence_type": "passage",
+        "section_title": "全文",
+        "support_snippet": "诊断、分级、症状评估、治疗方案的完整关系链"
+      }
+    ],
+    "expected_best_route": "graph",
+    "expected_weak_routes": [
+      "vector",
+      "bm25"
+    ],
+    "expected_first_failure": "单段召回无法整合诊断、分级、评估、治疗的完整关系链",
+    "expected_recovery_strategy": "graph通过COPD管理关系网络，整合所有环节",
+    "why_this_is_a_good_ab_test": "需要整合文档的核心知识结构，跨多个章节",
+    "distractors": [],
+    "measurable_signal": [
+      "evidence_coverage_gain",
+      "route_sensitivity"
+    ]
+  },
+  {
+    "sample_id": "ab_gra_021",
+    "doc_id": "med_doc_001",
+    "class": "graph_advantage",
+    "question": "哪些药物每日只需使用1次？它们分别属于什么类别？",
+    "question_type": "multi_hop",
+    "gold_answer": "茚达特罗（LABA）、噻托溴铵（LAMA）、格隆溴铵（LAMA）每日1次。",
+    "gold_evidence": [
+      {
+        "evidence_type": "passage",
+        "section_title": "2.1 支气管舒张剂",
+        "support_snippet": "茚达特罗、噻托溴铵、格隆溴铵均为每日1次"
+      }
+    ],
+    "expected_best_route": "graph",
+    "expected_weak_routes": [
+      "vector"
+    ],
+    "expected_first_failure": "vector可能只召回部分每日1次的药物",
+    "expected_recovery_strategy": "graph通过用药频次关系，找到所有每日1次的药物及其类别",
+    "why_this_is_a_good_ab_test": "需要通过用药频次属性反向查找药物并标注类别",
+    "distractors": [
+      "福莫特罗是每日2次"
+    ],
+    "measurable_signal": [
+      "evidence_coverage_gain",
+      "route_sensitivity"
+    ]
+  },
+  {
+    "sample_id": "ab_gra_022",
+    "doc_id": "med_doc_001",
+    "class": "graph_advantage",
+    "question": "COPD患者从轻度进展到极重度，治疗方案如何升级？",
+    "question_type": "multi_hop",
+    "gold_answer": "GOLD 1级用SABA按需；GOLD 2级用LABA或LAMA；GOLD 3-4级根据嗜酸性粒细胞水平用LABA+LAMA或三联方案。",
+    "gold_evidence": [
+      {
+        "evidence_type": "table",
+        "section_title": "COPD药物治疗选择矩阵",
+        "support_snippet": "不同GOLD分级对应的治疗方案升级路径"
+      }
+    ],
+    "expected_best_route": "graph",
+    "expected_weak_routes": [
+      "vector"
+    ],
+    "expected_first_failure": "vector可能只召回部分GOLD分级的治疗方案",
+    "expected_recovery_strategy": "graph通过GOLD分级关系链，展示治疗方案的升级路径",
+    "why_this_is_a_good_ab_test": "需要整合所有GOLD分级的治疗方案并展示升级逻辑，且答案在表格中",
+    "distractors": [],
+    "measurable_signal": [
+      "evidence_coverage_gain",
+      "route_sensitivity"
+    ]
+  },
+  {
+    "sample_id": "ab_gra_023",
+    "doc_id": "med_doc_001",
+    "class": "graph_advantage",
+    "question": "哪些药物的持续时间超过12小时？",
+    "question_type": "multi_hop",
+    "gold_answer": "LABA持续12-24小时，LAMA持续24小时，茚达特罗持续12-24小时，噻托溴铵持续24小时，格隆溴铵持续24小时。",
+    "gold_evidence": [
+      {
+        "evidence_type": "passage",
+        "section_title": "2.1 支气管舒张剂",
+        "support_snippet": "LABA持续12-24小时；LAMA持续24小时"
+      }
+    ],
+    "expected_best_route": "graph",
+    "expected_weak_routes": [
+      "vector"
+    ],
+    "expected_first_failure": "vector可能只召回部分长效药物",
+    "expected_recovery_strategy": "graph通过持续时间属性关系，找到所有持续时间超过12小时的药物",
+    "why_this_is_a_good_ab_test": "需要通过持续时间属性反向查找药物",
+    "distractors": [
+      "SABA持续4-6小时"
+    ],
+    "measurable_signal": [
+      "evidence_coverage_gain",
+      "route_sensitivity"
+    ]
+  },
+  {
+    "sample_id": "ab_gra_024",
+    "doc_id": "med_doc_001",
+    "class": "graph_advantage",
+    "question": "COPD治疗中，单药、双联、三联方案分别适用于什么情况？",
+    "question_type": "multi_hop",
+    "gold_answer": "单药（LABA或LAMA）适用于GOLD 2级轻-中度症状；双联（LABA+LAMA或LABA+ICS）适用于症状重或频繁加重；三联（LABA+LAMA+ICS）适用于GOLD 3-4级且嗜酸性粒细胞≥100/μL。",
+    "gold_evidence": [
+      {
+        "evidence_type": "table",
+        "section_title": "COPD药物治疗选择矩阵",
+        "support_snippet": "单药、双联、三联方案的适应症"
+      }
+    ],
+    "expected_best_route": "graph",
+    "expected_weak_routes": [
+      "vector"
+    ],
+    "expected_first_failure": "vector可能只召回部分方案类型",
+    "expected_recovery_strategy": "graph通过治疗方案层级关系，整合单药、双联、三联的适应症",
+    "why_this_is_a_good_ab_test": "需要按方案复杂度分类并整合适应症，且答案在表格中",
+    "distractors": [],
+    "measurable_signal": [
+      "evidence_coverage_gain",
+      "route_sensitivity"
+    ]
+  },
+  {
+    "sample_id": "ab_gra_025",
+    "doc_id": "med_doc_001",
+    "class": "graph_advantage",
+    "question": "FEV1、FVC、FEV1/FVC这三个指标在COPD诊断和分级中分别起什么作用？",
+    "question_type": "multi_hop",
+    "gold_answer": "FEV1/FVC < 0.70用于诊断COPD；FEV1占预计值百分比用于GOLD分级；FVC是用力肺活量。",
+    "gold_evidence": [
+      {
+        "evidence_type": "passage",
+        "section_title": "1. 疾病定义与诊断标准",
+        "support_snippet": "FEV1/FVC用于诊断，FEV1用于分级"
+      }
+    ],
+    "expected_best_route": "graph",
+    "expected_weak_routes": [
+      "vector"
+    ],
+    "expected_first_failure": "vector可能只召回部分指标的作用",
+    "expected_recovery_strategy": "graph通过肺功能指标关系链，整合所有指标的作用",
+    "why_this_is_a_good_ab_test": "需要区分相关指标的不同作用",
+    "distractors": [],
+    "measurable_signal": [
+      "evidence_coverage_gain",
+      "route_sensitivity"
+    ]
+  },
+  {
+    "sample_id": "ab_gra_026",
+    "doc_id": "med_doc_001",
+    "class": "graph_advantage",
+    "question": "COPD患者在什么情况下需要从单药升级到双联方案？",
+    "question_type": "multi_hop",
+    "gold_answer": "症状负担从轻-中度变为中-重度，或急性加重从0-1次/年增加到≥2次/年时需要升级。",
+    "gold_evidence": [
+      {
+        "evidence_type": "table",
+        "section_title": "COPD药物治疗选择矩阵",
+        "support_snippet": "单药和双联方案的适应症差异"
+      }
+    ],
+    "expected_best_route": "graph",
+    "expected_weak_routes": [
+      "vector"
+    ],
+    "expected_first_failure": "vector可能只召回单药或双联方案之一",
+    "expected_recovery_strategy": "graph通过治疗方案升级关系，对比单药和双联的适应症差异",
+    "why_this_is_a_good_ab_test": "需要对比相邻治疗层级的适应症差异，且答案在表格中",
+    "distractors": [],
+    "measurable_signal": [
+      "evidence_coverage_gain",
+      "route_sensitivity"
+    ]
+  },
+  {
+    "sample_id": "ab_gra_027",
+    "doc_id": "med_doc_001",
+    "class": "graph_advantage",
+    "question": "COPD的别名有哪些？这些名称在文档中如何使用？",
+    "question_type": "multi_hop",
+    "gold_answer": "COPD的别名包括慢性阻塞性肺疾病、慢阻肺，文档标题使用全称，正文混用。",
+    "gold_evidence": [
+      {
+        "evidence_type": "passage",
+        "section_title": "key_entities",
+        "support_snippet": "COPD别名：慢性阻塞性肺疾病、慢阻肺"
+      }
+    ],
+    "expected_best_route": "graph",
+    "expected_weak_routes": [
+      "vector"
+    ],
+    "expected_first_failure": "vector可能无法整合所有别名及其使用场景",
+    "expected_recovery_strategy": "graph通过实体别名关系，整合所有名称变体",
+    "why_this_is_a_good_ab_test": "需要整合实体的所有别名",
+    "distractors": [],
+    "measurable_signal": [
+      "evidence_coverage_gain",
+      "route_sensitivity"
+    ]
+  },
+  {
+    "sample_id": "ab_gra_028",
+    "doc_id": "med_doc_001",
+    "class": "graph_advantage",
+    "question": "支气管舒张剂包括哪些类别？每个类别有哪些代表药物？",
+    "question_type": "multi_hop",
+    "gold_answer": "SABA（沙丁胺醇）、LABA（福莫特罗、茚达特罗）、LAMA（噻托溴铵、格隆溴铵）。",
+    "gold_evidence": [
+      {
+        "evidence_type": "passage",
+        "section_title": "2.1 支气管舒张剂",
+        "support_snippet": "支气管舒张剂的分类和代表药物"
+      }
+    ],
+    "expected_best_route": "graph",
+    "expected_weak_routes": [
+      "vector"
+    ],
+    "expected_first_failure": "vector可能只召回部分类别或药物",
+    "expected_recovery_strategy": "graph通过药物分类关系，整合所有类别及其成员",
+    "why_this_is_a_good_ab_test": "需要整合药物分类体系的完整结构",
+    "distractors": [],
+    "measurable_signal": [
+      "evidence_coverage_gain",
+      "route_sensitivity"
+    ]
+  },
+  {
+    "sample_id": "ab_gra_029",
+    "doc_id": "med_doc_001",
+    "class": "graph_advantage",
+    "question": "哪些药物起效时间在30分钟以内？哪些超过30分钟？",
+    "question_type": "multi_hop",
+    "gold_answer": "沙丁胺醇起效5-15分钟（30分钟以内）；噻托溴铵、格隆溴铵起效30-60分钟（超过30分钟）。",
+    "gold_evidence": [
+      {
+        "evidence_type": "passage",
+        "section_title": "2.1 支气管舒张剂",
+        "support_snippet": "SABA起效5-15分钟；LAMA起效30-60分钟"
+      }
+    ],
+    "expected_best_route": "graph",
+    "expected_weak_routes": [
+      "vector"
+    ],
+    "expected_first_failure": "vector可能只召回部分药物的起效时间",
+    "expected_recovery_strategy": "graph通过起效时间属性关系，按阈值分类药物",
+    "why_this_is_a_good_ab_test": "需要按起效时间阈值对药物分类",
+    "distractors": [],
+    "measurable_signal": [
+      "evidence_coverage_gain",
+      "route_sensitivity"
+    ]
+  },
+  {
+    "sample_id": "ab_gra_030",
+    "doc_id": "med_doc_001",
+    "class": "graph_advantage",
+    "question": "COPD管理涉及哪些关键实体类型？它们之间有什么关系？",
+    "question_type": "global",
+    "gold_answer": "涉及疾病（COPD）、检查指标（FEV1、FVC、嗜酸性粒细胞）、评分量表（mMRC、CAT）、药物（SABA、LABA、LAMA、ICS）、分级系统（GOLD）、并发症（急性加重）。关系包括：诊断依据、分级标准、症状评估、治疗方案选择。",
+    "gold_evidence": [
+      {
+        "evidence_type": "passage",
+        "section_title": "key_entities和key_relations",
+        "support_snippet": "文档涉及的所有实体类型及其关系"
+      }
+    ],
+    "expected_best_route": "graph",
+    "expected_weak_routes": [
+      "vector",
+      "bm25"
+    ],
+    "expected_first_failure": "单段召回无法整合所有实体类型及其关系网络",
+    "expected_recovery_strategy": "graph通过知识图谱结构，展示所有实体类型及其关系",
+    "why_this_is_a_good_ab_test": "需要整合文档的完整知识结构",
+    "distractors": [],
+    "measurable_signal": [
+      "evidence_coverage_gain",
+      "route_sensitivity"
+    ]
+  }
+]

@@ -16,6 +16,7 @@ class TestEmbedChunks:
     def test_embeds_chunks(self, mock_settings, mock_make_client):
         cfg = MagicMock()
         cfg.openai.embedding_model = "text-embedding-3-small"
+        cfg.ingest.embedding_batch_size = 64
         mock_settings.return_value = cfg
 
         # Mock embedding response
@@ -47,6 +48,7 @@ class TestEmbedChunks:
     def test_uses_enriched_content(self, mock_settings, mock_make_client):
         cfg = MagicMock()
         cfg.openai.embedding_model = "text-embedding-3-small"
+        cfg.ingest.embedding_batch_size = 64
         mock_settings.return_value = cfg
 
         emb = MagicMock()
@@ -70,6 +72,7 @@ class TestEmbedChunks:
     def test_raises_on_api_error(self, mock_settings, mock_make_client):
         cfg = MagicMock()
         cfg.openai.embedding_model = "text-embedding-3-small"
+        cfg.ingest.embedding_batch_size = 64
         mock_settings.return_value = cfg
 
         mock_client = MagicMock()
@@ -78,3 +81,32 @@ class TestEmbedChunks:
 
         with pytest.raises(Exception, match="API down"):
             embed_chunks([Chunk(content="test")])
+
+    @patch("rag_core.embedder.make_openai_client")
+    @patch("rag_core.embedder.get_settings")
+    def test_batches_embedding_requests(self, mock_settings, mock_make_client):
+        cfg = MagicMock()
+        cfg.openai.embedding_model = "text-embedding-3-small"
+        cfg.ingest.embedding_batch_size = 2
+        mock_settings.return_value = cfg
+
+        def _response_for(inputs):
+            response = MagicMock()
+            response.data = []
+            for index, _text in enumerate(inputs):
+                emb = MagicMock()
+                emb.embedding = [float(index)]
+                response.data.append(emb)
+            return response
+
+        mock_client = MagicMock()
+        mock_client.embeddings.create.side_effect = lambda **kwargs: _response_for(kwargs["input"])
+        mock_make_client.return_value = mock_client
+
+        chunks = [Chunk(content="hello"), Chunk(content="world"), Chunk(content="again")]
+        result = embed_chunks(chunks)
+
+        assert mock_client.embeddings.create.call_count == 2
+        assert result[0].embedding == [0.0]
+        assert result[1].embedding == [1.0]
+        assert result[2].embedding == [0.0]

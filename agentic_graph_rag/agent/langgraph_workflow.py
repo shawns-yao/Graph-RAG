@@ -1,0 +1,1305 @@
+"""LangGraph-based orchestration for the retrieval self-correction loop."""
+
+from __future__ import annotations
+
+import re
+import time
+from dataclasses import dataclass
+from functools import lru_cache
+from typing import Any, Callable, TypedDict
+
+from langgraph.graph import END, START, StateGraph
+from rag_core.config import get_settings
+from rag_core.models import (
+    EscalationStep,
+    GeneratorStep,
+    PipelineTrace,
+    ProviderDiagnostic,
+    QAResult,
+    QueryType,
+    ReflectionStep,
+    RouterDecision,
+    RouterStep,
+    SearchResult,
+    ToolStep,
+    WorkflowMemoryEntry,
+)
+from rag_core.reflector import resolve_reflection_verdict
+
+_ANCHOR_PATTERN = re.compile(r"[A-Za-z0-9_.-]+|[\u4e00-\u9fff]{2,}")
+_ANSWER_GUARD_CONFIDENCE_CAP = 0.35
+_GLOBAL_COMPLETENESS_CONFIDENCE_THRESHOLD = 0.45
+_REFLECTION_RETRY_SCORE_THRESHOLD = 3.0
+_ANCHOR_STOPWORDS = {
+    "a",
+    "an",
+    "and",
+    "are",
+    "does",
+    "how",
+    "is",
+    "of",
+    "or",
+    "the",
+    "to",
+    "what",
+    "which",
+    "with",
+    "为什么",
+    "什么",
+    "哪些",
+    "如何",
+    "多少",
+    "怎么",
+    "是否",
+    "有关",
+}
+_RELATION_QUERY_TERMS = {
+    "compare",
+    "difference",
+    "impact",
+    "relation",
+    "relationship",
+    "依赖",
+    "关系",
+    "关联",
+    "区别",
+    "影响",
+    "差异",
+}
+
+
+@dataclass(frozen=True)
+class SelfCorrectionOps:
+    """Callbacks that bind workflow nodes to project-specific retrieval logic."""
+
+    execution_sources: Callable[
+        [str, str, dict[str, dict[str, list[SearchResult]]], list[str] | None],
+        tuple[list[str], list[str]],
+    ]
+    run_tool: Callable[..., list[SearchResult]]
+    cache_tool_results: Callable[
+        [str, str, list[SearchResult], dict[str, dict[str, list[SearchResult]]]],
+        None,
+    ]
+    cache_hybrid_provider_results: Callable[
+        [str, dict[str, list[SearchResult]], dict[str, dict[str, list[SearchResult]]]],
+        None,
+    ]
+    build_provider_diagnostics: Callable[
+        [dict[str, list[SearchResult]] | None, list[str], list[str]],
+        list[ProviderDiagnostic],
+    ]
+    evaluate_reflection: Callable[..., ReflectionStep]
+    plan_incremental_retry: Callable[
+        [
+            str,
+            str,
+            ReflectionStep,
+            dict[str, dict[str, list[SearchResult]]],
+            dict[str, list[SearchResult]] | None,
+        ],
+        tuple[str, list[str], list[str]] | None,
+    ]
+    get_next_tool: Callable[[str, set[str], ReflectionStep, RouterDecision], str | None]
+    should_rewrite_query: Callable[[str, ReflectionStep, list[str]], bool]
+    generate_retry_query: Callable[..., str]
+    rerank_results: Callable[..., list[SearchResult]]
+
+
+class SelfCorrectionState(TypedDict, total=False):
+    """State carried across LangGraph nodes for self-correction."""
+
+    ops: SelfCorrectionOps
+    driver: Any
+    openai_client: Any
+    decision: RouterDecision
+    trace: PipelineTrace | None
+    relevance_threshold: float
+    max_retries: int
+    base_query: str
+    current_query: str
+    current_tool: str
+    attempt: int
+    tried_tools: list[str]
+    reflection_history: list[ReflectionStep]
+    channel_cache: dict[str, dict[str, list[SearchResult]]]
+    forced_hybrid_providers: list[str] | None
+    results: list[SearchResult]
+    best_results: list[SearchResult]
+    best_score: float
+    best_attempt: int
+    best_rank: tuple[int, int, int, int]
+    retries_used: int
+    reused_sources: list[str]
+    executed_sources: list[str]
+    provider_results_sink: dict[str, list[SearchResult]] | None
+    pending_reflection: ReflectionStep | None
+    pending_reflection_signal: float | None
+    pending_reflection_threshold: float | None
+    last_reflection: ReflectionStep | None
+    next_step: str
+    last_elapsed_ms: int
+    tool_step_logged_for_attempt: bool
+    total_reranks: int
+    max_reranks: int
+    rewrite_attempted: bool
+    max_query_rewrites: int
+    query_history: list[str]
+    started_at_monotonic: float
+    time_budget_ms: int
+    memory: list[WorkflowMemoryEntry]
+    stop_requested: bool
+    final_results: list[SearchResult]
+
+
+def _select_best_results(
+    state: SelfCorrectionState,
+    reflection: ReflectionStep,
+) -> tuple[list[SearchResult], float, int, tuple[int, int, int, int]]:
+    best_results = state.get("best_results", [])
+    best_score = state.get("best_score", 0.0)
+    best_attempt = state.get("best_attempt", 0)
+    best_rank = state.get("best_rank", (-1, -1, -1, -10**9))
+    candidate_rank = _reflection_rank(
+        reflection,
+        query=state["current_query"],
+        results=state["results"],
+        executed_sources=state.get("executed_sources", []),
+        reused_sources=state.get("reused_sources", []),
+    )
+    if candidate_rank > best_rank:
+        return (
+            state["results"],
+            reflection.overall_score,
+            state["attempt"],
+            candidate_rank,
+        )
+    return best_results, best_score, best_attempt, best_rank
+
+
+def _record_reflection_trace(
+    state: SelfCorrectionState,
+    reflection: ReflectionStep,
+) -> None:
+    trace = state.get("trace")
+    if trace is None:
+        return
+    ops = state["ops"]
+    if not state.get("tool_step_logged_for_attempt", False):
+        trace.tool_steps.append(
+            ToolStep(
+                tool_name=state["current_tool"],
+                results_count=len(state["results"]),
+                relevance_score=reflection.overall_score,
+                duration_ms=state.get("last_elapsed_ms", 0),
+                query_used=state["current_query"],
+                cache_hit=bool(state.get("reused_sources")),
+                reused_sources=state.get("reused_sources", []),
+                executed_sources=state.get("executed_sources", []),
+                provider_diagnostics=ops.build_provider_diagnostics(
+                    state.get("provider_results_sink"),
+                    state.get("reused_sources", []),
+                    state.get("executed_sources", []),
+                ),
+            )
+        )
+        trace.reflection_steps.append(reflection)
+
+
+def _build_skip_reflection(
+    state: SelfCorrectionState,
+    *,
+    top_signal: float,
+    threshold: float,
+) -> ReflectionStep:
+    cfg = get_settings()
+    max_score = cfg.retrieval.reflection_score_scale
+    return ReflectionStep(
+        attempt=state["attempt"],
+        tool_name=state["current_tool"],
+        query_used=state["current_query"],
+        verdict="answer",
+        overall_score=max_score,
+        relevance=max_score,
+        entity_completeness=max_score,
+        logical_consistency=max_score,
+        context_sufficiency=max_score,
+        missing_information=[],
+        missing_entities=[],
+        missing_relationships=[],
+        coverage_gap_sources=[],
+        candidate_fix_paths=["skip_reflection"],
+        preferred_tools=[],
+        preferred_providers=[],
+        retry_scope="",
+        reasoning=(
+            f"Skipped LLM reflection because top normalized score "
+            f"{top_signal:.3f} >= {threshold:.3f}."
+        ),
+        failure_type="",
+        recommended_action="answer",
+        should_retry=False,
+        should_rewrite_query=False,
+        should_rerank_again=False,
+        comparison_to_previous="Auto-accepted due to strong retrieval evidence.",
+    )
+
+
+def _finalize_reflection_update(
+    state: SelfCorrectionState,
+    reflection: ReflectionStep,
+    *,
+    memory_message: str,
+    memory_metadata: dict[str, Any],
+) -> dict[str, Any]:
+    reflection_history = list(state.get("reflection_history", []))
+    reflection_history.append(reflection)
+    best_results, best_score, best_attempt, best_rank = _select_best_results(
+        state,
+        reflection,
+    )
+    _record_reflection_trace(state, reflection)
+    memory = _append_memory_entry(
+        state,
+        stage="reflection",
+        message=memory_message,
+        metadata=memory_metadata,
+    )
+    return {
+        "last_reflection": reflection,
+        "reflection_history": reflection_history,
+        "best_results": best_results,
+        "best_score": best_score,
+        "best_attempt": best_attempt,
+        "best_rank": best_rank,
+        "tool_step_logged_for_attempt": True,
+        "memory": memory,
+    }
+
+
+def _should_retry_after_answer_verdict(
+    state: SelfCorrectionState,
+    reflection: ReflectionStep,
+) -> bool:
+    return (
+        reflection.overall_score < max(1.0, state["relevance_threshold"] * 0.5)
+        and state["attempt"] < state["max_retries"]
+    )
+
+
+def _next_step_after_reflection(
+    state: SelfCorrectionState,
+    reflection: ReflectionStep,
+) -> str:
+    verdict = resolve_reflection_verdict(
+        reflection,
+        relevance_threshold=state["relevance_threshold"],
+    )
+    if verdict in {"answer", "stop"}:
+        if verdict == "answer" and _should_retry_after_answer_verdict(state, reflection):
+            return "prepare_retry"
+        return "finish"
+    if _budget_exhausted(state):
+        return "prepare_retry"
+    if (
+        verdict == "rerank"
+        and state.get("results")
+        and state.get("total_reranks", 0) < state.get("max_reranks", 1)
+    ):
+        return "rerank_results"
+    if state["attempt"] >= state["max_retries"]:
+        return "finish"
+    return "prepare_retry"
+
+
+def _query_anchor_terms(query: str) -> list[str]:
+    """Extract stable lexical anchors from a user query."""
+    ordered: list[str] = []
+    for match in _ANCHOR_PATTERN.findall(query.casefold()):
+        token = match.strip()
+        if not token or token in _ANCHOR_STOPWORDS:
+            continue
+        if token in _RELATION_QUERY_TERMS:
+            continue
+        if token.isalpha() and len(token) < 2:
+            continue
+        if token not in ordered:
+            ordered.append(token)
+    return ordered
+
+
+def _relation_query_terms(query: str) -> list[str]:
+    """Extract explicit relation operators from the query."""
+    lowered = query.casefold()
+    ordered: list[str] = []
+    for term in _RELATION_QUERY_TERMS:
+        if term in lowered and term not in ordered:
+            ordered.append(term)
+    return ordered
+
+
+def _anchor_hit_profile(query: str, results: list[SearchResult]) -> tuple[int, int, int, int]:
+    """Measure objective lexical evidence quality."""
+    anchors = _query_anchor_terms(query)
+    relation_terms = _relation_query_terms(query)
+    if not anchors and not relation_terms:
+        return (0, 0, 0, 0)
+
+    distinct_hits: set[str] = set()
+    exact_query_hit = 0
+    relation_hits: set[str] = set()
+    best_rank = 10**9
+    normalized_query = query.casefold().strip()
+    for result in results:
+        text = (result.chunk.enriched_content or result.chunk.content or "").casefold()
+        if not text:
+            continue
+        if normalized_query and normalized_query in text:
+            exact_query_hit = 1
+        hits = {anchor for anchor in anchors if anchor in text}
+        distinct_hits.update(hits)
+        relation_hits.update(term for term in relation_terms if term in text)
+        candidate_rank = result.rank if result.rank > 0 else 10**9
+        if candidate_rank < best_rank:
+            best_rank = candidate_rank
+    if best_rank == 10**9:
+        best_rank = 0
+    return (exact_query_hit, len(distinct_hits), len(relation_hits), -best_rank)
+
+
+def _remaining_budget_ms(state: SelfCorrectionState) -> int:
+    """Return remaining request budget in milliseconds."""
+    budget_ms = max(0, int(state.get("time_budget_ms", 0)))
+    started = float(state.get("started_at_monotonic", 0.0))
+    elapsed_ms = int((time.perf_counter() - started) * 1000)
+    return max(0, budget_ms - elapsed_ms)
+
+
+def _budget_exhausted(state: SelfCorrectionState) -> bool:
+    """Whether the request-level budget has been exhausted."""
+    return _remaining_budget_ms(state) <= 0
+
+
+def _reflection_rank(
+    reflection: ReflectionStep,
+    *,
+    query: str,
+    results: list[SearchResult],
+    executed_sources: list[str],
+    reused_sources: list[str],
+) -> tuple[int, int, int, int]:
+    """Rank evidence using deterministic lexical/objective signals only."""
+    del reflection, executed_sources, reused_sources
+    return _anchor_hit_profile(query, results)
+
+
+def _current_missing_claims(reflection: ReflectionStep) -> list[str]:
+    """Normalize the reflection's claimed gaps for loop-guard checks."""
+    claims = [
+        *reflection.missing_information,
+        *reflection.missing_entities,
+        *reflection.missing_relationships,
+    ]
+    normalized: list[str] = []
+    for claim in claims:
+        text = str(claim).strip().casefold()
+        if text and text not in normalized:
+            normalized.append(text)
+    return normalized
+
+
+def _missing_claim_covered_by_results(claim: str, results: list[SearchResult]) -> bool:
+    """Reject retries when the claimed gap already appears in retrieved evidence."""
+    claim_terms = [
+        token for token in _ANCHOR_PATTERN.findall(claim)
+        if token and token not in _ANCHOR_STOPWORDS
+    ]
+    if not claim_terms:
+        return False
+    corpus = "\n".join(
+        (result.chunk.enriched_content or result.chunk.content or "").casefold()
+        for result in results
+    )
+    return all(term.casefold() in corpus for term in claim_terms)
+
+
+def _should_block_reflection_retry(state: SelfCorrectionState) -> tuple[bool, str]:
+    """Stop when reflection repeatedly hallucinates or re-asks covered gaps."""
+    reflection = state.get("last_reflection")
+    if reflection is None:
+        return False, ""
+
+    current_claims = _current_missing_claims(reflection)
+    if not current_claims:
+        return False, ""
+
+    for claim in current_claims:
+        if _missing_claim_covered_by_results(claim, state.get("results", [])):
+            return True, f"reflection requested already-covered gap: {claim}"
+
+    history = list(state.get("reflection_history", []))
+    previous_claim_sets = [
+        set(_current_missing_claims(step))
+        for step in history[:-1]
+        if _current_missing_claims(step)
+    ]
+    current_claim_set = set(current_claims)
+    if previous_claim_sets and current_claim_set == previous_claim_sets[-1]:
+        return True, "reflection repeated the same missing claims consecutively"
+    if current_claim_set and sum(1 for item in previous_claim_sets if item == current_claim_set) >= 1:
+        return True, "reflection repeated a previously requested missing claim set"
+    return False, ""
+
+
+def _stop_with_best_results(
+    state: SelfCorrectionState,
+    *,
+    stage: str,
+    message: str,
+) -> dict[str, Any]:
+    """Stop the loop and keep the strongest evidence collected so far."""
+    memory = _append_memory_entry(
+        state,
+        stage=stage,
+        message=message,
+        metadata={
+            "tool": state.get("current_tool", ""),
+            "remaining_budget_ms": _remaining_budget_ms(state),
+        },
+    )
+    return {
+        "stop_requested": True,
+        "retries_used": state.get("attempt", 0),
+        "final_results": state.get("best_results") or state.get("results", []),
+        "results": state.get("best_results") or state.get("results", []),
+        "memory": memory,
+    }
+
+
+def _append_memory_entry(
+    state: dict[str, Any],
+    *,
+    stage: str,
+    message: str,
+    metadata: dict[str, Any] | None = None,
+) -> list[WorkflowMemoryEntry]:
+    """Append one structured memory entry and sync it into the trace."""
+    memory = list(state.get("memory", []))
+    normalized_metadata = {
+        key: value
+        for key, value in (metadata or {}).items()
+        if value not in (None, "", [], {}, ())
+    }
+    memory.append(
+        WorkflowMemoryEntry(
+            stage=stage,
+            message=message,
+            metadata=normalized_metadata,
+        )
+    )
+    trace = state.get("trace")
+    if trace is not None:
+        trace.workflow_memory = list(memory)
+    return memory
+
+
+def _execute_attempt(state: SelfCorrectionState) -> dict[str, Any]:
+    """Run the current tool once and cache any provider-level evidence."""
+    ops = state["ops"]
+    current_query = state["current_query"]
+    current_tool = state["current_tool"]
+    channel_cache = state["channel_cache"]
+    forced_hybrid_providers = state.get("forced_hybrid_providers")
+
+    reused_sources, executed_sources = ops.execution_sources(
+        current_tool,
+        current_query,
+        channel_cache,
+        forced_hybrid_providers,
+    )
+    provider_results_sink = {} if current_tool == "hybrid_search" else None
+
+    started = time.perf_counter()
+    results = ops.run_tool(
+        current_tool,
+        current_query,
+        state["driver"],
+        state["openai_client"],
+        state["decision"],
+        channel_cache=channel_cache,
+        hybrid_enabled_providers=forced_hybrid_providers,
+        provider_results_sink=provider_results_sink,
+    )
+    elapsed_ms = int((time.perf_counter() - started) * 1000)
+
+    ops.cache_tool_results(current_query, current_tool, results, channel_cache)
+    if current_tool == "hybrid_search" and provider_results_sink is not None:
+        ops.cache_hybrid_provider_results(current_query, provider_results_sink, channel_cache)
+
+    tried_tools = list(state.get("tried_tools", []))
+    if current_tool not in tried_tools:
+        tried_tools.append(current_tool)
+
+    memory = _append_memory_entry(
+        state,
+        stage="retrieval",
+        message=f"{current_tool} returned {len(results)} results",
+        metadata={
+            "query": current_query,
+            "tool": current_tool,
+            "reused_sources": reused_sources,
+            "executed_sources": executed_sources,
+        },
+    )
+
+    return {
+        "results": results,
+        "reused_sources": reused_sources,
+        "executed_sources": executed_sources,
+        "provider_results_sink": provider_results_sink,
+        "last_elapsed_ms": elapsed_ms,
+        "tried_tools": tried_tools,
+        "forced_hybrid_providers": None,
+        "tool_step_logged_for_attempt": False,
+        "memory": memory,
+    }
+
+
+def _evaluate_reflection_node(state: SelfCorrectionState) -> dict[str, Any]:
+    """Evaluate the current retrieval attempt without mutating workflow history."""
+    ops = state["ops"]
+    results = state.get("results", [])
+    cfg = get_settings()
+    threshold = cfg.agent.reflection_skip_score_threshold
+    has_normalized_scores = any(result.score_normalized is not None for result in results)
+    if results and has_normalized_scores:
+        top_signal = max(
+            (
+                result.score_normalized
+                if result.score_normalized is not None
+                else result.score
+            )
+            for result in results
+        )
+        if top_signal >= threshold:
+            reflection = _build_skip_reflection(
+                state,
+                top_signal=top_signal,
+                threshold=threshold,
+            )
+            return {
+                "pending_reflection": reflection,
+                "pending_reflection_signal": top_signal,
+                "pending_reflection_threshold": threshold,
+            }
+
+    reflection = ops.evaluate_reflection(
+        state["current_query"],
+        results,
+        openai_client=state["openai_client"],
+        reflection_history=list(state.get("reflection_history", [])),
+        workflow_memory=state.get("memory", []),
+        tool_name=state["current_tool"],
+        attempt=state["attempt"],
+    )
+    return {"pending_reflection": reflection}
+
+
+def _interpret_verdict_node(state: SelfCorrectionState) -> dict[str, Any]:
+    """Record reflection state and map its verdict to the next workflow step."""
+    reflection = state.get("pending_reflection")
+    if reflection is None:
+        return {"next_step": "finish"}
+
+    if "skip_reflection" in reflection.candidate_fix_paths:
+        memory_message = (
+            f"{state['current_tool']} skipped LLM reflection with "
+            f"top score {reflection.overall_score:.2f}"
+        )
+        memory_metadata = {
+            "skip_threshold": state.get(
+                "pending_reflection_threshold",
+                get_settings().agent.reflection_skip_score_threshold,
+            ),
+            "top_score": state.get("pending_reflection_signal", reflection.overall_score),
+            "retry_scope": reflection.retry_scope,
+        }
+    else:
+        memory_message = (
+            f"{state['current_tool']} scored {reflection.overall_score:.2f} "
+            f"with action {reflection.recommended_action or 'unknown'}"
+        )
+        memory_metadata = {
+            "failure_type": reflection.failure_type,
+            "missing_information": reflection.missing_information,
+            "missing_entities": reflection.missing_entities,
+            "retry_scope": reflection.retry_scope,
+        }
+
+    update = _finalize_reflection_update(
+        state,
+        reflection,
+        memory_message=memory_message,
+        memory_metadata=memory_metadata,
+    )
+    update["next_step"] = _next_step_after_reflection(
+        {**state, **update},
+        reflection,
+    )
+    return update
+
+
+def _after_interpret_verdict(state: SelfCorrectionState) -> str:
+    """Route using the decision computed by the verdict interpreter node."""
+    return state.get("next_step", "finish")
+
+
+def _rerank_results(state: SelfCorrectionState) -> dict[str, Any]:
+    """Apply one local rerank pass before escalating to a broader tool."""
+    started = time.perf_counter()
+    reranked = state["ops"].rerank_results(
+        state["current_query"],
+        state["results"],
+        openai_client=state["openai_client"],
+    )
+    elapsed_ms = int((time.perf_counter() - started) * 1000)
+
+    trace = state.get("trace")
+    if trace is not None:
+        trace.tool_steps.append(
+            ToolStep(
+                tool_name="rerank_results",
+                results_count=len(reranked),
+                relevance_score=state.get("last_reflection", ReflectionStep()).overall_score,
+                duration_ms=elapsed_ms,
+                query_used=state["current_query"],
+            )
+        )
+
+    memory = _append_memory_entry(
+        state,
+        stage="rerank",
+        message=f"rerank_results reordered {len(reranked)} candidates",
+        metadata={
+            "query": state["current_query"],
+            "previous_tool": state["current_tool"],
+        },
+    )
+    return {
+        "results": reranked,
+        "last_elapsed_ms": elapsed_ms,
+        "total_reranks": state.get("total_reranks", 0) + 1,
+        "memory": memory,
+    }
+
+
+def _prepare_retry(state: SelfCorrectionState) -> dict[str, Any]:
+    """Choose the next tool and optionally rewrite the query."""
+    if _budget_exhausted(state):
+        return _stop_with_best_results(
+            state,
+            stage="retry",
+            message="request time budget exhausted; returning best known evidence",
+        )
+    should_block_retry, block_reason = _should_block_reflection_retry(state)
+    if should_block_retry:
+        return _stop_with_best_results(
+            state,
+            stage="retry",
+            message=block_reason,
+        )
+
+    ops = state["ops"]
+    current_query = state["current_query"]
+    current_tool = state["current_tool"]
+    reflection = state["last_reflection"]
+    channel_cache = state["channel_cache"]
+    provider_results_sink = state.get("provider_results_sink")
+
+    incremental_plan = ops.plan_incremental_retry(
+        current_query,
+        current_tool,
+        reflection,
+        channel_cache,
+        provider_results_sink,
+    )
+    if incremental_plan is not None:
+        next_tool, forced_hybrid_providers, cached_sources_reused = incremental_plan
+    else:
+        next_tool = ops.get_next_tool(
+            current_tool,
+            set(state.get("tried_tools", [])),
+            reflection,
+            state["decision"],
+        )
+        forced_hybrid_providers = None
+        cached_sources_reused = []
+
+    if not next_tool:
+        return _stop_with_best_results(
+            state,
+            stage="retry",
+            message="retry plan exhausted; returning best known evidence",
+        )
+
+    next_query = current_query
+    rewrite_attempted = state.get("rewrite_attempted", False)
+    query_history = list(state.get("query_history", [state.get("base_query", current_query)]))
+    if (
+        not rewrite_attempted
+        and state.get("max_query_rewrites", 1) > 0
+        and ops.should_rewrite_query(next_tool, reflection, cached_sources_reused)
+    ):
+        candidate_query = ops.generate_retry_query(
+            current_query,
+            state["results"],
+            openai_client=state["openai_client"],
+            reflection=reflection,
+            reflection_history=state.get("reflection_history", []),
+            workflow_memory=state.get("memory", []),
+        ).strip()
+        rewrite_attempted = True
+        normalized_history = {item.strip().casefold() for item in query_history if item.strip()}
+        if candidate_query and candidate_query.casefold() not in normalized_history:
+            next_query = candidate_query
+            query_history.append(candidate_query)
+
+    trace = state.get("trace")
+    if trace is not None:
+        fallback_reason = (
+            f"reflection {reflection.overall_score:.1f} < "
+            f"threshold {state['relevance_threshold']}"
+        )
+        trace.escalation_steps.append(
+            EscalationStep(
+                from_tool=current_tool,
+                to_tool=next_tool,
+                reason=(
+                    f"{reflection.failure_type or 'low_score'}: "
+                    f"{reflection.reasoning or fallback_reason}"
+                ),
+                rephrased_query=next_query,
+                cached_sources_reused=cached_sources_reused,
+            )
+        )
+
+    memory = _append_memory_entry(
+        state,
+        stage="retry",
+        message=f"retry planned from {current_tool} to {next_tool}",
+        metadata={
+            "current_query": current_query,
+            "next_query": next_query,
+            "cached_sources_reused": cached_sources_reused,
+            "forced_hybrid_providers": forced_hybrid_providers or [],
+        },
+    )
+
+    return {
+        "current_query": next_query,
+        "current_tool": next_tool,
+        "attempt": state["attempt"] + 1,
+        "forced_hybrid_providers": forced_hybrid_providers,
+        "stop_requested": False,
+        "rewrite_attempted": rewrite_attempted,
+        "query_history": query_history,
+        "memory": memory,
+    }
+
+
+def _after_prepare_retry(state: SelfCorrectionState) -> str:
+    """Continue looping unless retry preparation requested a stop."""
+    if state.get("stop_requested"):
+        return "finish"
+    return "execute_attempt"
+
+
+@lru_cache(maxsize=1)
+def _compile_self_correction_graph():
+    """Compile the LangGraph workflow once and reuse it across requests."""
+    graph = StateGraph(SelfCorrectionState)
+    graph.add_node("execute_attempt", _execute_attempt)
+    graph.add_node("evaluate_reflection", _evaluate_reflection_node)
+    graph.add_node("interpret_verdict", _interpret_verdict_node)
+    graph.add_node("rerank_results", _rerank_results)
+    graph.add_node("prepare_retry", _prepare_retry)
+
+    graph.add_edge(START, "execute_attempt")
+    graph.add_edge("execute_attempt", "evaluate_reflection")
+    graph.add_edge("evaluate_reflection", "interpret_verdict")
+    graph.add_conditional_edges(
+        "interpret_verdict",
+        _after_interpret_verdict,
+        {
+            "rerank_results": "rerank_results",
+            "prepare_retry": "prepare_retry",
+            "finish": END,
+        },
+    )
+    graph.add_edge("rerank_results", "evaluate_reflection")
+    graph.add_conditional_edges(
+        "prepare_retry",
+        _after_prepare_retry,
+        {
+            "execute_attempt": "execute_attempt",
+            "finish": END,
+        },
+    )
+    return graph.compile()
+
+
+def run_self_correction_workflow(
+    *,
+    query: str,
+    driver: Any,
+    openai_client: Any,
+    decision: RouterDecision,
+    max_retries: int,
+    relevance_threshold: float,
+    max_reranks: int = 1,
+    max_query_rewrites: int = 0,
+    request_time_budget_ms: int = 1500,
+    trace: PipelineTrace | None,
+    ops: SelfCorrectionOps,
+    memory_seed: list[WorkflowMemoryEntry] | None = None,
+    memory_sink: list[WorkflowMemoryEntry] | None = None,
+    reflection_history_sink: list[ReflectionStep] | None = None,
+) -> tuple[list[SearchResult], int]:
+    """Execute the retrieval correction loop via LangGraph."""
+    workflow = _compile_self_correction_graph()
+    initial_state: SelfCorrectionState = {
+        "ops": ops,
+        "driver": driver,
+        "openai_client": openai_client,
+        "decision": decision,
+        "trace": trace,
+        "relevance_threshold": relevance_threshold,
+        "max_retries": max_retries,
+        "base_query": query,
+        "current_query": query,
+        "current_tool": decision.suggested_tool,
+        "attempt": 0,
+        "tried_tools": [],
+        "reflection_history": [],
+        "channel_cache": {},
+        "forced_hybrid_providers": None,
+        "results": [],
+        "best_results": [],
+        "best_score": 0.0,
+        "best_attempt": 0,
+        "best_rank": (-1, -1, -1, -10**9),
+        "retries_used": max_retries,
+        "reused_sources": [],
+        "executed_sources": [],
+        "provider_results_sink": None,
+        "last_reflection": None,
+        "last_elapsed_ms": 0,
+        "tool_step_logged_for_attempt": False,
+        "total_reranks": 0,
+        "max_reranks": max(0, int(max_reranks)),
+        "rewrite_attempted": False,
+        "max_query_rewrites": max(0, int(max_query_rewrites)),
+        "query_history": [query],
+        "started_at_monotonic": time.perf_counter(),
+        "time_budget_ms": max(0, int(request_time_budget_ms)),
+        "memory": list(memory_seed or []),
+        "stop_requested": False,
+        "final_results": [],
+    }
+    final_state = workflow.invoke(initial_state)
+    final_memory = list(final_state.get("memory", []))
+    final_reflection_history = list(final_state.get("reflection_history", []))
+    if trace is not None:
+        trace.workflow_memory = final_memory
+        trace.reflection_steps = final_reflection_history
+    if memory_sink is not None:
+        memory_sink.clear()
+        memory_sink.extend(final_memory)
+    if reflection_history_sink is not None:
+        reflection_history_sink.clear()
+        reflection_history_sink.extend(final_reflection_history)
+
+    reflection = final_state.get("last_reflection")
+    if reflection is not None and resolve_reflection_verdict(
+        reflection,
+        relevance_threshold=relevance_threshold,
+    ) in {"answer", "stop"}:
+        return final_state.get("results", []), final_state.get("attempt", 0)
+
+    final_results = final_state.get("final_results") or final_state.get("best_results")
+    if final_results:
+        return final_results, final_state.get("retries_used", max_retries)
+    return final_state.get("results", []), final_state.get("retries_used", max_retries)
+
+
+@dataclass(frozen=True)
+class AgentWorkflowOps:
+    """Callbacks for the top-level route/retrieve/generate/completeness workflow."""
+
+    classify_query: Callable[..., RouterDecision]
+    is_cross_language_global: Callable[[str], bool]
+    run_self_correction: Callable[..., tuple[list[SearchResult], int]]
+    generate_answer: Callable[..., QAResult]
+    evaluate_completeness: Callable[..., bool]
+    comprehensive_search: Callable[..., list[SearchResult]]
+
+
+class AgentWorkflowState(TypedDict, total=False):
+    """State carried across the top-level agent workflow."""
+
+    ops: AgentWorkflowOps
+    query: str
+    driver: Any
+    openai_client: Any
+    use_llm_router: bool
+    reasoning: Any
+    trace: PipelineTrace
+    settings: Any
+    decision: RouterDecision
+    results: list[SearchResult]
+    retries: int
+    qa_result: QAResult
+    router_method: str
+    router_duration_ms: int
+    completeness_done: bool
+    completeness_attempt: int
+    completeness_complete: bool
+    existing_ids: list[str]
+    total_retries: int
+    reflection_history: list[ReflectionStep]
+    memory: list[WorkflowMemoryEntry]
+    answer_guard_triggered: bool
+    answer_guard_reason: str
+
+
+def _route_query(state: AgentWorkflowState) -> dict[str, Any]:
+    """Classify the query and record router metadata."""
+    started = time.perf_counter()
+    decision = state["ops"].classify_query(
+        state["query"],
+        use_llm=state["use_llm_router"],
+        openai_client=state["openai_client"],
+        reasoning=state["reasoning"],
+    )
+    router_duration_ms = int((time.perf_counter() - started) * 1000)
+    if state["ops"].is_cross_language_global(state["query"]) and decision.suggested_tool != "full_document_read":
+        decision = RouterDecision(
+            query_type=QueryType.GLOBAL,
+            suggested_tool="full_document_read",
+            confidence=decision.confidence,
+            reasoning=decision.reasoning,
+        )
+    router_method = (
+        "hard_rule"
+        if decision.reasoning.startswith("Hard rule:")
+        else ("mangle" if state["reasoning"] else ("llm" if state["use_llm_router"] else "pattern"))
+    )
+    state["trace"].router_step = RouterStep(
+        method=router_method,
+        decision=decision,
+        duration_ms=router_duration_ms,
+    )
+    memory = _append_memory_entry(
+        state,
+        stage="route",
+        message=f"router selected {decision.suggested_tool}",
+        metadata={
+            "query_type": str(decision.query_type),
+            "method": router_method,
+            "confidence": decision.confidence,
+        },
+    )
+    return {
+        "decision": decision,
+        "router_method": router_method,
+        "router_duration_ms": router_duration_ms,
+        "memory": memory,
+    }
+
+
+def _retrieve_evidence(state: AgentWorkflowState) -> dict[str, Any]:
+    """Run the nested self-correction retrieval workflow."""
+    memory = list(state.get("memory", []))
+    reflection_history = list(state.get("reflection_history", []))
+    results, retries = state["ops"].run_self_correction(
+        query=state["query"],
+        driver=state["driver"],
+        openai_client=state["openai_client"],
+        decision=state["decision"],
+        trace=state["trace"],
+        memory_sink=memory,
+        reflection_history_sink=reflection_history,
+    )
+    existing_ids = [result.chunk.id for result in results if result.chunk.id]
+    state["trace"].workflow_memory = list(memory)
+    state["trace"].reflection_steps = list(reflection_history)
+    answer_guard_triggered = False
+    answer_guard_reason = ""
+    for step in reversed(reflection_history):
+        if (step.recommended_action or "") == "stop_due_to_invalid_reflection":
+            answer_guard_triggered = True
+            answer_guard_reason = step.reasoning or "Reflection policy guard stopped retry."
+            break
+    if not answer_guard_triggered:
+        for entry in reversed(memory):
+            if entry.stage != "retry":
+                continue
+            if (
+                "requested already-covered gap" in entry.message
+                or "repeated" in entry.message
+                or "time budget exhausted" in entry.message
+                or "retry plan exhausted" in entry.message
+            ):
+                answer_guard_triggered = True
+                answer_guard_reason = entry.message
+                break
+    return {
+        "results": results,
+        "retries": retries,
+        "total_retries": retries,
+        "existing_ids": existing_ids,
+        "memory": memory,
+        "reflection_history": reflection_history,
+        "answer_guard_triggered": answer_guard_triggered,
+        "answer_guard_reason": answer_guard_reason,
+    }
+
+
+def _generate_answer_node(state: AgentWorkflowState) -> dict[str, Any]:
+    """Generate the answer from the current evidence set."""
+    started = time.perf_counter()
+    reflection_history = list(state.get("reflection_history", []))
+    reflection_score = reflection_history[-1].overall_score if reflection_history else None
+    qa_result = state["ops"].generate_answer(
+        state["query"],
+        state["results"],
+        openai_client=state["openai_client"],
+        reflection_score=reflection_score,
+    )
+    if state.get("answer_guard_triggered"):
+        guard_reason = state.get("answer_guard_reason", "").strip()
+        caveat = (
+            "Available evidence covers part of the question, but the retrieval "
+            "guard blocked further expansion because the remaining evidence is "
+            "not decisive enough."
+        )
+        if guard_reason:
+            caveat = f"{caveat} Guard reason: {guard_reason}"
+        answer_text = qa_result.answer or ""
+        if caveat not in answer_text:
+            answer_text = f"{caveat}\n\n{answer_text}".strip()
+        qa_result = qa_result.model_copy(
+            update={
+                "answer": answer_text,
+                "confidence": min(qa_result.confidence, _ANSWER_GUARD_CONFIDENCE_CAP),
+            }
+        )
+    settings = state.get("settings")
+    model_name = ""
+    if settings is not None:
+        model_name = str(getattr(settings.openai, "llm_model", ""))
+    state["trace"].generator_step = GeneratorStep(
+        model=model_name,
+        prompt_tokens=qa_result.prompt_tokens,
+        completion_tokens=qa_result.completion_tokens,
+        confidence=qa_result.confidence,
+        duration_ms=int((time.perf_counter() - started) * 1000),
+    )
+    memory = _append_memory_entry(
+        state,
+        stage="generate",
+        message="generated answer from current evidence",
+        metadata={
+            "sources": len(state["results"]),
+            "confidence": qa_result.confidence,
+            "answer_guard_triggered": state.get("answer_guard_triggered", False),
+        },
+    )
+    return {"qa_result": qa_result, "memory": memory}
+
+
+def _after_generate(state: AgentWorkflowState) -> str:
+    """Skip completeness for non-global queries."""
+    qa_result = state.get("qa_result")
+    if state.get("answer_guard_triggered"):
+        return "finish"
+    if (
+        state["decision"].query_type == QueryType.GLOBAL
+        and qa_result is not None
+        and bool((qa_result.answer or "").strip())
+        and qa_result.confidence < _GLOBAL_COMPLETENESS_CONFIDENCE_THRESHOLD
+        and len(state.get("results", [])) < 8
+    ):
+        return "check_completeness"
+    return "finish"
+
+
+def _check_completeness_node(state: AgentWorkflowState) -> dict[str, Any]:
+    """Evaluate whether the current answer is complete for global queries."""
+    qa_result = state["qa_result"]
+    reflection_history = list(state.get("reflection_history", []))
+    last_reflection = reflection_history[-1] if reflection_history else None
+    forced_incomplete = False
+    if qa_result.confidence < _GLOBAL_COMPLETENESS_CONFIDENCE_THRESHOLD:
+        forced_incomplete = True
+    if last_reflection is not None and (
+        (last_reflection.verdict or "") in {"retry", "rerank"}
+        or last_reflection.should_retry
+        or last_reflection.overall_score < _REFLECTION_RETRY_SCORE_THRESHOLD
+    ):
+        forced_incomplete = True
+    is_complete = False
+    if not forced_incomplete:
+        is_complete = state["ops"].evaluate_completeness(
+            state["query"],
+            qa_result.answer,
+            openai_client=state["openai_client"],
+        )
+    if state["trace"].generator_step is not None:
+        state["trace"].generator_step.completeness_check = is_complete
+    memory = _append_memory_entry(
+        state,
+        stage="completeness",
+        message="answer completeness evaluated",
+        metadata={
+            "complete": is_complete,
+            "attempt": state.get("completeness_attempt", 0),
+        },
+    )
+    return {
+        "completeness_done": True,
+        "completeness_complete": is_complete,
+        "memory": memory,
+    }
+
+
+def _after_completeness(state: AgentWorkflowState) -> str:
+    """Choose the next completeness branch based on current progress."""
+    if state.get("completeness_complete", True):
+        return "finish"
+    if state.get("completeness_attempt", 0) == 0:
+        return "augment_with_comprehensive"
+    return "finish"
+
+
+def _merge_unique_results(
+    base_results: list[SearchResult],
+    extra_results: list[SearchResult],
+    existing_ids: list[str],
+) -> tuple[list[SearchResult], list[str]]:
+    seen_ids = set(existing_ids)
+    combined = list(base_results)
+    for result in extra_results:
+        chunk_id = result.chunk.id
+        if chunk_id and chunk_id in seen_ids:
+            continue
+        combined.append(result)
+        if chunk_id:
+            seen_ids.add(chunk_id)
+    return combined, [chunk_id for chunk_id in seen_ids]
+
+
+def _augment_with_comprehensive_node(state: AgentWorkflowState) -> dict[str, Any]:
+    """Retry a global answer with comprehensive retrieval."""
+    extra_results = state["ops"].comprehensive_search(
+        state["query"],
+        state["driver"],
+        state["openai_client"],
+    )
+    combined, existing_ids = _merge_unique_results(
+        state["results"],
+        extra_results,
+        state.get("existing_ids", []),
+    )
+    memory = _append_memory_entry(
+        state,
+        stage="augment",
+        message="comprehensive search appended evidence",
+        metadata={"added_results": len(extra_results)},
+    )
+    return {
+        "results": combined,
+        "existing_ids": existing_ids,
+        "completeness_attempt": 1,
+        "total_retries": state.get("total_retries", state.get("retries", 0)) + (1 if extra_results else 0),
+        "memory": memory,
+    }
+
+
+@lru_cache(maxsize=1)
+def _compile_agent_workflow_graph():
+    """Compile the top-level agent workflow once and reuse it across requests."""
+    graph = StateGraph(AgentWorkflowState)
+    graph.add_node("route_query", _route_query)
+    graph.add_node("retrieve_evidence", _retrieve_evidence)
+    graph.add_node("generate_answer", _generate_answer_node)
+    graph.add_node("check_completeness", _check_completeness_node)
+    graph.add_node("augment_with_comprehensive", _augment_with_comprehensive_node)
+
+    graph.add_edge(START, "route_query")
+    graph.add_edge("route_query", "retrieve_evidence")
+    graph.add_edge("retrieve_evidence", "generate_answer")
+    graph.add_conditional_edges(
+        "generate_answer",
+        _after_generate,
+        {
+            "check_completeness": "check_completeness",
+            "finish": END,
+        },
+    )
+    graph.add_conditional_edges(
+        "check_completeness",
+        _after_completeness,
+        {
+            "augment_with_comprehensive": "augment_with_comprehensive",
+            "finish": END,
+        },
+    )
+    graph.add_edge("augment_with_comprehensive", "generate_answer")
+    return graph.compile()
+
+
+def run_agent_workflow(
+    *,
+    query: str,
+    driver: Any,
+    openai_client: Any,
+    use_llm_router: bool,
+    reasoning: Any,
+    trace: PipelineTrace,
+    settings: Any | None = None,
+    ops: AgentWorkflowOps,
+    workflow_memory_seed: list[WorkflowMemoryEntry] | None = None,
+    reflection_history_seed: list[ReflectionStep] | None = None,
+) -> QAResult:
+    """Execute the top-level route/retrieve/generate/completeness workflow."""
+    workflow = _compile_agent_workflow_graph()
+    initial_state: AgentWorkflowState = {
+        "ops": ops,
+        "query": query,
+        "driver": driver,
+        "openai_client": openai_client,
+        "use_llm_router": use_llm_router,
+        "reasoning": reasoning,
+        "trace": trace,
+        "settings": settings,
+        "results": [],
+        "retries": 0,
+        "completeness_done": False,
+        "completeness_attempt": 0,
+        "completeness_complete": True,
+        "existing_ids": [],
+        "total_retries": 0,
+        "reflection_history": list(reflection_history_seed or []),
+        "memory": list(workflow_memory_seed or []),
+    }
+    final_state = workflow.invoke(initial_state)
+    qa_result = final_state["qa_result"]
+    qa_result.sources = final_state.get("results", qa_result.sources)
+    qa_result.retries = final_state.get("total_retries", final_state.get("retries", 0))
+    qa_result.router_decision = final_state["decision"]
+    trace.workflow_memory = list(final_state.get("memory", []))
+    trace.reflection_steps = list(final_state.get("reflection_history", trace.reflection_steps))
+    qa_result.trace = trace
+    return qa_result

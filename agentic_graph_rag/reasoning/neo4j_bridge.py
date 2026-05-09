@@ -6,6 +6,7 @@ from collections.abc import Iterator
 from typing import TYPE_CHECKING
 
 from pymangle.ast_nodes import Constant, TermType
+from rag_core.neo4j_utils import open_neo4j_session
 
 if TYPE_CHECKING:
     from neo4j import Driver
@@ -43,7 +44,7 @@ class Neo4jExternalPredicate:
         for i, inp in enumerate(inputs):
             params[f"p{i}"] = inp.value
 
-        with self._driver.session() as session:
+        with open_neo4j_session(self._driver) as session:
             result = session.run(self._cypher, params)
             for record in result:
                 yield [_to_constant(v) for v in record.values()]

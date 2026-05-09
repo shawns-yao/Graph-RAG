@@ -1,186 +1,397 @@
-"""Tests for benchmark.runner and benchmark.compare."""
+"""Tests for the rebuilt GraphRAG-Benchmark style evaluation stack."""
 
-from benchmark.compare import accuracy_by_type, compare_modes, compute_metrics
+from __future__ import annotations
+
+import json
+import io
+from pathlib import Path
+from types import SimpleNamespace
+
+import pytest
+
+from benchmark.metrics.answer_accuracy import compute_answer_correctness
+from benchmark.metrics.coverage import compute_coverage_score
+from benchmark.metrics.evidence_recall import compute_evidence_recall
+from benchmark.generation_eval import evaluate_dataset as evaluate_generation_dataset
+from scripts.run_medical_format_smoke import _print_utf8_payload
 from benchmark.runner import (
-    MODES,
-    _is_global_query,
-    _keyword_overlap,
-    _needs_comprehensive,
-    load_questions,
+    _is_empty_generation_row,
+    _load_questions,
+    _run_mode,
+    _split_evidences,
+    _write_payload,
+    run_benchmark,
 )
-
-# ---------------------------------------------------------------------------
-# load_questions
-# ---------------------------------------------------------------------------
-
-class TestLoadQuestions:
-    def test_loads_all(self):
-        qs = load_questions()
-        assert len(qs) == 30
-
-    def test_has_required_fields(self):
-        qs = load_questions()
-        for q in qs:
-            assert "id" in q
-            assert "question" in q
-            assert "type" in q
-            assert "keywords" in q
-
-    def test_all_types_covered(self):
-        qs = load_questions()
-        types = {q["type"] for q in qs}
-        assert types == {"simple", "relation", "multi_hop", "global", "temporal"}
-
-    def test_doc1_and_doc2_present(self):
-        qs = load_questions()
-        doc1 = [q for q in qs if q["id"] <= 15]
-        doc2 = [q for q in qs if q["id"] > 15]
-        assert len(doc1) == 15
-        assert len(doc2) == 15
+from rag_core.llm_resilience import LLMCircuitOpenError
 
 
-class TestIsGlobalQuery:
-    def test_russian_all(self):
-        assert _is_global_query("Перечисли все компоненты архитектуры")
-        assert _is_global_query("Опиши все слои MeaningHub")
-        assert _is_global_query("Резюмируй все методы интеграции")
-        assert _is_global_query("Дай обзор хранения данных")
+class _FakeLLM:
+    def __init__(self, responses: list[str]) -> None:
+        self._responses = responses
 
-    def test_english_all(self):
-        assert _is_global_query("List all components of the architecture")
-        assert _is_global_query("Describe all layers of MeaningHub")
-        assert _is_global_query("Summarize all methods")
-
-    def test_non_global(self):
-        assert not _is_global_query("Что такое онтология?")
-        assert not _is_global_query("How does Neo4j work?")
-        assert not _is_global_query("When was GraphRAG introduced?")
+    async def ainvoke(self, prompt: str, config=None):  # noqa: ANN001
+        del prompt, config
+        if not self._responses:
+            raise RuntimeError("no fake responses left")
+        return SimpleNamespace(content=self._responses.pop(0))
 
 
-class TestNeedsComprehensive:
-    def test_global_queries(self):
-        assert _needs_comprehensive("Перечисли все компоненты")
-        assert _needs_comprehensive("List all components")
+class _FakeEmbeddings:
+    def __init__(self, vectors: list[list[float]]) -> None:
+        self._vectors = vectors
 
-    def test_mention_queries_russian(self):
-        assert _needs_comprehensive("Какие фреймворки для графовых баз знаний упоминаются?")
-        assert _needs_comprehensive("Какие инструменты упоминаются в документе?")
-        assert _needs_comprehensive("Какие технологии упоминаются?")
-
-    def test_mention_queries_english(self):
-        assert _needs_comprehensive("What frameworks are mentioned?")
-        assert _needs_comprehensive("What tools are described in the document?")
-
-    def test_non_comprehensive(self):
-        assert not _needs_comprehensive("Что такое онтология?")
-        assert not _needs_comprehensive("How does Neo4j work?")
+    async def aembed_query(self, text: str) -> list[float]:
+        del text
+        if not self._vectors:
+            raise RuntimeError("no fake vectors left")
+        return self._vectors.pop(0)
 
 
-class TestKeywordOverlap:
-    def test_full_overlap(self):
-        assert _keyword_overlap("Graphiti and Cognee are frameworks", ["Graphiti", "Cognee"]) == 1.0
-
-    def test_partial_overlap(self):
-        assert _keyword_overlap("Graphiti is a framework", ["Graphiti", "Cognee"]) == 0.5
-
-    def test_no_overlap(self):
-        assert _keyword_overlap("Neo4j is great", ["Graphiti", "Cognee"]) == 0.0
-
-    def test_empty_keywords(self):
-        assert _keyword_overlap("some text", []) == 0.0
-
-    def test_case_insensitive(self):
-        assert _keyword_overlap("graphiti is mentioned", ["Graphiti"]) == 1.0
-
-
-# ---------------------------------------------------------------------------
-# MODES
-# ---------------------------------------------------------------------------
-
-class TestModes:
-    def test_six_modes(self):
-        assert len(MODES) == 6
-        assert set(MODES.keys()) == {
-            "vector", "cypher", "hybrid", "agent_pattern", "agent_llm", "agent_mangle",
-        }
+def test_load_questions_accepts_graphrag_benchmark_shape(tmp_path: Path) -> None:
+    path = tmp_path / "questions.json"
+    path.write_text(
+        json.dumps(
+            [
+                {
+                    "id": "Medical-1",
+                    "question": "What is BCC?",
+                    "answer": "Basal cell carcinoma.",
+                    "question_type": "Fact Retrieval",
+                    "evidence": "Basal cell carcinoma.",
+                }
+            ]
+        ),
+        encoding="utf-8",
+    )
+    rows = _load_questions(str(path))
+    assert len(rows) == 1
+    assert rows[0]["question_type"] == "Fact Retrieval"
 
 
-# ---------------------------------------------------------------------------
-# compute_metrics
-# ---------------------------------------------------------------------------
+def test_split_evidences_handles_semicolon_payload() -> None:
+    assert _split_evidences("one; two ; ; three") == ["one", "two", "three"]
 
-class TestComputeMetrics:
-    def test_empty(self):
-        m = compute_metrics([])
-        assert m["accuracy"] == 0.0
-        assert m["total"] == 0
 
-    def test_all_pass(self):
-        results = [
-            {"passed": True, "confidence": 0.8, "latency": 1.0, "retries": 0},
-            {"passed": True, "confidence": 0.9, "latency": 2.0, "retries": 1},
+@pytest.mark.asyncio
+async def test_answer_correctness_scores_high_for_matching_answer() -> None:
+    llm = _FakeLLM(
+        [
+            '["Basal cell carcinoma is the most common type of skin cancer."]',
+            '["Basal cell carcinoma is the most common type of skin cancer."]',
+            '{"TP":[{"statement":"Basal cell carcinoma is the most common type of skin cancer.","reason":"same"}],"FP":[],"FN":[]}',
         ]
-        m = compute_metrics(results)
-        assert m["accuracy"] == 1.0
-        assert m["correct"] == 2
-        assert m["avg_confidence"] == 0.85
-        assert m["avg_latency"] == 1.5
-        assert m["avg_retries"] == 0.5
+    )
+    embeddings = _FakeEmbeddings([[1.0, 0.0], [1.0, 0.0]])
+    score = await compute_answer_correctness(
+        "What is the most common type of skin cancer?",
+        "Basal cell carcinoma is the most common type of skin cancer.",
+        "Basal cell carcinoma is the most common type of skin cancer.",
+        llm,
+        embeddings,
+    )
+    assert score > 0.9
 
-    def test_partial(self):
-        results = [
-            {"passed": True, "confidence": 0.8, "latency": 1.0, "retries": 0},
-            {"passed": False, "confidence": 0.3, "latency": 2.0, "retries": 2},
+
+@pytest.mark.asyncio
+async def test_coverage_score_returns_partial_credit() -> None:
+    llm = _FakeLLM(
+        [
+            '{"facts":["Fact A","Fact B"]}',
+            '{"classifications":[{"statement":"Fact A","attributed":1},{"statement":"Fact B","attributed":0}]}',
         ]
-        m = compute_metrics(results)
-        assert m["accuracy"] == 0.5
-        assert m["correct"] == 1
-        assert m["total"] == 2
+    )
+    score = await compute_coverage_score("Q", "Reference", "Response", llm)
+    assert score == 0.5
 
 
-# ---------------------------------------------------------------------------
-# compare_modes
-# ---------------------------------------------------------------------------
+@pytest.mark.asyncio
+async def test_evidence_recall_returns_average_attribution() -> None:
+    llm = _FakeLLM(
+        [
+            '{"classifications":[{"statement":"E1","reason":"yes","attributed":1},{"statement":"E2","reason":"no","attributed":0}]}'
+        ]
+    )
+    score = await compute_evidence_recall("Q", ["ctx"], ["E1", "E2"], llm)
+    assert score == 0.5
 
-class TestCompareModes:
-    def test_generates_rows(self):
-        all_results = {
-            "vector": [
-                {"passed": True, "confidence": 0.8, "latency": 1.0, "retries": 0},
-            ],
-            "hybrid": [
-                {"passed": False, "confidence": 0.3, "latency": 2.0, "retries": 1},
-            ],
+
+@pytest.mark.asyncio
+async def test_generation_eval_tolerates_metric_failure() -> None:
+    llm = _FakeLLM([])
+    embeddings = _FakeEmbeddings([])
+    dataset = [
+        {
+            "question": "Q",
+            "answer": "A",
+            "contexts": ["ctx"],
+            "ground_truth": "GT",
         }
-        rows = compare_modes(all_results)
-        assert len(rows) == 2
-        assert rows[0]["Mode"] == "vector"
-        assert rows[1]["Mode"] == "hybrid"
-        assert "Accuracy" in rows[0]
-        assert "Avg Confidence" in rows[0]
-
-    def test_empty_results(self):
-        rows = compare_modes({})
-        assert rows == []
+    ]
+    result = await evaluate_generation_dataset(
+        dataset,
+        metrics=["answer_correctness"],
+        llm=llm,
+        embeddings=embeddings,
+    )
+    assert result["answer_correctness"] == pytest.approx(0.0)
 
 
-# ---------------------------------------------------------------------------
-# accuracy_by_type
-# ---------------------------------------------------------------------------
+def test_query_embedding_retry_controller_opens_on_repeated_timeout(monkeypatch):
+    from agentic_graph_rag.agent.tools import _embed_query
 
-class TestAccuracyByType:
-    def test_breakdown(self):
-        all_results = {
-            "vector": [
-                {"type": "simple", "passed": True},
-                {"type": "simple", "passed": False},
-                {"type": "relation", "passed": True},
-            ],
+    fake_cfg = SimpleNamespace(
+        openai=SimpleNamespace(embedding_model="demo", embedding_dimensions=3),
+        benchmark=SimpleNamespace(
+            llm_max_retries=1,
+            llm_initial_backoff_seconds=0.0,
+            llm_max_backoff_seconds=0.0,
+            llm_jitter_seconds=0.0,
+            llm_read_timeout_seconds=1.0,
+        ),
+    )
+    monkeypatch.setattr("agentic_graph_rag.agent.tools.get_settings", lambda: fake_cfg)
+
+    client = SimpleNamespace(
+        embeddings=SimpleNamespace(
+            create=lambda **_kwargs: (_ for _ in ()).throw(RuntimeError("502 gateway timeout"))
+        )
+    )
+
+    with pytest.raises(LLMCircuitOpenError):
+        _embed_query("What is BCC?", client)
+
+
+def test_write_payload_falls_back_to_utf8_buffer(monkeypatch):
+    class _AsciiStdout:
+        encoding = "gbk"
+
+        def __init__(self) -> None:
+            self.buffer = io.BytesIO()
+
+        def write(self, _text: str):
+            raise UnicodeEncodeError("gbk", "\uf0dc", 0, 1, "illegal multibyte sequence")
+
+        def flush(self):
+            return None
+
+    fake_stdout = _AsciiStdout()
+    monkeypatch.setattr("benchmark.runner.sys.stdout", fake_stdout)
+
+    _write_payload({"symbol": "\uf0dc"})
+
+    assert '"symbol": "\\uf0dc"' not in fake_stdout.buffer.getvalue().decode("utf-8")
+
+
+def test_medical_smoke_print_payload_falls_back_to_utf8_buffer(monkeypatch):
+    class _AsciiStdout:
+        encoding = "gbk"
+
+        def __init__(self) -> None:
+            self.buffer = io.BytesIO()
+
+        def write(self, _text: str):
+            raise UnicodeEncodeError("gbk", "级", 0, 1, "illegal multibyte sequence")
+
+        def flush(self):
+            return None
+
+    fake_stdout = _AsciiStdout()
+    monkeypatch.setattr("scripts.run_medical_format_smoke.sys.stdout", fake_stdout)
+
+    _print_utf8_payload({"query": "COPD诊断和分级"})
+
+    assert "COPD诊断和分级" in fake_stdout.buffer.getvalue().decode("utf-8")
+
+
+def test_empty_generation_row_detects_no_context_fallback() -> None:
+    row = {
+        "answer": "I don't have enough context to answer this question.",
+        "contexts": [],
+    }
+    assert _is_empty_generation_row(row) is True
+
+
+def test_empty_generation_row_ignores_non_empty_contexts() -> None:
+    row = {
+        "answer": "I don't have enough context to answer this question.",
+        "contexts": ["real context"],
+    }
+    assert _is_empty_generation_row(row) is False
+
+
+def test_run_mode_routes_graph_h2_with_fixed_hops(monkeypatch) -> None:
+    captured: dict[str, int] = {}
+
+    def _fake_cypher_traverse(query, driver, client, top_k=None, max_hops=None, entry_top_k=None):  # noqa: ANN001
+        del query, driver, client, top_k, entry_top_k
+        captured["max_hops"] = max_hops
+        return []
+
+    monkeypatch.setattr("benchmark.runner.cypher_traverse", _fake_cypher_traverse)
+    monkeypatch.setattr(
+        "benchmark.runner.generate_answer",
+        lambda question, results, client: SimpleNamespace(answer="A", sources=results),
+    )
+
+    _run_mode("graph_h2", "q", SimpleNamespace(), SimpleNamespace())
+
+    assert captured["max_hops"] == 2
+
+
+def test_run_mode_routes_graph_h3_with_fixed_hops(monkeypatch) -> None:
+    captured: dict[str, int] = {}
+
+    def _fake_cypher_traverse(query, driver, client, top_k=None, max_hops=None, entry_top_k=None):  # noqa: ANN001
+        del query, driver, client, top_k, entry_top_k
+        captured["max_hops"] = max_hops
+        return []
+
+    monkeypatch.setattr("benchmark.runner.cypher_traverse", _fake_cypher_traverse)
+    monkeypatch.setattr(
+        "benchmark.runner.generate_answer",
+        lambda question, results, client: SimpleNamespace(answer="A", sources=results),
+    )
+
+    _run_mode("graph_h3", "q", SimpleNamespace(), SimpleNamespace())
+
+    assert captured["max_hops"] == 3
+
+
+def test_run_benchmark_exposes_parallelism_settings(monkeypatch, tmp_path: Path):
+    questions_path = tmp_path / "questions.json"
+    questions_path.write_text(
+        json.dumps(
+            [
+                {
+                    "id": "q1",
+                    "question": "What is BCC?",
+                    "answer": "Basal cell carcinoma.",
+                    "question_type": "Fact Retrieval",
+                    "evidence": "Basal cell carcinoma.",
+                }
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    fake_cfg = SimpleNamespace(
+        neo4j=SimpleNamespace(uri="bolt://fake", user="neo4j", password="neo4j"),
+        openai=SimpleNamespace(llm_model_mini="judge", embedding_model="embed"),
+    )
+    monkeypatch.setattr("benchmark.runner.get_settings", lambda: fake_cfg)
+    monkeypatch.setattr("benchmark.runner.make_openai_client", lambda *args, **kwargs: SimpleNamespace())
+    monkeypatch.setattr("benchmark.runner.GraphDatabase.driver", lambda *args, **kwargs: SimpleNamespace(close=lambda: None))
+    monkeypatch.setattr("benchmark.runner.OpenAIAsyncJudge", lambda *args, **kwargs: SimpleNamespace())
+    monkeypatch.setattr("benchmark.runner.OpenAIAsyncEmbeddings", lambda *args, **kwargs: SimpleNamespace())
+    monkeypatch.setattr(
+        "benchmark.runner._run_mode",
+        lambda mode, question, driver, client: SimpleNamespace(answer="A", sources=[]),
+    )
+    async def _fake_score_mode(rows, llm, embeddings, eval_concurrency):  # noqa: ANN001
+        del llm, embeddings
+        return {
+            "rows": len(rows),
+            "eval_concurrency": eval_concurrency,
         }
-        breakdown = accuracy_by_type(all_results)
-        assert breakdown["vector"]["simple"] == 0.5
-        assert breakdown["vector"]["relation"] == 1.0
 
-    def test_empty(self):
-        breakdown = accuracy_by_type({})
-        assert breakdown == {}
+    monkeypatch.setattr("benchmark.runner._score_mode", _fake_score_mode)
+
+    payload = run_benchmark(
+        questions_path=str(questions_path),
+        modes=["bm25_only"],
+        max_workers=2,
+        eval_concurrency=3,
+    )
+
+    assert payload["max_workers"] == 2
+    assert payload["eval_concurrency"] == 3
+
+
+def test_run_benchmark_aborts_after_consecutive_empty_results(monkeypatch, tmp_path: Path) -> None:
+    questions_path = tmp_path / "questions.json"
+    questions_path.write_text(
+        json.dumps(
+            [
+                {
+                    "id": "q1",
+                    "question": "Q1",
+                    "answer": "A1",
+                    "question_type": "Fact Retrieval",
+                    "evidence": "E1",
+                },
+                {
+                    "id": "q2",
+                    "question": "Q2",
+                    "answer": "A2",
+                    "question_type": "Fact Retrieval",
+                    "evidence": "E2",
+                },
+                {
+                    "id": "q3",
+                    "question": "Q3",
+                    "answer": "A3",
+                    "question_type": "Fact Retrieval",
+                    "evidence": "E3",
+                },
+                {
+                    "id": "q4",
+                    "question": "Q4",
+                    "answer": "A4",
+                    "question_type": "Fact Retrieval",
+                    "evidence": "E4",
+                },
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    fake_cfg = SimpleNamespace(
+        neo4j=SimpleNamespace(uri="bolt://fake", user="neo4j", password="neo4j"),
+        openai=SimpleNamespace(llm_model_mini="judge", embedding_model="embed"),
+    )
+    monkeypatch.setattr("benchmark.runner.get_settings", lambda: fake_cfg)
+    monkeypatch.setattr("benchmark.runner.make_openai_client", lambda *args, **kwargs: SimpleNamespace())
+    monkeypatch.setattr("benchmark.runner.GraphDatabase.driver", lambda *args, **kwargs: SimpleNamespace(close=lambda: None))
+    monkeypatch.setattr("benchmark.runner.OpenAIAsyncJudge", lambda *args, **kwargs: SimpleNamespace())
+    monkeypatch.setattr("benchmark.runner.OpenAIAsyncEmbeddings", lambda *args, **kwargs: SimpleNamespace())
+
+    answers = iter(
+        [
+            SimpleNamespace(
+                answer="I don't have enough context to answer this question.",
+                sources=[],
+            ),
+            SimpleNamespace(
+                answer="I don't have enough context to answer this question.",
+                sources=[],
+            ),
+            SimpleNamespace(
+                answer="I don't have enough context to answer this question.",
+                sources=[],
+            ),
+            SimpleNamespace(
+                answer="should never run",
+                sources=[],
+            ),
+        ]
+    )
+    monkeypatch.setattr("benchmark.runner._run_mode", lambda *args, **kwargs: next(answers))
+
+    async def _fake_score_mode(rows, llm, embeddings, eval_concurrency):  # noqa: ANN001
+        del llm, embeddings, eval_concurrency
+        return {"rows": len(rows)}
+
+    monkeypatch.setattr("benchmark.runner._score_mode", _fake_score_mode)
+
+    payload = run_benchmark(
+        questions_path=str(questions_path),
+        modes=["bm25_only"],
+        max_workers=1,
+        max_consecutive_empty_results=3,
+    )
+
+    assert payload["summary"]["bm25_only"]["rows"] == 3
+    assert payload["summary"]["bm25_only"]["empty_result_count"] == 3
+    assert payload["summary"]["bm25_only"]["processed_questions"] == 3
+    assert payload["summary"]["bm25_only"]["requested_questions"] == 4
+    assert "aborted after 3 consecutive empty" in payload["summary"]["bm25_only"]["abort_reason"]

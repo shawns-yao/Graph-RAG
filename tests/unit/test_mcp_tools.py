@@ -6,6 +6,7 @@ from rag_core.models import (
     PipelineTrace,
     QAResult,
     SearchResult,
+    WorkflowMemoryEntry,
 )
 
 
@@ -59,13 +60,27 @@ def test_search_graph_unknown_tool():
 def test_explain_trace_tool():
     from api.mcp_server import create_mcp_tools
 
-    trace = PipelineTrace(trace_id="tr_exp", timestamp="T", query="q")
+    trace = PipelineTrace(
+        trace_id="tr_exp",
+        timestamp="T",
+        query="q",
+        session_id="sess-1",
+        workflow_memory=[
+            WorkflowMemoryEntry(
+                stage="retrieval",
+                message="vector recall missed one entity",
+            )
+        ],
+    )
     svc = MagicMock()
     svc.get_trace.return_value = trace
 
     tools = create_mcp_tools(svc)
     result = tools["explain_trace"]("tr_exp")
-    assert result["trace_id"] == "tr_exp"
+    assert result["trace"]["trace_id"] == "tr_exp"
+    assert result["explain"]["trace_id"] == "tr_exp"
+    assert result["explain"]["session_id"] == "sess-1"
+    assert result["explain"]["memory"][0]["stage"] == "retrieval"
 
 
 def test_explain_trace_not_found():

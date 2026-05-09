@@ -1,0 +1,186 @@
+[
+  {
+    "question_id": "q_001_09",
+    "doc_id": "med_doc_001",
+    "question": "GOLD 2级患者如果嗜酸性粒细胞≥300/μL且急性加重≥2次/年，应该使用什么方案？",
+    "question_type": "relation",
+    "difficulty": "medium",
+    "expected_best_route": "hybrid",
+    "gold_answer": "应该使用LABA+ICS方案。",
+    "gold_evidence": [
+      {
+        "evidence_type": "table",
+        "section_title": "table_001_1",
+        "evidence_locator": "第4行",
+        "support_snippet": "2级 | 中-重 | ≥2次/年 | ≥300/μL | LABA+ICS"
+      }
+    ],
+    "reasoning_chain": [
+      "识别患者特征：GOLD 2级",
+      "识别条件：嗜酸性粒细胞≥300/μL",
+      "识别条件：急性加重≥2次/年",
+      "查找表格匹配行：LABA+ICS"
+    ],
+    "distractors": [
+      "嗜酸性粒细胞<100/μL时用LABA+LAMA"
+    ],
+    "failure_risk": "中等风险",
+    "why_other_routes_may_fail": "需要在表格中匹配多个条件，hybrid最有效"
+  },
+  {
+    "question_id": "q_001_10",
+    "doc_id": "med_doc_001",
+    "question": "GOLD 3-4级患者如果嗜酸性粒细胞≥100/μL，推荐什么治疗方案？",
+    "question_type": "relation",
+    "difficulty": "medium",
+    "expected_best_route": "hybrid",
+    "gold_answer": "推荐LABA+LAMA+ICS三联方案。",
+    "gold_evidence": [
+      {
+        "evidence_type": "table",
+        "section_title": "table_001_1",
+        "evidence_locator": "第6行",
+        "support_snippet": "3-4级 | 重 | ≥2次/年 | ≥100/μL | LABA+LAMA+ICS"
+      }
+    ],
+    "reasoning_chain": [
+      "识别患者特征：GOLD 3-4级",
+      "识别条件：嗜酸性粒细胞≥100/μL",
+      "查找表格：LABA+LAMA+ICS"
+    ],
+    "distractors": [
+      "GOLD 2级嗜酸性粒细胞阈值是≥300/μL"
+    ],
+    "failure_risk": "中等风险",
+    "why_other_routes_may_fail": "需要理解GOLD分级与嗜酸性粒细胞阈值的关系，hybrid最佳"
+  },
+  {
+    "question_id": "q_001_11",
+    "doc_id": "med_doc_001",
+    "question": "沙丁胺醇和噻托溴铵的起效时间有什么区别？",
+    "question_type": "relation",
+    "difficulty": "medium",
+    "expected_best_route": "hybrid",
+    "gold_answer": "沙丁胺醇起效时间为5-15分钟，噻托溴铵起效时间为30-60分钟，沙丁胺醇起效更快。",
+    "gold_evidence": [
+      {
+        "evidence_type": "passage",
+        "section_title": "2.1 支气管舒张剂",
+        "evidence_locator": "SABA和LAMA段落",
+        "support_snippet": "沙丁胺醇起效时间：5-15分钟\n噻托溴铵起效时间：30-60分钟"
+      }
+    ],
+    "reasoning_chain": [
+      "查找沙丁胺醇起效时间：5-15分钟",
+      "查找噻托溴铵起效时间：30-60分钟",
+      "对比：沙丁胺醇更快"
+    ],
+    "distractors": [],
+    "failure_risk": "中等风险",
+    "why_other_routes_may_fail": "需要跨段落对比，hybrid最佳"
+  },
+  {
+    "question_id": "q_001_12",
+    "doc_id": "med_doc_001",
+    "question": "为什么GOLD 2级患者嗜酸性粒细胞≥300/μL时要用LABA+ICS而不是LABA+LAMA？",
+    "question_type": "relation",
+    "difficulty": "hard",
+    "expected_best_route": "graph",
+    "gold_answer": "因为嗜酸性粒细胞≥300/μL时考虑使用ICS（吸入糖皮质激素），这是基于嗜酸性粒细胞水平指导ICS使用的原则。",
+    "gold_evidence": [
+      {
+        "evidence_type": "table",
+        "section_title": "table_001_1",
+        "evidence_locator": "key_facts",
+        "support_snippet": "嗜酸性粒细胞≥300/μL时考虑ICS"
+      }
+    ],
+    "reasoning_chain": [
+      "识别条件：嗜酸性粒细胞≥300/μL",
+      "查找治疗原则：高嗜酸性粒细胞提示ICS获益",
+      "推理：因此选择含ICS的方案"
+    ],
+    "distractors": [
+      "嗜酸性粒细胞<100/μL时不用ICS"
+    ],
+    "failure_risk": "高风险",
+    "why_other_routes_may_fail": "需要理解嗜酸性粒细胞-ICS的因果关系，graph最佳"
+  },
+  {
+    "question_id": "q_001_13",
+    "doc_id": "med_doc_001",
+    "question": "SABA和LABA在持续时间上有什么区别？",
+    "question_type": "relation",
+    "difficulty": "easy",
+    "expected_best_route": "hybrid",
+    "gold_answer": "SABA持续时间为4-6小时，LABA持续时间为12-24小时，LABA持续时间更长。",
+    "gold_evidence": [
+      {
+        "evidence_type": "passage",
+        "section_title": "2.1 支气管舒张剂",
+        "evidence_locator": "SABA和LABA段落",
+        "support_snippet": "SABA持续时间：4-6小时\nLABA持续时间：12-24小时"
+      }
+    ],
+    "reasoning_chain": [
+      "查找SABA持续时间：4-6小时",
+      "查找LABA持续时间：12-24小时",
+      "对比：LABA更长"
+    ],
+    "distractors": [],
+    "failure_risk": "低风险",
+    "why_other_routes_may_fail": "需要对比两类药物，hybrid最佳"
+  },
+  {
+    "question_id": "q_001_14",
+    "doc_id": "med_doc_001",
+    "question": "如果COPD患者FEV1为45%预计值，属于哪个GOLD分级？",
+    "question_type": "relation",
+    "difficulty": "medium",
+    "expected_best_route": "graph",
+    "gold_answer": "FEV1为45%预计值属于GOLD 3级（重度），因为30% ≤ 45% < 50%。",
+    "gold_evidence": [
+      {
+        "evidence_type": "passage",
+        "section_title": "1.1 GOLD分级标准",
+        "evidence_locator": "列表",
+        "support_snippet": "GOLD 3级（重度）：30% ≤ FEV1 < 50%预计值"
+      }
+    ],
+    "reasoning_chain": [
+      "识别FEV1值：45%",
+      "匹配分级标准：30% ≤ 45% < 50%",
+      "结论：GOLD 3级"
+    ],
+    "distractors": [
+      "GOLD 2级是50% ≤ FEV1 < 80%"
+    ],
+    "failure_risk": "中等风险",
+    "why_other_routes_may_fail": "需要数值推理，graph能建模数值区间关系"
+  },
+  {
+    "question_id": "q_001_15",
+    "doc_id": "med_doc_001",
+    "question": "GOLD 1级和GOLD 2级在治疗方案上有什么区别？",
+    "question_type": "relation",
+    "difficulty": "medium",
+    "expected_best_route": "hybrid",
+    "gold_answer": "GOLD 1级仅需SABA按需使用，GOLD 2级需要LABA或LAMA长期治疗。",
+    "gold_evidence": [
+      {
+        "evidence_type": "table",
+        "section_title": "table_001_1",
+        "evidence_locator": "第1-2行",
+        "support_snippet": "1级推荐SABA按需，2级推荐LABA或LAMA"
+      }
+    ],
+    "reasoning_chain": [
+      "查找GOLD 1级方案：SABA按需",
+      "查找GOLD 2级方案：LABA或LAMA",
+      "对比：1级按需，2级长期"
+    ],
+    "distractors": [],
+    "failure_risk": "低风险",
+    "why_other_routes_may_fail": "需要对比表格中两行，hybrid最佳"
+  }
+]

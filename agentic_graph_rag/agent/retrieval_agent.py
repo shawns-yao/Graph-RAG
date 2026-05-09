@@ -8,6 +8,7 @@ and retries with different strategies when quality is low.
 from __future__ import annotations
 
 import logging
+import re
 import time
 import uuid
 from datetime import datetime, timezone
@@ -16,20 +17,41 @@ from typing import TYPE_CHECKING
 from rag_core.config import get_settings
 from rag_core.generator import generate_answer
 from rag_core.models import (
-    EscalationStep,
-    GeneratorStep,
     PipelineTrace,
+    ProviderDiagnostic,
     QAResult,
     QueryType,
+    ReflectionStep,
     RouterDecision,
-    RouterStep,
     SearchResult,
-    ToolStep,
+    WorkflowMemoryEntry,
 )
-from rag_core.reflector import evaluate_completeness, evaluate_relevance, generate_retry_query
+from rag_core.reflector import (
+    evaluate_completeness,
+    evaluate_reflection,
+    generate_retry_query,
+    resolve_reflection_verdict,
+)
+from rag_core.reranker import rerank
 
+from agentic_graph_rag.agent.langgraph_workflow import (
+    AgentWorkflowOps,
+    SelfCorrectionOps,
+    run_agent_workflow,
+    run_self_correction_workflow,
+)
 from agentic_graph_rag.agent.router import classify_query
+from agentic_graph_rag.agent.tool_registry import TOOL_NAMES
+from agentic_graph_rag.agent.routing_rules import (
+    INTERNAL_ALIAS_CONCEPT_PATTERN,
+    INTERNAL_ALIAS_GLOBAL_PATTERN,
+    LEXICAL_PRIORITY_PATTERN,
+    LONG_QUERY_TOKEN_LIMIT,
+    RELATION_QUERY_KEYWORDS,
+    SHORT_QUERY_TOKEN_LIMIT,
+)
 from agentic_graph_rag.agent.tools import (
+    bm25_search,
     community_search,
     comprehensive_search,
     cypher_traverse,
@@ -50,6 +72,7 @@ logger = logging.getLogger(__name__)
 # Tool registry: query_type → tool function
 _TOOL_REGISTRY = {
     "vector_search": vector_search,
+    "bm25_search": bm25_search,
     "cypher_traverse": cypher_traverse,
     "community_search": community_search,
     "hybrid_search": hybrid_search,
@@ -58,29 +81,86 @@ _TOOL_REGISTRY = {
     "full_document_read": full_document_read,
 }
 
-# Escalation chain: if current tool fails, try next
-_ESCALATION_CHAIN = [
-    "vector_search",
-    "cypher_traverse",
-    "hybrid_search",
-    "comprehensive_search",
-    "full_document_read",
-]
+_LIGHTWEIGHT_RECALL_TOOLS = ["bm25_search", "vector_search"]
+_GRAPH_FIRST_TOOLS = ["cypher_traverse", "hybrid_search"]
+_HYBRID_RECALL_TOOLS = ["hybrid_search", "comprehensive_search"]
+_HYBRID_MISSING_ENTITY_TOOLS = ["bm25_search", "vector_search", "cypher_traverse", "hybrid_search"]
+_GLOBAL_DEEP_RECALL_TOOLS = ["full_document_read", "hybrid_search", "bm25_search"]
+_HYBRID_MISSING_RECALL_FALLBACK = ["bm25_search", "vector_search", "cypher_traverse"]
+_HYBRID_RELATION_FALLBACK = ["cypher_traverse", "bm25_search", "vector_search"]
+
+_RETRY_TOOL_MATRIX: dict[str, list[str]] = {
+    "vector_search": ["bm25_search", "cypher_traverse", "hybrid_search", "comprehensive_search"],
+    "bm25_search": ["vector_search", "cypher_traverse", "hybrid_search", "comprehensive_search"],
+    "cypher_traverse": ["bm25_search", "vector_search", "hybrid_search", "comprehensive_search"],
+    "hybrid_search": ["bm25_search", "cypher_traverse", "vector_search", "comprehensive_search"],
+    "comprehensive_search": _GLOBAL_DEEP_RECALL_TOOLS + ["vector_search"],
+    "full_document_read": [],
+    "temporal_query": ["bm25_search", "vector_search", "hybrid_search", "comprehensive_search"],
+}
+
+_REFLECTION_RULES: dict[str, dict[str, list[str]]] = {
+    "use_graph_traversal": {"tools": _GRAPH_FIRST_TOOLS, "providers": ["graph"]},
+    "target_missing_entity": {"tools": _HYBRID_MISSING_ENTITY_TOOLS, "providers": ["graph", "bm25"]},
+    "use_comprehensive_search": {"tools": _HYBRID_RECALL_TOOLS, "providers": []},
+    "relation_missing": {"tools": _GRAPH_FIRST_TOOLS, "providers": ["graph"]},
+    "missing_entity": {"tools": _HYBRID_MISSING_ENTITY_TOOLS, "providers": ["graph", "bm25"]},
+    "insufficient_context": {"tools": _HYBRID_RECALL_TOOLS, "providers": []},
+}
+
+_REFLECTION_ACTION_TOOL_MAP: dict[str, list[str]] = {
+    key: value["tools"]
+    for key, value in _REFLECTION_RULES.items()
+    if key in {"use_graph_traversal", "target_missing_entity", "use_comprehensive_search"}
+}
+
+_REFLECTION_FAILURE_TOOL_MAP: dict[str, list[str]] = {
+    key: value["tools"]
+    for key, value in _REFLECTION_RULES.items()
+    if key in {"relation_missing", "missing_entity", "insufficient_context"}
+}
+
+_QUERY_TYPE_TOOL_HINTS: dict[tuple[QueryType, str], list[str]] = {
+    (QueryType.SIMPLE, "missing_entity"): _LIGHTWEIGHT_RECALL_TOOLS + ["cypher_traverse"],
+    (QueryType.SIMPLE, "no_results"): _LIGHTWEIGHT_RECALL_TOOLS + ["cypher_traverse", "hybrid_search"],
+    (QueryType.RELATION, "missing_entity"): ["bm25_search"] + _GRAPH_FIRST_TOOLS,
+    (QueryType.RELATION, "relation_missing"): _GRAPH_FIRST_TOOLS,
+    (QueryType.MULTI_HOP, "relation_missing"): _GRAPH_FIRST_TOOLS,
+    (QueryType.MULTI_HOP, "insufficient_recall"): ["vector_search", "hybrid_search"],
+    (QueryType.GLOBAL, "insufficient_context"): ["comprehensive_search", "full_document_read", "hybrid_search"],
+    (QueryType.GLOBAL, "no_results"): ["full_document_read", "comprehensive_search"],
+}
+
+_TOOL_CHANNEL_MAP = {
+    "vector_search": "vector",
+    "bm25_search": "bm25",
+    "cypher_traverse": "graph",
+}
+_HYBRID_CHANNEL_ORDER = ["vector", "bm25", "graph"]
+_VALID_PROVIDER_NAMES = set(_HYBRID_CHANNEL_ORDER)
+_VALID_TOOL_NAMES = set(TOOL_NAMES)
+
+
+def _extend_unique(target: list[str], values: list[str], *, valid: set[str] | None = None) -> None:
+    """Append values in order once, with optional allow-list validation."""
+    for value in values:
+        if valid is not None and value not in valid:
+            continue
+        if value not in target:
+            target.append(value)
+
+
+def _matches_internal_alias_global(query: str) -> bool:
+    """Detect internal alias queries that need document-wide coverage."""
+    has_cyrillic = bool(re.search(r'[а-яА-ЯёЁ]', query))
+    has_doc2 = bool(INTERNAL_ALIAS_CONCEPT_PATTERN.search(query))
+    has_global = bool(INTERNAL_ALIAS_GLOBAL_PATTERN.search(query))
+    return has_cyrillic and has_doc2 and has_global
 
 
 def _is_cross_language_global(query: str) -> bool:
-    """Detect RU global queries targeting EN-only Doc2 concepts (SCL/MeaningHub)."""
-    import re
-    has_cyrillic = bool(re.search(r'[а-яА-ЯёЁ]', query))
-    has_doc2 = bool(re.search(
-        r'\b(semantic\s+c(ore|ompanion)|SCL|companion\s+layer)\b',
-        query, re.IGNORECASE,
-    ))
-    has_global = bool(re.search(
-        r'\b(все\b|всех\b|перечисл|опиши все|list all|describe all|all\s+\w+\s+decisions)\b',
-        query, re.IGNORECASE,
-    ))
-    return has_cyrillic and has_doc2 and has_global
+    """Backward-compatible alias for internal alias coverage rule."""
+    return _matches_internal_alias_global(query)
 
 
 # ---------------------------------------------------------------------------
@@ -96,6 +176,261 @@ def select_tool(decision: RouterDecision) -> str:
     return "vector_search"
 
 
+def _hybrid_cache_plan(
+    query: str,
+    channel_cache: dict[str, dict[str, list[SearchResult]]],
+    enabled_providers: list[str] | None = None,
+) -> tuple[dict[str, list[SearchResult]], list[str], list[str]]:
+    """Resolve cached and missing channels for a hybrid retrieval pass."""
+    cached_for_query = channel_cache.get(query, {})
+    forced_enabled = None if enabled_providers is None else set(enabled_providers)
+    seed_results = {
+        source: cached_for_query[source]
+        for source in _HYBRID_CHANNEL_ORDER
+        if source in cached_for_query and (forced_enabled is None or source not in forced_enabled)
+    }
+    resolved_enabled_providers = [
+        source for source in _HYBRID_CHANNEL_ORDER
+        if (forced_enabled is None and source not in seed_results)
+        or (forced_enabled is not None and source in forced_enabled)
+    ]
+    return seed_results, resolved_enabled_providers, list(seed_results)
+
+
+def _execution_sources(
+    tool_name: str,
+    query: str,
+    channel_cache: dict[str, dict[str, list[SearchResult]]],
+    hybrid_enabled_providers: list[str] | None = None,
+) -> tuple[list[str], list[str]]:
+    """Describe which retrieval channels are reused vs freshly executed."""
+    if tool_name == "hybrid_search":
+        seed_results, enabled_providers, reused_sources = _hybrid_cache_plan(
+            query,
+            channel_cache,
+            hybrid_enabled_providers,
+        )
+        _ = seed_results
+        return reused_sources, enabled_providers
+
+    channel = _TOOL_CHANNEL_MAP.get(tool_name)
+    if channel is None:
+        return [], []
+    return [], [channel]
+
+
+def _cache_tool_results(
+    query: str,
+    tool_name: str,
+    results: list[SearchResult],
+    channel_cache: dict[str, dict[str, list[SearchResult]]],
+) -> None:
+    """Persist single-channel retrieval results for later hybrid reuse."""
+    channel = _TOOL_CHANNEL_MAP.get(tool_name)
+    if channel is None:
+        return
+    channel_cache.setdefault(query, {})[channel] = results
+
+
+def _cache_hybrid_provider_results(
+    query: str,
+    provider_results: dict[str, list[SearchResult]],
+    channel_cache: dict[str, dict[str, list[SearchResult]]],
+) -> None:
+    """Persist provider-level hybrid outputs for future incremental retries."""
+    if not provider_results:
+        return
+
+    query_cache = channel_cache.setdefault(query, {})
+    for source in _HYBRID_CHANNEL_ORDER:
+        if source in provider_results:
+            query_cache[source] = provider_results[source]
+
+
+def _build_provider_diagnostics(
+    provider_results: dict[str, list[SearchResult]] | None,
+    reused_sources: list[str],
+    executed_sources: list[str],
+) -> list[ProviderDiagnostic]:
+    """Summarize provider-level retrieval evidence for trace inspection."""
+    if not provider_results and not reused_sources and not executed_sources:
+        return []
+
+    diagnostics: list[ProviderDiagnostic] = []
+    source_order = list(dict.fromkeys([
+        *reused_sources,
+        *executed_sources,
+        *((provider_results or {}).keys()),
+    ]))
+    for source in source_order:
+        results = (provider_results or {}).get(source, [])
+        scores = [result.score for result in results]
+        top_chunk_ids = [result.chunk.id for result in results[:3] if result.chunk.id]
+        diagnostics.append(ProviderDiagnostic(
+            source=source,
+            results_count=len(results),
+            top_score=max(scores, default=0.0),
+            average_score=(sum(scores) / len(scores)) if scores else 0.0,
+            reused=source in reused_sources,
+            executed=source in executed_sources,
+            top_chunk_ids=top_chunk_ids,
+        ))
+    return diagnostics
+
+
+def _diagnostic_gap_sources(
+    provider_results: dict[str, list[SearchResult]] | None,
+) -> list[str]:
+    """Return providers that produced no evidence in the current pass."""
+    if not provider_results:
+        return []
+    return [
+        source for source in _HYBRID_CHANNEL_ORDER
+        if source in provider_results and not provider_results[source]
+    ]
+
+
+def _should_rewrite_query(
+    next_tool: str,
+    reflection: ReflectionStep,
+    cached_sources_reused: list[str],
+) -> bool:
+    """Rewrite only when it materially helps broader fallback retrieval."""
+    verdict = resolve_reflection_verdict(reflection)
+    if verdict != "retry":
+        return False
+    if reflection.should_rewrite_query:
+        return True
+    if next_tool == "hybrid_search" and cached_sources_reused:
+        return False
+    if next_tool in {"comprehensive_search", "full_document_read"}:
+        return True
+    return (reflection.recommended_action or "").strip().lower() in {
+        "target_missing_entity",
+        "use_comprehensive_search",
+    }
+
+
+def _tool_kwargs(
+    tool_name: str,
+    decision: RouterDecision,
+    *,
+    query: str = "",
+    channel_cache: dict[str, dict[str, list[SearchResult]]] | None = None,
+    hybrid_enabled_providers: list[str] | None = None,
+    provider_results_sink: dict[str, list[SearchResult]] | None = None,
+) -> dict:
+    """Build optional tool kwargs from router context."""
+    if tool_name == "hybrid_search":
+        kwargs: dict = {"query_type": decision.query_type}
+        if channel_cache is not None:
+            seed_results, enabled_providers, _ = _hybrid_cache_plan(
+                query,
+                channel_cache,
+                hybrid_enabled_providers,
+            )
+            if seed_results:
+                kwargs["seed_results"] = seed_results
+            kwargs["enabled_providers"] = enabled_providers
+        if provider_results_sink is not None:
+            kwargs["provider_results"] = provider_results_sink
+        return kwargs
+    return {}
+
+
+def _run_tool(
+    tool_name: str,
+    query: str,
+    driver: Driver,
+    openai_client: OpenAI,
+    decision: RouterDecision,
+    *,
+    channel_cache: dict[str, dict[str, list[SearchResult]]] | None = None,
+    hybrid_enabled_providers: list[str] | None = None,
+    provider_results_sink: dict[str, list[SearchResult]] | None = None,
+) -> list[SearchResult]:
+    """Execute a retrieval tool with router-aware optional kwargs."""
+    tool_fn = _TOOL_REGISTRY[tool_name]
+    return tool_fn(
+        query,
+        driver,
+        openai_client,
+        **_tool_kwargs(
+            tool_name,
+            decision,
+            query=query,
+            channel_cache=channel_cache,
+            hybrid_enabled_providers=hybrid_enabled_providers,
+            provider_results_sink=provider_results_sink,
+        ),
+    )
+
+
+def _preferred_providers_for_reflection(reflection: ReflectionStep) -> list[str]:
+    """Map reflection outcomes to provider-level incremental fixes."""
+    ordered: list[str] = []
+    for provider in reflection.preferred_providers:
+        provider_name = provider.strip().lower()
+        _extend_unique(ordered, [provider_name], valid=_VALID_PROVIDER_NAMES)
+    for key in (
+        (reflection.recommended_action or "").strip().lower(),
+        (reflection.failure_type or "").strip().lower(),
+    ):
+        rule = _REFLECTION_RULES.get(key)
+        if rule is None:
+            continue
+        _extend_unique(ordered, rule["providers"], valid=_VALID_PROVIDER_NAMES)
+    return ordered
+
+
+def _plan_incremental_retry(
+    query: str,
+    current_tool: str,
+    reflection: ReflectionStep,
+    channel_cache: dict[str, dict[str, list[SearchResult]]],
+    provider_results: dict[str, list[SearchResult]] | None = None,
+) -> tuple[str, list[str], list[str]] | None:
+    """Return an incremental hybrid retry plan when one route needs refresh."""
+    verdict = resolve_reflection_verdict(reflection)
+    if verdict != "retry" or reflection.retry_scope == "stop" or not reflection.should_retry:
+        return None
+    if current_tool in {"comprehensive_search", "full_document_read", "community_search"}:
+        return None
+
+    refresh_sources = _preferred_providers_for_reflection(reflection)
+    if reflection.failure_type in {"insufficient_recall", "insufficient_context", "no_results"}:
+        for source in _diagnostic_gap_sources(provider_results):
+            if source not in refresh_sources:
+                refresh_sources.append(source)
+    if not refresh_sources:
+        return None
+
+    cached_for_query = channel_cache.get(query, {})
+    reusable_sources = [
+        source for source in _HYBRID_CHANNEL_ORDER
+        if source in cached_for_query and source not in refresh_sources
+    ]
+    if not reusable_sources:
+        return None
+
+    for source in refresh_sources:
+        cached_for_query.pop(source, None)
+    return "hybrid_search", refresh_sources, reusable_sources
+
+
+def _rerank_results(
+    query: str,
+    results: list[SearchResult],
+    *,
+    openai_client: OpenAI,
+) -> list[SearchResult]:
+    """Apply a local rerank pass without triggering a fresh retrieval fan-out."""
+    del openai_client
+    if not results:
+        return []
+    return rerank(query, results, top_k=len(results))
+
+
 # ---------------------------------------------------------------------------
 # Self-correction loop
 # ---------------------------------------------------------------------------
@@ -108,6 +443,8 @@ def self_correction_loop(
     max_retries: int | None = None,
     relevance_threshold: float | None = None,
     trace: PipelineTrace | None = None,
+    memory_sink: list[WorkflowMemoryEntry] | None = None,
+    reflection_history_sink: list[ReflectionStep] | None = None,
 ) -> tuple[list[SearchResult], int]:
     """Execute retrieval with self-correction.
 
@@ -121,92 +458,149 @@ def self_correction_loop(
         max_retries = cfg.agent.max_retries
     if relevance_threshold is None:
         relevance_threshold = cfg.agent.relevance_threshold
+    resolved_tool = select_tool(decision)
+    resolved_decision = decision.model_copy(update={"suggested_tool": resolved_tool})
 
-    tool_name = select_tool(decision)
-    tried_tools: set[str] = set()
-    best_results: list[SearchResult] = []
-    best_score: float = 0.0
-    best_attempt: int = 0
-
-    for attempt in range(max_retries + 1):
-        # Execute tool
-        tool_fn = _TOOL_REGISTRY[tool_name]
-        t0 = time.perf_counter()
-        results = tool_fn(query, driver, openai_client)
-        elapsed_ms = int((time.perf_counter() - t0) * 1000)
-        tried_tools.add(tool_name)
-
-        if not results:
-            logger.warning("Tool '%s' returned no results (attempt %d)", tool_name, attempt + 1)
-            if trace is not None:
-                trace.tool_steps.append(ToolStep(
-                    tool_name=tool_name,
-                    results_count=0,
-                    relevance_score=0.0,
-                    duration_ms=elapsed_ms,
-                    query_used=query,
-                ))
-        else:
-            # Evaluate relevance
-            score = evaluate_relevance(query, results, openai_client=openai_client)
-            logger.info(
-                "Relevance score: %.2f (threshold: %.2f, tool: %s, attempt: %d)",
-                score, relevance_threshold, tool_name, attempt + 1,
-            )
-
-            # Track best results across attempts
-            if score > best_score:
-                best_results = results
-                best_score = score
-                best_attempt = attempt
-
-            # Record tool step in trace
-            if trace is not None:
-                trace.tool_steps.append(ToolStep(
-                    tool_name=tool_name,
-                    results_count=len(results),
-                    relevance_score=score,
-                    duration_ms=elapsed_ms,
-                    query_used=query,
-                ))
-
-            if score >= relevance_threshold:
-                return results, attempt
-
-        # Escalate to next tool, rephrasing query first
-        if attempt < max_retries:
-            next_tool = _get_next_tool(tool_name, tried_tools)
-            if next_tool:
-                # Rephrase query before escalating for better coverage
-                query = generate_retry_query(query, results, openai_client=openai_client)
-                logger.info("Escalating from '%s' to '%s' (rephrased query)", tool_name, next_tool)
-                if trace is not None:
-                    trace.escalation_steps.append(EscalationStep(
-                        from_tool=tool_name,
-                        to_tool=next_tool,
-                        reason=f"relevance {best_score:.1f} < threshold {relevance_threshold}",
-                        rephrased_query=query,
-                    ))
-                tool_name = next_tool
-            else:
-                logger.info("No more tools to escalate to")
-                break
-
-    # Return best results found across all attempts
-    if best_results:
-        logger.info("Returning best results (score=%.2f from attempt %d)", best_score, best_attempt + 1)
-        return best_results, max_retries
-    return results, max_retries
+    ops = SelfCorrectionOps(
+        execution_sources=_execution_sources,
+        run_tool=_run_tool,
+        cache_tool_results=_cache_tool_results,
+        cache_hybrid_provider_results=_cache_hybrid_provider_results,
+        build_provider_diagnostics=_build_provider_diagnostics,
+        evaluate_reflection=evaluate_reflection,
+        plan_incremental_retry=_plan_incremental_retry,
+        get_next_tool=_get_next_tool,
+        should_rewrite_query=_should_rewrite_query,
+        generate_retry_query=generate_retry_query,
+        rerank_results=_rerank_results,
+    )
+    return run_self_correction_workflow(
+        query=query,
+        driver=driver,
+        openai_client=openai_client,
+        decision=resolved_decision,
+        max_retries=max_retries,
+        relevance_threshold=relevance_threshold,
+        max_reranks=cfg.agent.max_reranks,
+        max_query_rewrites=cfg.agent.max_query_rewrites,
+        request_time_budget_ms=cfg.agent.request_time_budget_ms,
+        trace=trace,
+        ops=ops,
+        memory_seed=memory_sink,
+        memory_sink=memory_sink,
+        reflection_history_sink=reflection_history_sink,
+    )
 
 
-def _get_next_tool(current: str, tried: set[str]) -> str | None:
-    """Get next tool in escalation chain that hasn't been tried."""
-    try:
-        idx = _ESCALATION_CHAIN.index(current)
-    except ValueError:
-        idx = -1
+def _preferred_tools_for_reflection(reflection: ReflectionStep) -> list[str]:
+    """Map reflection outcomes to targeted next-step tools."""
+    ordered: list[str] = []
+    for tool in reflection.preferred_tools:
+        tool_name = tool.strip().lower()
+        _extend_unique(ordered, [tool_name], valid=_VALID_TOOL_NAMES)
+    for key in (
+        (reflection.recommended_action or "").strip().lower(),
+        (reflection.failure_type or "").strip().lower(),
+    ):
+        rule = _REFLECTION_RULES.get(key)
+        if rule is None:
+            continue
+        _extend_unique(ordered, rule["tools"], valid=_VALID_TOOL_NAMES)
+    return ordered
 
-    for tool in _ESCALATION_CHAIN[idx + 1:]:
+
+def _rule_first_tool_preferences(
+    decision: RouterDecision | None,
+    reflection: ReflectionStep | None,
+) -> list[str]:
+    """Apply deterministic query heuristics before softer reflection hints."""
+    if decision is None or reflection is None:
+        return []
+
+    query = (reflection.query_used or "").strip()
+    lowered_query = query.casefold()
+    normalized_tokens = [token for token in re.split(r"\s+", lowered_query) if token]
+    tools: list[str] = []
+
+    if any(keyword in lowered_query for keyword in RELATION_QUERY_KEYWORDS):
+        tools.extend(_GRAPH_FIRST_TOOLS)
+
+    if LEXICAL_PRIORITY_PATTERN.search(query):
+        tools.extend(_LIGHTWEIGHT_RECALL_TOOLS)
+
+    if normalized_tokens and len(normalized_tokens) <= SHORT_QUERY_TOKEN_LIMIT:
+        tools.extend(_LIGHTWEIGHT_RECALL_TOOLS)
+    if len(normalized_tokens) >= LONG_QUERY_TOKEN_LIMIT:
+        tools.extend(_HYBRID_RECALL_TOOLS)
+
+    failure_type = (reflection.failure_type or "").strip().lower()
+    if failure_type == "relation_missing":
+        tools.extend(_GRAPH_FIRST_TOOLS)
+    if failure_type in {"missing_entity", "no_results"}:
+        tools.extend(_LIGHTWEIGHT_RECALL_TOOLS)
+
+    ordered: list[str] = []
+    _extend_unique(ordered, tools, valid=_VALID_TOOL_NAMES)
+    return ordered
+
+
+def _query_type_tool_preferences(
+    decision: RouterDecision | None,
+    reflection: ReflectionStep | None,
+) -> list[str]:
+    """Return tool hints tuned to query type and diagnosed failure mode."""
+    if decision is None or reflection is None:
+        return []
+    failure_type = (reflection.failure_type or "").strip().lower()
+    if not failure_type:
+        return []
+    return list(_QUERY_TYPE_TOOL_HINTS.get((decision.query_type, failure_type), []))
+
+
+def _matrix_tool_preferences(
+    current: str,
+    decision: RouterDecision | None,
+    reflection: ReflectionStep | None,
+) -> list[str]:
+    """Return controlled fallback tools without relying on a linear escalation chain."""
+    ordered: list[str] = []
+    failure_type = ((reflection.failure_type if reflection is not None else "") or "").strip().lower()
+    query_type = decision.query_type if decision is not None else None
+
+    if current == "comprehensive_search" and query_type == QueryType.GLOBAL:
+        ordered.extend(_GLOBAL_DEEP_RECALL_TOOLS)
+    elif current == "full_document_read":
+        ordered.extend([])
+    elif current == "hybrid_search" and failure_type in {"missing_entity", "no_results", "insufficient_recall"}:
+        ordered.extend(_HYBRID_MISSING_RECALL_FALLBACK)
+    elif current == "hybrid_search" and failure_type == "relation_missing":
+        ordered.extend(_HYBRID_RELATION_FALLBACK)
+    else:
+        ordered.extend(_RETRY_TOOL_MATRIX.get(current, []))
+
+    if query_type == QueryType.GLOBAL and "full_document_read" not in ordered and current == "comprehensive_search":
+        ordered.append("full_document_read")
+
+    deduped: list[str] = []
+    _extend_unique(deduped, ordered, valid=_VALID_TOOL_NAMES)
+    return deduped
+
+
+def _get_next_tool(
+    current: str,
+    tried: set[str],
+    reflection: ReflectionStep | None = None,
+    decision: RouterDecision | None = None,
+) -> str | None:
+    """Get next tool using deterministic rules, targeted hints, then a fallback matrix."""
+    candidate_tools: list[str] = []
+    if reflection is not None:
+        candidate_tools.extend(_rule_first_tool_preferences(decision, reflection))
+        candidate_tools.extend(_query_type_tool_preferences(decision, reflection))
+        candidate_tools.extend(_preferred_tools_for_reflection(reflection))
+    candidate_tools.extend(_matrix_tool_preferences(current, decision, reflection))
+
+    for tool in candidate_tools:
         if tool not in tried:
             return tool
     return None
@@ -222,6 +616,9 @@ def run(
     openai_client: OpenAI | None = None,
     use_llm_router: bool = False,
     reasoning: ReasoningEngine | None = None,
+    session_id: str = "",
+    workflow_memory_seed: list[WorkflowMemoryEntry] | None = None,
+    reflection_history_seed: list[ReflectionStep] | None = None,
 ) -> QAResult:
     """Run the agentic retrieval pipeline.
 
@@ -236,87 +633,37 @@ def run(
         from rag_core.config import make_openai_client
         openai_client = make_openai_client(cfg)
 
-    t_start = time.perf_counter()
     trace = PipelineTrace(
         trace_id=f"tr_{uuid.uuid4().hex[:12]}",
         timestamp=datetime.now(timezone.utc).isoformat(),
         query=query,
+        session_id=session_id,
     )
-
-    # Step 1: Classify query
-    t_router = time.perf_counter()
-    decision = classify_query(query, use_llm=use_llm_router, openai_client=openai_client, reasoning=reasoning)
-    router_ms = int((time.perf_counter() - t_router) * 1000)
-
-    router_method = "mangle" if reasoning else ("llm" if use_llm_router else "pattern")
-    trace.router_step = RouterStep(
-        method=router_method,
-        decision=decision,
-        duration_ms=router_ms,
+    t_start = time.perf_counter()
+    ops = AgentWorkflowOps(
+        classify_query=classify_query,
+        is_cross_language_global=_matches_internal_alias_global,
+        run_self_correction=self_correction_loop,
+        generate_answer=generate_answer,
+        evaluate_completeness=evaluate_completeness,
+        comprehensive_search=comprehensive_search,
     )
-    logger.info(
-        "Query classified: type=%s, tool=%s, confidence=%.2f",
-        decision.query_type.value, decision.suggested_tool, decision.confidence,
-    )
-
-    # Override: cross-language global queries → full_document_read directly
-    # (vector_search returns wrong document for RU queries about EN-only Doc2 concepts)
-    if _is_cross_language_global(query) and decision.suggested_tool != "full_document_read":
-        logger.info("Cross-language global override: %s → full_document_read", decision.suggested_tool)
-        decision = RouterDecision(
-            query_type=QueryType.GLOBAL,
-            suggested_tool="full_document_read",
-            confidence=decision.confidence,
-        )
-
-    # Step 2: Self-correction loop
-    results, retries = self_correction_loop(
-        query, driver, openai_client, decision, trace=trace,
-    )
-
-    # Step 3: Generate answer
-    qa_result = generate_answer(query, results, openai_client=openai_client)
-
-    # Step 4: Completeness check for GLOBAL queries (multi-step retry)
-    if decision.query_type == QueryType.GLOBAL:
-        existing_ids = {sr.chunk.id for sr in results if sr.chunk.id}
-
-        # Retry 1: comprehensive_search (multi-query fan-out + full_read)
-        if not evaluate_completeness(query, qa_result.answer, openai_client=openai_client):
-            logger.info("Completeness check failed for GLOBAL query — retrying with comprehensive_search")
-            extra_results = comprehensive_search(query, driver, openai_client)
-            if extra_results:
-                combined = results + [r for r in extra_results if r.chunk.id not in existing_ids]
-                existing_ids.update(r.chunk.id for r in extra_results if r.chunk.id)
-                qa_result = generate_answer(query, combined, openai_client=openai_client)
-                results = combined
-                retries += 1
-
-            # Retry 2: full_document_read with large top_k if still incomplete
-            if not evaluate_completeness(query, qa_result.answer, openai_client=openai_client):
-                logger.info("Still incomplete after comprehensive — retrying with full_document_read(top_k=30)")
-                full_results = full_document_read(query, driver, openai_client, top_k=30)
-                if full_results:
-                    combined = results + [r for r in full_results if r.chunk.id not in existing_ids]
-                    qa_result = generate_answer(query, combined, openai_client=openai_client)
-                    retries += 1
-
-    # Build generator step
-    trace.generator_step = GeneratorStep(
-        model=str(cfg.openai.llm_model),
-        prompt_tokens=qa_result.prompt_tokens,
-        completion_tokens=qa_result.completion_tokens,
-        confidence=qa_result.confidence,
+    qa_result = run_agent_workflow(
+        query=query,
+        driver=driver,
+        openai_client=openai_client,
+        use_llm_router=use_llm_router,
+        reasoning=reasoning,
+        trace=trace,
+        settings=cfg,
+        ops=ops,
+        workflow_memory_seed=workflow_memory_seed,
+        reflection_history_seed=reflection_history_seed,
     )
     trace.total_duration_ms = int((time.perf_counter() - t_start) * 1000)
 
-    # Enrich with metadata
-    qa_result.retries = retries
-    qa_result.router_decision = decision
-    qa_result.trace = trace
-
     logger.info(
         "Agent result: %d sources, %d retries, confidence=%.2f",
-        len(qa_result.sources), retries, qa_result.confidence,
+        len(qa_result.sources), qa_result.retries, qa_result.confidence,
     )
     return qa_result

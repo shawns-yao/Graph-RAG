@@ -72,6 +72,50 @@ def test_query(client, mock_service):
     mock_service.query.assert_called_once()
 
 
+def test_query_stream(client, mock_service):
+    mock_service.stream_query.return_value = iter([
+        {"event": "status", "data": {"stage": "retrieval_started"}},
+        {"event": "token", "data": {"text": "Hello"}},
+        {"event": "done", "data": {"answer": "Hello", "trace_id": "tr_test123"}},
+    ])
+
+    with client.stream(
+        "POST",
+        "/api/v1/query/stream",
+        json={"text": "test question", "session_id": "sess-1"},
+    ) as resp:
+        body = "".join(
+            chunk.decode("utf-8") if isinstance(chunk, bytes) else chunk
+            for chunk in resp.iter_raw()
+        )
+
+    assert resp.status_code == 200
+    assert resp.headers["content-type"].startswith("text/event-stream")
+    assert "event: status" in body
+    assert "retrieval_started" in body
+    assert "event: token" in body
+    assert "Hello" in body
+    assert "event: done" in body
+    mock_service.stream_query.assert_called_once_with(
+        "test question",
+        mode="agent_pattern",
+        session_id="sess-1",
+    )
+
+
+def test_query_passes_session_id(client, mock_service):
+    resp = client.post(
+        "/api/v1/query",
+        json={"text": "test question", "session_id": "sess-1"},
+    )
+    assert resp.status_code == 200
+    mock_service.query.assert_called_with(
+        "test question",
+        mode="agent_pattern",
+        session_id="sess-1",
+    )
+
+
 def test_query_missing_text(client):
     resp = client.post("/api/v1/query", json={})
     assert resp.status_code == 422
@@ -81,6 +125,15 @@ def test_get_trace(client):
     resp = client.get("/api/v1/trace/tr_test123")
     assert resp.status_code == 200
     assert resp.json()["trace_id"] == "tr_test123"
+
+
+def test_get_trace_explain(client):
+    resp = client.get("/api/v1/trace/tr_test123/explain")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["trace"]["trace_id"] == "tr_test123"
+    assert data["explain"]["trace_id"] == "tr_test123"
+    assert data["explain"]["retrieval"]["steps"][0]["tool_name"] == "vector_search"
 
 
 def test_get_trace_not_found(client, mock_service):

@@ -70,7 +70,7 @@ Retrieval:
   Query -> Router (simple/relation/multi_hop/global/temporal)
            Router cascade: Mangle -> LLM -> Pattern fallback
         -> Tool Selection (vector/cypher/hybrid/comprehensive/full_read/temporal)
-        -> Self-Correction Loop (evaluate relevance -> escalate if <2.0)
+        -> Self-Correction Loop (reflect -> rerank or retry with targeted tool/provider upgrades)
         -> Graph Verifier (contradiction detection)
         -> Generator (GPT-4o synthesis + dynamic confidence + citations)
 ```
@@ -311,13 +311,19 @@ Traces are cached (LRU, 100 entries) and retrievable via `GET /api/v1/trace/{id}
 
 ## Self-Correction Loop
 
-The agent evaluates retrieval quality (1-5 scale) and escalates through the tool chain when results are insufficient:
+The agent evaluates retrieval quality on a 1-5 scale and then chooses among three actions:
 
-```
-vector_search -> cypher_traverse -> hybrid_search -> comprehensive_search -> full_document_read
+``` 
+answer | rerank | retry
 ```
 
-Each retry rephrases the query via LLM and uses a different tool with expanded search scope. For GLOBAL queries, a completeness check triggers additional retrieval if the answer is incomplete. Max 2 retries by default. Best results tracked across attempts.
+Retries are not a fixed linear escalation chain. The workflow combines:
+
+- deterministic query heuristics
+- reflection-recommended tools/providers
+- a fallback matrix per current tool
+
+The loop can refresh only part of `hybrid_search`, rewrite the query when broader recall is justified, or stop early when reflection is repeating covered gaps. For `GLOBAL` queries, the top-level workflow may run one additional `comprehensive_search` pass when low-confidence evidence suggests the first answer is incomplete. Cross-language internal alias queries can still route directly to `full_document_read`, but that is a router choice, not the default top-level retry path.
 
 ## Mangle Reasoning
 

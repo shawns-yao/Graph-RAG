@@ -1,0 +1,47 @@
+[
+  {
+    "question_id": "q_med_doc_001_01",
+    "doc_id": "med_doc_001",
+    "question": "COPD的诊断标准是什么？",
+    "question_type": "simple",
+    "difficulty": "easy",
+    "expected_best_route": "vector",
+    "gold_answer": "使用支气管舒张剂后，FEV1/FVC < 0.70即可确诊COPD。",
+    "gold_evidence": [
+      {
+        "evidence_type": "passage",
+        "section_title": "1. 疾病定义与诊断标准",
+        "evidence_locator": "第1段",
+        "support_snippet": "诊断依据肺功能检查：使用支气管舒张剂后，FEV1/FVC < 0.70即可确诊。"
+      }
+    ],
+    "reasoning_chain": [],
+    "distractors": [],
+    "failure_risk": "低风险，定义明确",
+    "why_other_routes_may_fail": "bm25关键词匹配也有效，graph无必要因为是单一定义"
+  },
+  {
+    "question_id": "q_med_doc_001_02",
+    "doc_id": "med_doc_001",
+    "question": "GOLD 3级对应的FEV1范围是多少？",
+    "question_type": "simple",
+    "difficulty": "easy",
+    "expected_best_route": "bm25",
+    "gold_answer": "GOLD 3级（重度）对应FEV1为30% ≤ FEV1 < 50%预计值。",
+    "gold_evidence": [
+      {
+        "evidence_type": "passage",
+        "section_title": "1.1 GOLD分级标准",
+        "evidence_locator": "列表第3项",
+        "support_snippet": "GOLD 3级（重度）：30% ≤ FEV1 < 50%预计值"
+      }
+    ],
+    "reasoning_chain": [],
+    "distractors": [
+      "GOLD 2级是50% ≤ FEV1 < 80%（相邻分级）",
+      "GOLD 4级是FEV1 < 30%（相邻分级）"
+    ],
+    "failure_risk": "中等风险，容易与GOLD 2级或4级混淆",
+    "why_other_routes_may_fail": "vector可能召回多个GOLD分级，bm25精确匹配'GOLD 3'更准确"
+  }
+]

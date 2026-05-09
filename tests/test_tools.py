@@ -1,16 +1,18 @@
 """Tests for agentic_graph_rag.agent.tools."""
 
-from unittest.mock import MagicMock, patch
+from unittest.mock import ANY, MagicMock, patch
 
 from rag_core.models import Chunk, GraphContext, SearchResult
 
 from agentic_graph_rag.agent.tools import (
+    _get_channel_weights,
     _cosine_similarity,
     _embed_query,
     _fetch_passage_embeddings,
     _generate_sub_queries,
     _graph_context_to_results,
     _rrf_merge,
+    bm25_search,
     community_search,
     comprehensive_search,
     full_document_read,
@@ -134,6 +136,57 @@ class TestRRFMerge:
         for i, r in enumerate(merged, start=1):
             assert r.rank == i
 
+    def test_merges_three_lists(self):
+        a = _make_results(2, source="vector")
+        b = _make_results(2, source="bm25")
+        c = _make_results(2, source="graph")
+        merged = _rrf_merge(a, b, c, top_k=5)
+        assert len(merged) == 2
+        assert merged[0].source == "hybrid"
+
+    def test_applies_source_weights(self):
+        a = [SearchResult(chunk=Chunk(id="c1", content="Vector"), score=0.9, rank=1, source="vector")]
+        b = [SearchResult(chunk=Chunk(id="c2", content="Graph"), score=0.9, rank=1, source="graph")]
+        merged = _rrf_merge(
+            a,
+            b,
+            top_k=2,
+            weights={"vector": 0.5, "graph": 2.0},
+        )
+        assert [item.chunk.id for item in merged] == ["c2", "c1"]
+
+
+class TestChannelWeights:
+    def test_uses_query_type_defaults(self):
+        weights = _get_channel_weights("multi_hop")
+        assert weights["graph"] > weights["vector"]
+        assert weights["graph"] > weights["bm25"]
+
+    def test_override_wins(self):
+        weights = _get_channel_weights("simple", overrides={"bm25": 1.4})
+        assert weights["bm25"] == 1.4
+
+
+# ---------------------------------------------------------------------------
+# bm25_search
+# ---------------------------------------------------------------------------
+
+class TestBM25Search:
+    @patch("agentic_graph_rag.retrieval.providers.BM25RetrievalProvider.retrieve")
+    def test_returns_ranked_results(self, mock_retrieve):
+        driver = _mock_driver()
+        expected = [
+            SearchResult(chunk=Chunk(id="c1", content="Alpha"), score=3.5, rank=1, source="bm25"),
+            SearchResult(chunk=Chunk(id="c2", content="Beta"), score=1.2, rank=2, source="bm25"),
+        ]
+        mock_retrieve.return_value = expected
+
+        results = bm25_search("alpha", driver, _mock_openai_client(), top_k=2)
+
+        assert results == expected
+        assert results[0].chunk.id == "c1"
+        mock_retrieve.assert_called_once()
+
 
 # ---------------------------------------------------------------------------
 # _fetch_passage_embeddings
@@ -183,110 +236,18 @@ class TestFetchPassageEmbeddings:
 # ---------------------------------------------------------------------------
 
 class TestHybridSearch:
-    @patch("agentic_graph_rag.agent.tools._fetch_passage_embeddings")
-    @patch("agentic_graph_rag.agent.tools.cypher_traverse")
-    @patch("agentic_graph_rag.agent.tools.vector_search")
-    def test_reranks_by_cosine_similarity(self, mock_vs, mock_ct, mock_fetch):
-        """Higher cosine similarity passages should rank first."""
-        # vector_search returns [c1, c2]
-        mock_vs.return_value = [
-            SearchResult(chunk=Chunk(id="c1", content="Low match"), score=1.0, rank=1, source="vector"),
-            SearchResult(chunk=Chunk(id="c2", content="High match"), score=0.5, rank=2, source="vector"),
-        ]
-        # cypher_traverse returns [c3] — a new passage
-        mock_ct.return_value = [
-            SearchResult(chunk=Chunk(id="c3", content="Best match"), score=1.0, rank=1, source="graph"),
-        ]
-        # PassageNode embeddings: c3 is closest to query
-        mock_fetch.return_value = {
-            "c1": [0.1, 0.9],  # low similarity to [1,0]
-            "c2": [0.7, 0.3],  # medium similarity
-            "c3": [0.99, 0.01],  # very high similarity
-        }
-
-        driver = _mock_driver()
-        client = _mock_openai_client([1.0, 0.0])  # query embedding
-
-        results = hybrid_search("test", driver, client, top_k=5)
-        assert len(results) == 3
-        assert results[0].chunk.id == "c3"  # highest cosine similarity
-        assert results[0].source == "hybrid"
-        assert results[0].score > results[1].score
-        assert results[1].score > results[2].score
-
-    @patch("agentic_graph_rag.agent.tools._fetch_passage_embeddings")
-    @patch("agentic_graph_rag.agent.tools.cypher_traverse")
-    @patch("agentic_graph_rag.agent.tools.vector_search")
-    def test_deduplicates_results(self, mock_vs, mock_ct, mock_fetch):
-        """Same passage from both sources should appear only once."""
-        shared = SearchResult(chunk=Chunk(id="c1", content="Shared"), score=1.0, rank=1, source="vector")
-        mock_vs.return_value = [shared]
-        mock_ct.return_value = [
-            SearchResult(chunk=Chunk(id="c1", content="Shared"), score=1.0, rank=1, source="graph"),
-        ]
-        mock_fetch.return_value = {"c1": [1.0, 0.0]}
-
+    @patch("agentic_graph_rag.agent.tools.RetrievalOrchestrator.search")
+    def test_delegates_to_orchestrator_with_query_type(self, mock_search):
         driver = _mock_driver()
         client = _mock_openai_client([1.0, 0.0])
+        mock_search.return_value = _make_results(2, source="hybrid")
 
-        results = hybrid_search("test", driver, client, top_k=5)
-        assert len(results) == 1
-        assert results[0].chunk.id == "c1"
+        results = hybrid_search("test", driver, client, top_k=3, query_type="multi_hop")
 
-    @patch("agentic_graph_rag.agent.tools._fetch_passage_embeddings")
-    @patch("agentic_graph_rag.agent.tools.cypher_traverse")
-    @patch("agentic_graph_rag.agent.tools.vector_search")
-    def test_fallback_for_missing_embeddings(self, mock_vs, mock_ct, mock_fetch):
-        """Passages without embeddings get fallback score."""
-        mock_vs.return_value = [
-            SearchResult(chunk=Chunk(id="c1", content="Has embedding"), score=0.8, rank=1, source="vector"),
-            SearchResult(chunk=Chunk(id="", content="No id passage"), score=0.5, rank=2, source="vector"),
-        ]
-        mock_ct.return_value = []
-        # Only c1 has embedding
-        mock_fetch.return_value = {"c1": [1.0, 0.0]}
-
-        driver = _mock_driver()
-        client = _mock_openai_client([1.0, 0.0])
-
-        results = hybrid_search("test", driver, client, top_k=5)
         assert len(results) == 2
-        # c1 has real cosine score, should rank first
-        assert results[0].chunk.id == "c1"
-        # second result has fallback score
-        assert results[1].score < results[0].score
-
-    @patch("agentic_graph_rag.agent.tools._fetch_passage_embeddings")
-    @patch("agentic_graph_rag.agent.tools.cypher_traverse")
-    @patch("agentic_graph_rag.agent.tools.vector_search")
-    def test_respects_top_k(self, mock_vs, mock_ct, mock_fetch):
-        """Returns at most top_k results."""
-        mock_vs.return_value = _make_results(5, source="vector")
-        mock_ct.return_value = _make_results(5, source="graph")
-        mock_fetch.return_value = {
-            f"c{i}": [1.0 / (i + 1), 0.0] for i in range(5)
-        }
-
-        driver = _mock_driver()
-        client = _mock_openai_client([1.0, 0.0])
-
-        results = hybrid_search("test", driver, client, top_k=3)
-        assert len(results) == 3
-        for i, r in enumerate(results, start=1):
-            assert r.rank == i
-
-    @patch("agentic_graph_rag.agent.tools.cypher_traverse")
-    @patch("agentic_graph_rag.agent.tools.vector_search")
-    def test_empty_results(self, mock_vs, mock_ct):
-        """Returns empty list when both sources return nothing."""
-        mock_vs.return_value = []
-        mock_ct.return_value = []
-
-        driver = _mock_driver()
-        client = _mock_openai_client()
-
-        results = hybrid_search("test", driver, client)
-        assert results == []
+        _, kwargs = mock_search.call_args
+        assert kwargs["query_type"] == "multi_hop"
+        assert kwargs["provider_top_k"]["bm25"] > 0
 
 
 # ---------------------------------------------------------------------------
@@ -294,20 +255,19 @@ class TestHybridSearch:
 # ---------------------------------------------------------------------------
 
 class TestVectorSearch:
-    def test_returns_results(self):
+    @patch("agentic_graph_rag.retrieval.providers.VectorRetrievalProvider.retrieve")
+    def test_returns_results(self, mock_retrieve):
         driver = _mock_driver()
         client = _mock_openai_client()
-        ctx = GraphContext(passages=["Result"], source_ids=["c1"])
-
-        with patch(
-            "agentic_graph_rag.retrieval.vector_cypher.search",
-            return_value=ctx,
-        ):
-            results = vector_search("test", driver, client, top_k=5)
+        mock_retrieve.return_value = [
+            SearchResult(chunk=Chunk(id="c1", content="Result"), score=1.0, rank=1, source="vector")
+        ]
+        results = vector_search("test", driver, client, top_k=5)
 
         assert len(results) == 1
         assert results[0].chunk.content == "Result"
         client.embeddings.create.assert_called_once()
+        mock_retrieve.assert_called_once()
 
 
 # ---------------------------------------------------------------------------
@@ -351,7 +311,7 @@ class TestFullDocumentRead:
         assert len(results) == 2
         # rec2 has higher similarity, should be first
         assert results[0].chunk.content == "Text two"
-        assert results[0].source == "full_read"
+        assert results[0].source == "vector"
         assert results[0].score > results[1].score
         assert results[1].chunk.content == "Text one"
 
@@ -424,7 +384,7 @@ class TestWrapperTools:
 
         results = temporal_query("когда основана компания", driver, client)
         assert len(results) == 2
-        assert results[0].source == "temporal"
+        assert results[0].source == "vector"
         # Temporal passage should be boosted above regular
         assert results[0].chunk.content == "Компания основана в 2015 году"
 
@@ -487,38 +447,98 @@ class TestGenerateSubQueries:
         assert len(subs) == 2
 
 
+class TestComprehensiveSearchFanout:
+    @patch("agentic_graph_rag.agent.tools._rrf_merge")
+    @patch("agentic_graph_rag.agent.tools._embed_query")
+    @patch("agentic_graph_rag.agent.tools.rerank")
+    @patch("agentic_graph_rag.agent.tools.full_document_read")
+    @patch("agentic_graph_rag.agent.tools.vector_search")
+    @patch("agentic_graph_rag.agent.tools._generate_sub_queries")
+    @patch("agentic_graph_rag.agent.tools._detect_enumeration_count")
+    @patch("agentic_graph_rag.agent.tools.get_settings")
+    def test_comprehensive_search_caps_fanout_and_uses_light_hybrid(
+        self,
+        mock_settings,
+        mock_detect_count,
+        mock_generate_sub_queries,
+        mock_vector_search,
+        mock_full_document_read,
+        mock_rerank,
+        mock_embed_query,
+        mock_rrf_merge,
+    ):
+        cfg = MagicMock()
+        cfg.retrieval.top_k_final = 6
+        cfg.retrieval.top_k_vector = 6
+        cfg.openai.llm_model_mini = "test-mini"
+        mock_settings.return_value = cfg
+
+        mock_detect_count.return_value = 9
+        mock_generate_sub_queries.return_value = ["q1", "q2", "q3"]
+        mock_vector_search.return_value = _make_results(2, source="vector")
+        mock_full_document_read.return_value = _make_results(2, source="vector")
+        mock_rrf_merge.side_effect = lambda *lists, top_k=5, **_kwargs: lists[0][:top_k]
+        mock_rerank.side_effect = lambda _query, results, **_kwargs: results
+        mock_embed_query.return_value = [1.0, 0.0]
+
+        results = comprehensive_search("list all COPD indicators", _mock_driver(), _mock_openai_client())
+
+        assert results
+        mock_generate_sub_queries.assert_called_once_with(
+            "list all COPD indicators",
+            ANY,
+            "test-mini",
+            n=3,
+        )
+        assert mock_vector_search.call_count == 3
+        for call in mock_vector_search.call_args_list:
+            assert call.kwargs["top_k"] == 4
+        mock_full_document_read.assert_called_once()
+        assert mock_full_document_read.call_args.kwargs["top_k"] == 8
+        mock_rerank.assert_called_once()
+
+
 # ---------------------------------------------------------------------------
 # comprehensive_search
 # ---------------------------------------------------------------------------
 
 class TestComprehensiveSearch:
+    @patch("agentic_graph_rag.agent.tools.rerank")
+    @patch("agentic_graph_rag.agent.tools.full_document_read")
     @patch("agentic_graph_rag.agent.tools.vector_search")
     @patch("agentic_graph_rag.agent.tools._generate_sub_queries")
-    def test_merges_sub_query_results(self, mock_gen, mock_vs):
+    def test_merges_sub_query_results(self, mock_gen, mock_vs, mock_full_read, mock_rerank):
         mock_gen.return_value = ["sub1", "sub2", "sub3"]
-        # Return different results for each call
         mock_vs.side_effect = [
             _make_results(3, source="v"),  # sub1
             _make_results(3, source="v"),  # sub2
             _make_results(3, source="v"),  # sub3
-            _make_results(3, source="v"),  # original query
         ]
+        mock_full_read.return_value = _make_results(2, source="vector")
+        mock_rerank.side_effect = lambda _query, results, **_kwargs: results
 
         driver = _mock_driver()
         client = _mock_openai_client()
 
         results = comprehensive_search("list all features", driver, client, top_k=10)
         assert len(results) > 0
-        assert mock_vs.call_count == 4  # 3 sub-queries + 1 original
+        assert mock_vs.call_count == 3
+        mock_full_read.assert_called_once()
+        mock_rerank.assert_called_once()
 
+    @patch("agentic_graph_rag.agent.tools.rerank")
+    @patch("agentic_graph_rag.agent.tools.full_document_read")
     @patch("agentic_graph_rag.agent.tools.vector_search")
     @patch("agentic_graph_rag.agent.tools._generate_sub_queries")
-    def test_falls_back_on_empty_sub_queries(self, mock_gen, mock_vs):
+    def test_falls_back_on_empty_sub_queries(self, mock_gen, mock_vs, mock_full_read, mock_rerank):
         mock_gen.return_value = []
         mock_vs.return_value = _make_results(5, source="v")
+        mock_full_read.return_value = []
+        mock_rerank.side_effect = lambda _query, results, **_kwargs: results
 
         driver = _mock_driver()
         client = _mock_openai_client()
 
         results = comprehensive_search("test", driver, client)
-        assert len(results) == 5
+        assert len(results) == 0
+        mock_vs.assert_not_called()

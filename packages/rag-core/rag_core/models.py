@@ -11,6 +11,17 @@ from pydantic import BaseModel, Field
 # Ingestion models (from RAG 2.0)
 # ---------------------------------------------------------------------------
 
+class DocumentBlock(BaseModel):
+    """Structured document block preserved from parsed source content."""
+
+    block_type: str
+    text: str
+    heading_path: list[str] = Field(default_factory=list)
+    order_index: int = 0
+    page: int | None = None
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+
 class Chunk(BaseModel):
     """A text chunk with optional contextual enrichment and embedding."""
 
@@ -38,6 +49,7 @@ class Entity(BaseModel):
     name: str
     entity_type: str = ""
     description: str = ""
+    entity_confidence: float = 0.0
     metadata: dict[str, Any] = Field(default_factory=dict)
 
 
@@ -75,6 +87,7 @@ class PhraseNode(BaseModel):
     name: str
     entity_type: str = ""
     pagerank_score: float = 0.0
+    confidence: float = 0.0
     passage_ids: list[str] = Field(default_factory=list)
 
 
@@ -125,6 +138,7 @@ class SearchResult(BaseModel):
 
     chunk: Chunk
     score: float = 0.0
+    score_normalized: float | None = None
     rank: int = 0
     source: str = "vector"  # "vector", "graph", "hybrid"
 
@@ -132,6 +146,18 @@ class SearchResult(BaseModel):
 # ---------------------------------------------------------------------------
 # Provenance models (v6 — pipeline trace)
 # ---------------------------------------------------------------------------
+
+class ProviderDiagnostic(BaseModel):
+    """Provider-level retrieval diagnostics for a tool execution."""
+
+    source: str
+    results_count: int = 0
+    top_score: float = 0.0
+    average_score: float = 0.0
+    reused: bool = False
+    executed: bool = False
+    top_chunk_ids: list[str] = Field(default_factory=list)
+
 
 class ToolStep(BaseModel):
     """One tool execution step in the pipeline."""
@@ -141,6 +167,47 @@ class ToolStep(BaseModel):
     relevance_score: float = 0.0
     duration_ms: int = 0
     query_used: str = ""
+    cache_hit: bool = False
+    reused_sources: list[str] = Field(default_factory=list)
+    executed_sources: list[str] = Field(default_factory=list)
+    provider_diagnostics: list[ProviderDiagnostic] = Field(default_factory=list)
+
+
+class ReflectionStep(BaseModel):
+    """Structured reflection result for one retrieval attempt."""
+
+    attempt: int = 0
+    tool_name: str = ""
+    query_used: str = ""
+    verdict: str = ""
+    overall_score: float = 0.0
+    relevance: float = 0.0
+    entity_completeness: float = 0.0
+    logical_consistency: float = 0.0
+    context_sufficiency: float = 0.0
+    missing_information: list[str] = Field(default_factory=list)
+    missing_entities: list[str] = Field(default_factory=list)
+    missing_relationships: list[str] = Field(default_factory=list)
+    coverage_gap_sources: list[str] = Field(default_factory=list)
+    candidate_fix_paths: list[str] = Field(default_factory=list)
+    preferred_tools: list[str] = Field(default_factory=list)
+    preferred_providers: list[str] = Field(default_factory=list)
+    retry_scope: str = ""
+    reasoning: str = ""
+    failure_type: str = ""
+    recommended_action: str = ""
+    should_retry: bool = True
+    should_rewrite_query: bool = False
+    should_rerank_again: bool = False
+    comparison_to_previous: str = ""
+
+
+class WorkflowMemoryEntry(BaseModel):
+    """Structured workflow memory captured across routing, retrieval, and retries."""
+
+    stage: str
+    message: str
+    metadata: dict[str, Any] = Field(default_factory=dict)
 
 
 class EscalationStep(BaseModel):
@@ -151,6 +218,7 @@ class EscalationStep(BaseModel):
     reason: str = ""
     rephrased_query: str = ""
     duration_ms: int = 0
+    cached_sources_reused: list[str] = Field(default_factory=list)
 
 
 class RouterStep(BaseModel):
@@ -179,8 +247,13 @@ class PipelineTrace(BaseModel):
     trace_id: str
     timestamp: str
     query: str
+    expanded_query: str = ""
+    final_answer: str = ""
+    session_id: str = ""
     router_step: RouterStep | None = None
     tool_steps: list[ToolStep] = Field(default_factory=list)
+    reflection_steps: list[ReflectionStep] = Field(default_factory=list)
+    workflow_memory: list[WorkflowMemoryEntry] = Field(default_factory=list)
     escalation_steps: list[EscalationStep] = Field(default_factory=list)
     generator_step: GeneratorStep | None = None
     total_duration_ms: int = 0

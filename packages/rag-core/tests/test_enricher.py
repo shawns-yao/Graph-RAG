@@ -29,7 +29,8 @@ class TestEnrichChunks:
         result = enrich_chunks(chunks, document_summary="A test document")
 
         assert len(result) == 1
-        assert result[0].context == "Context about the chunk"
+        assert "Document summary:" in result[0].context
+        assert "Chunk position: 1/1" in result[0].context
 
     @patch("rag_core.enricher.make_openai_client")
     @patch("rag_core.enricher.get_settings")
@@ -50,8 +51,9 @@ class TestEnrichChunks:
         result = enrich_chunks(chunks)
 
         assert len(result) == 2
-        # Should have called create at least 3 times: 1 summary + 2 contexts
-        assert mock_client.chat.completions.create.call_count >= 3
+        assert mock_client.chat.completions.create.call_count == 0
+        assert "Document summary:" in result[0].context
+        assert "Chunk position: 1/2" in result[0].context
 
     @patch("rag_core.enricher.make_openai_client")
     @patch("rag_core.enricher.get_settings")
@@ -69,4 +71,25 @@ class TestEnrichChunks:
 
         # Should return chunks even if enrichment fails
         assert len(result) == 1
-        assert result[0].context == ""
+        assert "Document summary:" in result[0].context
+
+    @patch("rag_core.enricher.make_openai_client")
+    @patch("rag_core.enricher.get_settings")
+    def test_uses_llm_for_large_documents(self, mock_settings, mock_make_client):
+        cfg = MagicMock()
+        cfg.openai.llm_model = "gpt-4o-mini"
+        mock_settings.return_value = cfg
+
+        mock_response = MagicMock()
+        mock_response.choices = [MagicMock()]
+        mock_response.choices[0].message.content = "Generated text"
+
+        mock_client = MagicMock()
+        mock_client.chat.completions.create.return_value = mock_response
+        mock_make_client.return_value = mock_client
+
+        chunks = [Chunk(content=("A" * 1200)) for _ in range(5)]
+        result = enrich_chunks(chunks)
+
+        assert len(result) == 5
+        assert mock_client.chat.completions.create.call_count >= 6

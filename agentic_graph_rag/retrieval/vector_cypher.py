@@ -14,6 +14,7 @@ from typing import TYPE_CHECKING
 
 from rag_core.config import get_settings
 from rag_core.models import Entity, GraphContext
+from rag_core.neo4j_utils import open_neo4j_session
 
 from agentic_graph_rag.indexing.dual_node import PASSAGE_LABEL, PHRASE_LABEL, RELATED_TO_LABEL
 
@@ -46,7 +47,7 @@ def find_entry_points(
     if threshold is None:
         threshold = cfg.retrieval.vector_threshold
 
-    with driver.session() as session:
+    with open_neo4j_session(driver) as session:
         result = session.run(
             f"""
             CALL db.index.vector.queryNodes(
@@ -91,6 +92,8 @@ def traverse_graph(
     entry_ids: list[str],
     driver: Driver,
     max_hops: int | None = None,
+    cooccurrence_limit: int | None = None,
+    passage_limit: int | None = None,
 ) -> dict:
     """Traverse graph from entry PhraseNodes to collect related nodes.
 
@@ -107,12 +110,16 @@ def traverse_graph(
     cfg = get_settings()
     if max_hops is None:
         max_hops = cfg.retrieval.max_hops
+    if cooccurrence_limit is None:
+        cooccurrence_limit = cfg.retrieval.graph_cooccurrence_limit
+    if passage_limit is None:
+        passage_limit = cfg.retrieval.graph_passage_limit
 
     phrase_nodes: dict[str, dict] = {}
     passage_nodes: dict[str, dict] = {}
     relationships: list[dict[str, str]] = []
 
-    with driver.session() as session:
+    with open_neo4j_session(driver) as session:
         # Step 1: Traverse inter-PhraseNode RELATED_TO edges up to max_hops
         result = session.run(
             f"""
@@ -182,8 +189,10 @@ def traverse_graph(
                     neighbor.id AS id,
                     neighbor.name AS name,
                     neighbor.entity_type AS entity_type
+                LIMIT $cooccurrence_limit
                 """,
                 seed_ids=cooccur_seed_ids,
+                cooccurrence_limit=cooccurrence_limit,
             )
             for record in result:
                 nid = record["id"]
@@ -203,8 +212,10 @@ def traverse_graph(
                 WHERE ph.id IN $phrase_ids
                 RETURN DISTINCT
                     pa.id AS id, pa.text AS text, pa.chunk_id AS chunk_id
+                LIMIT $passage_limit
                 """,
                 phrase_ids=all_phrase_ids,
+                passage_limit=passage_limit,
             )
 
             for record in result:
@@ -290,6 +301,8 @@ def search(
     top_k: int | None = None,
     max_hops: int | None = None,
     threshold: float | None = None,
+    cooccurrence_limit: int | None = None,
+    passage_limit: int | None = None,
 ) -> GraphContext:
     """Full VectorCypher retrieval pipeline.
 
@@ -309,7 +322,13 @@ def search(
     entry_ids = [e["id"] for e in entries]
 
     # Step 2: Graph traversal
-    traversal = traverse_graph(entry_ids, driver, max_hops=max_hops)
+    traversal = traverse_graph(
+        entry_ids,
+        driver,
+        max_hops=max_hops,
+        cooccurrence_limit=cooccurrence_limit,
+        passage_limit=passage_limit,
+    )
 
     # Step 3: Assemble context
     context = collect_context(traversal)

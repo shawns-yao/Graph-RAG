@@ -37,6 +37,7 @@ def test_get_tool_policy_defaults():
     policy = get_tool_policy()
     assert policy.max_escalation_depth == 3
     assert "vector_search" in policy.tool_timeouts
+    assert "bm25_search" in policy.tool_timeouts
 
 
 def test_get_tool_policy_env_override(monkeypatch):

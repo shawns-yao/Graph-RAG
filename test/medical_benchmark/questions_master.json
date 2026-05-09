@@ -1,0 +1,907 @@
+{
+  "metadata": {
+    "version": "1.0",
+    "domain": "medical_knowledge",
+    "total_questions": 30,
+    "query_types": {
+      "simple": 10,
+      "relation": 8,
+      "multi_hop": 8,
+      "global": 3,
+      "temporal": 1
+    }
+  },
+  "questions": [
+    {
+      "id": "Q001",
+      "query": "2型糖尿病的诊断标准是什么？",
+      "query_type": "simple",
+      "difficulty": "easy",
+      "recommended_retrieval": [
+        "vector_search",
+        "bm25_search"
+      ],
+      "answer": "2型糖尿病诊断需满足以下任一条件：空腹血糖≥7.0 mmol/L、OGTT 2小时血糖≥11.1 mmol/L、HbA1c≥6.5%、或伴有典型高血糖症状且随机血糖≥11.1 mmol/L。",
+      "evidence_chunks": [
+        "1.1 2型糖尿病诊断标准"
+      ],
+      "keywords": [
+        "2型糖尿病",
+        "T2DM",
+        "诊断标准",
+        "空腹血糖",
+        "HbA1c"
+      ],
+      "why_vector_works": "问题直接询问定义，向量检索能找到包含'诊断标准'的段落",
+      "why_bm25_works": "关键词'2型糖尿病'+'诊断标准'匹配度高",
+      "why_graph_may_fail": "不涉及实体关系，单段落即可回答",
+      "failure_risk": "low",
+      "distractor_entities": []
+    },
+    {
+      "id": "Q002",
+      "query": "eGFR小于30时二甲双胍应该如何调整？",
+      "query_type": "relation",
+      "difficulty": "medium",
+      "recommended_retrieval": [
+        "hybrid_search",
+        "cypher_traverse"
+      ],
+      "answer": "eGFR <30 mL/min/1.73m²时二甲双胍禁用。",
+      "evidence_chunks": [
+        "1.3 二甲双胍使用规范"
+      ],
+      "keywords": [
+        "二甲双胍",
+        "Metformin",
+        "eGFR",
+        "肾功能",
+        "禁忌症"
+      ],
+      "reasoning_chain": [
+        "识别实体：二甲双胍（药物）、eGFR（检查指标）",
+        "查找关系：二甲双胍 -[禁忌症]-> eGFR <30",
+        "提取结论：禁用"
+      ],
+      "why_vector_may_fail": "需要精确数值匹配（30），语义检索可能召回eGFR 30-45的段落",
+      "why_bm25_works": "关键词'eGFR'+'30'+'二甲双胍'精确匹配",
+      "why_graph_works": "药物-禁忌症-数值阈值的三元关系",
+      "failure_risk": "medium",
+      "distractor_entities": [
+        "eGFR 30-45（减量区间）",
+        "eGFR 45-60（安全区间）"
+      ]
+    },
+    {
+      "id": "Q003",
+      "query": "SGLT-2抑制剂降低心血管死亡风险的幅度是多少？",
+      "query_type": "simple",
+      "difficulty": "easy",
+      "recommended_retrieval": [
+        "vector_search",
+        "bm25_search"
+      ],
+      "answer": "SGLT-2抑制剂降低心血管死亡风险38%（EMPA-REG研究）。",
+      "evidence_chunks": [
+        "1.4 SGLT-2抑制剂心肾保护作用"
+      ],
+      "keywords": [
+        "SGLT-2抑制剂",
+        "SGLT-2i",
+        "心血管死亡",
+        "风险",
+        "38%",
+        "EMPA-REG"
+      ],
+      "why_vector_works": "语义相似度高，'降低风险'是核心语义",
+      "why_bm25_works": "关键词'SGLT-2'+'心血管死亡'+'风险'匹配",
+      "why_graph_may_fail": "单一事实陈述，不涉及复杂关系",
+      "failure_risk": "low",
+      "distractor_entities": [
+        "延缓eGFR下降40%（肾脏保护数据，非心血管）"
+      ]
+    },
+    {
+      "id": "Q004",
+      "query": "糖尿病合并高血压患者的目标血压是多少？首选药物是什么？",
+      "query_type": "multi_hop",
+      "difficulty": "medium",
+      "recommended_retrieval": [
+        "hybrid_search",
+        "comprehensive_search"
+      ],
+      "answer": "目标血压<130/80 mmHg，首选ACEI或ARB。",
+      "evidence_chunks": [
+        "2.2 ACEI与ARB的选择"
+      ],
+      "keywords": [
+        "糖尿病",
+        "高血压",
+        "目标血压",
+        "ACEI",
+        "ARB",
+        "首选"
+      ],
+      "reasoning_chain": [
+        "识别患者特征：糖尿病+高血压",
+        "查找目标血压：<130/80 mmHg",
+        "查找首选药物：ACEI/ARB"
+      ],
+      "why_vector_may_fail": "需要同时召回两个信息点（目标值+药物选择），单次检索可能不完整",
+      "why_hybrid_works": "向量找到相关段落，图谱补充药物-适应症关系",
+      "failure_risk": "medium",
+      "distractor_entities": [
+        "普通高血压目标<140/90",
+        "ACEI副作用（干咳）"
+      ]
+    },
+    {
+      "id": "Q005",
+      "query": "ACEI导致干咳时应该如何处理？",
+      "query_type": "relation",
+      "difficulty": "easy",
+      "recommended_retrieval": [
+        "cypher_traverse",
+        "hybrid_search"
+      ],
+      "answer": "ACEI常见副作用为干咳（发生率15-20%），此时改用ARB。",
+      "evidence_chunks": [
+        "2.2 ACEI与ARB的选择"
+      ],
+      "keywords": [
+        "ACEI",
+        "干咳",
+        "副作用",
+        "ARB",
+        "替代"
+      ],
+      "reasoning_chain": [
+        "识别问题：ACEI -[副作用]-> 干咳",
+        "查找解决方案：干咳 -[处理]-> 改用ARB"
+      ],
+      "why_vector_works": "语义关联明确",
+      "why_graph_works": "药物-副作用-替代方案的因果链",
+      "failure_risk": "low",
+      "distractor_entities": [
+        "ACEI其他禁忌症（双侧肾动脉狭窄、妊娠）"
+      ]
+    },
+    {
+      "id": "Q006",
+      "query": "噻嗪类利尿剂在eGFR小于30时疗效如何？应该换用什么药物？",
+      "query_type": "multi_hop",
+      "difficulty": "medium",
+      "recommended_retrieval": [
+        "hybrid_search",
+        "cypher_traverse"
+      ],
+      "answer": "eGFR <30 mL/min/1.73m²时噻嗪类利尿剂疗效降低，应改用袢利尿剂。",
+      "evidence_chunks": [
+        "2.3 利尿剂与电解质监测"
+      ],
+      "keywords": [
+        "噻嗪类利尿剂",
+        "HCTZ",
+        "eGFR",
+        "30",
+        "疗效",
+        "袢利尿剂",
+        "呋塞米"
+      ],
+      "reasoning_chain": [
+        "识别条件：eGFR <30",
+        "查找噻嗪类疗效：疗效降低",
+        "查找替代方案：袢利尿剂"
+      ],
+      "why_vector_may_fail": "需要精确数值阈值（30）和药物替换逻辑",
+      "why_graph_works": "药物-适用条件-替代药物的多跳关系",
+      "failure_risk": "medium",
+      "distractor_entities": [
+        "噻嗪类副作用（低钾、高尿酸）",
+        "袢利尿剂用于心衰"
+      ]
+    },
+    {
+      "id": "Q007",
+      "query": "心衰患者使用β受体阻滞剂的禁忌症有哪些？",
+      "query_type": "simple",
+      "difficulty": "easy",
+      "recommended_retrieval": [
+        "vector_search",
+        "bm25_search"
+      ],
+      "answer": "β受体阻滞剂禁忌症包括：心率<50次/分、收缩压<90 mmHg、II度及以上房室传导阻滞。",
+      "evidence_chunks": [
+        "3.3 β受体阻滞剂滴定方案"
+      ],
+      "keywords": [
+        "β受体阻滞剂",
+        "禁忌症",
+        "心率",
+        "血压",
+        "房室传导阻滞"
+      ],
+      "why_vector_works": "直接询问禁忌症列表",
+      "why_bm25_works": "关键词'β受体阻滞剂'+'禁忌症'精确匹配",
+      "failure_risk": "low",
+      "distractor_entities": []
+    },
+    {
+      "id": "Q008",
+      "query": "美托洛尔缓释片的目标剂量是多少？滴定周期是多久？",
+      "query_type": "multi_hop",
+      "difficulty": "medium",
+      "recommended_retrieval": [
+        "hybrid_search",
+        "vector_search"
+      ],
+      "answer": "美托洛尔缓释片目标剂量为190 mg/日，每2周剂量翻倍进行滴定。",
+      "evidence_chunks": [
+        "3.3 β受体阻滞剂滴定方案"
+      ],
+      "keywords": [
+        "美托洛尔",
+        "Metoprolol",
+        "目标剂量",
+        "190 mg",
+        "滴定",
+        "2周"
+      ],
+      "reasoning_chain": [
+        "识别药物：美托洛尔缓释片",
+        "查找目标剂量：190 mg/日",
+        "查找滴定周期：每2周"
+      ],
+      "why_vector_works": "两个信息点在同一段落",
+      "why_bm25_works": "关键词'美托洛尔'+'目标剂量'+'滴定'匹配",
+      "failure_risk": "low",
+      "distractor_entities": [
+        "比索洛尔目标剂量10 mg/日（不同药物）"
+      ]
+    },
+    {
+      "id": "Q009",
+      "query": "NT-proBNP多少可以排除心衰？",
+      "query_type": "simple",
+      "difficulty": "easy",
+      "recommended_retrieval": [
+        "vector_search",
+        "bm25_search"
+      ],
+      "answer": "NT-proBNP <300 pg/mL可以排除心衰。",
+      "evidence_chunks": [
+        "3.4 利钠肽与心衰诊断"
+      ],
+      "keywords": [
+        "NT-proBNP",
+        "排除",
+        "心衰",
+        "300 pg/mL"
+      ],
+      "why_vector_works": "语义明确，'排除心衰'是核心查询意图",
+      "why_bm25_works": "关键词'NT-proBNP'+'排除'+'心衰'精确匹配",
+      "failure_risk": "low",
+      "distractor_entities": [
+        "BNP <100 pg/mL（不同指标）",
+        "NT-proBNP >900支持诊断（相反逻辑）"
+      ]
+    },
+    {
+      "id": "Q010",
+      "query": "STEMI的心电图诊断标准是什么？",
+      "query_type": "simple",
+      "difficulty": "easy",
+      "recommended_retrieval": [
+        "vector_search",
+        "bm25_search"
+      ],
+      "answer": "STEMI心电图标准为≥2个相邻导联ST段抬高（胸导联≥0.2 mV，肢导联≥0.1 mV）。",
+      "evidence_chunks": [
+        "4.1 急性心肌梗死诊断"
+      ],
+      "keywords": [
+        "STEMI",
+        "心电图",
+        "ST段抬高",
+        "诊断标准",
+        "导联"
+      ],
+      "why_vector_works": "直接询问诊断标准",
+      "why_bm25_works": "关键词'STEMI'+'心电图'+'诊断'匹配",
+      "failure_risk": "low",
+      "distractor_entities": [
+        "NSTEMI（无ST段抬高）",
+        "心肌标志物升高（另一诊断标准）"
+      ]
+    },
+    {
+      "id": "Q011",
+      "query": "PCI术后使用药物洗脱支架的患者，双抗治疗应该持续多久？",
+      "query_type": "relation",
+      "difficulty": "medium",
+      "recommended_retrieval": [
+        "cypher_traverse",
+        "hybrid_search"
+      ],
+      "answer": "药物洗脱支架（DES）术后双抗治疗至少持续12个月。",
+      "evidence_chunks": [
+        "4.2 双联抗血小板治疗（DAPT）"
+      ],
+      "keywords": [
+        "PCI",
+        "药物洗脱支架",
+        "DES",
+        "双抗",
+        "DAPT",
+        "12个月",
+        "疗程"
+      ],
+      "reasoning_chain": [
+        "识别手术：PCI",
+        "识别支架类型：药物洗脱支架（DES）",
+        "查找疗程：至少12个月"
+      ],
+      "why_vector_may_fail": "需要区分DES和BMS的不同疗程",
+      "why_graph_works": "手术-支架类型-疗程的三元关系",
+      "failure_risk": "medium",
+      "distractor_entities": [
+        "裸金属支架（BMS）至少1个月（更短疗程）"
+      ]
+    },
+    {
+      "id": "Q012",
+      "query": "替格瑞洛相比氯吡格雷有什么优势和劣势？",
+      "query_type": "relation",
+      "difficulty": "medium",
+      "recommended_retrieval": [
+        "hybrid_search",
+        "cypher_traverse"
+      ],
+      "answer": "替格瑞洛相比氯吡格雷降低心血管死亡风险21%，但出血风险增加11%。",
+      "evidence_chunks": [
+        "4.2 双联抗血小板治疗（DAPT）"
+      ],
+      "keywords": [
+        "替格瑞洛",
+        "Ticagrelor",
+        "氯吡格雷",
+        "Clopidogrel",
+        "优势",
+        "劣势",
+        "出血"
+      ],
+      "reasoning_chain": [
+        "识别对比药物：替格瑞洛 vs 氯吡格雷",
+        "查找优势：降低心血管死亡21%",
+        "查找劣势：出血风险增加11%"
+      ],
+      "why_vector_works": "对比性问题，语义检索能找到比较段落",
+      "why_graph_works": "药物-疗效-副作用的多维关系",
+      "failure_risk": "low",
+      "distractor_entities": [
+        "替格瑞洛禁忌症（颅内出血史）"
+      ]
+    },
+    {
+      "id": "Q013",
+      "query": "ACS患者他汀治疗的LDL-C目标值是多少？",
+      "query_type": "simple",
+      "difficulty": "easy",
+      "recommended_retrieval": [
+        "vector_search",
+        "bm25_search"
+      ],
+      "answer": "ACS患者LDL-C目标值为<1.8 mmol/L（70 mg/dL）。",
+      "evidence_chunks": [
+        "4.3 他汀类药物强化治疗"
+      ],
+      "keywords": [
+        "ACS",
+        "他汀",
+        "LDL-C",
+        "目标值",
+        "1.8 mmol/L"
+      ],
+      "why_vector_works": "直接询问目标值",
+      "why_bm25_works": "关键词'ACS'+'LDL-C'+'目标'精确匹配",
+      "failure_risk": "low",
+      "distractor_entities": []
+    },
+    {
+      "id": "Q014",
+      "query": "他汀治疗时CK升高超过多少倍需要停药？",
+      "query_type": "simple",
+      "difficulty": "easy",
+      "recommended_retrieval": [
+        "vector_search",
+        "bm25_search"
+      ],
+      "answer": "CK升高>10倍正常上限或出现肌痛需停药。",
+      "evidence_chunks": [
+        "4.3 他汀类药物强化治疗"
+      ],
+      "keywords": [
+        "他汀",
+        "CK",
+        "肌酸激酶",
+        "停药",
+        "10倍"
+      ],
+      "why_vector_works": "精确数值查询",
+      "why_bm25_works": "关键词'CK'+'10倍'+'停药'匹配",
+      "failure_risk": "low",
+      "distractor_entities": [
+        "转氨酶>3倍需减量（不同指标）"
+      ]
+    },
+    {
+      "id": "Q015",
+      "query": "CKD 5期患者PTH的目标范围是多少？",
+      "query_type": "simple",
+      "difficulty": "easy",
+      "recommended_retrieval": [
+        "vector_search",
+        "bm25_search"
+      ],
+      "answer": "CKD 5期患者PTH目标范围为150-300 pg/mL。",
+      "evidence_chunks": [
+        "5.1 CKD分期与管理"
+      ],
+      "keywords": [
+        "CKD 5期",
+        "PTH",
+        "目标",
+        "150-300 pg/mL"
+      ],
+      "why_vector_works": "直接询问目标范围",
+      "why_bm25_works": "关键词'CKD 5期'+'PTH'+'目标'匹配",
+      "failure_risk": "low",
+      "distractor_entities": [
+        "血磷目标2.5-4.5 mg/dL（不同指标）"
+      ]
+    },
+    {
+      "id": "Q016",
+      "query": "肾性贫血患者使用EPO治疗时，目标血红蛋白是多少？为什么不能过高？",
+      "query_type": "multi_hop",
+      "difficulty": "medium",
+      "recommended_retrieval": [
+        "hybrid_search",
+        "comprehensive_search"
+      ],
+      "answer": "目标Hb为100-120 g/L，不超过130 g/L，因为过高会增加心血管风险。",
+      "evidence_chunks": [
+        "5.2 贫血管理"
+      ],
+      "keywords": [
+        "肾性贫血",
+        "EPO",
+        "促红素",
+        "血红蛋白",
+        "Hb",
+        "目标",
+        "心血管风险"
+      ],
+      "reasoning_chain": [
+        "识别治疗：EPO治疗肾性贫血",
+        "查找目标值：100-120 g/L",
+        "查找上限原因：>130增加心血管风险"
+      ],
+      "why_vector_works": "两个信息点在同一段落",
+      "why_hybrid_works": "向量找到段落，图谱补充因果关系",
+      "failure_risk": "low",
+      "distractor_entities": []
+    },
+    {
+      "id": "Q017",
+      "query": "CKD患者高钾血症紧急处理的步骤是什么？",
+      "query_type": "global",
+      "difficulty": "medium",
+      "recommended_retrieval": [
+        "full_document_read",
+        "comprehensive_search"
+      ],
+      "answer": "紧急处理步骤：1)停用ACEI/ARB等升钾药物 2)10%葡萄糖酸钙10-20 mL静推（心脏保护）3)胰岛素10U+50%葡萄糖50 mL静推（促钾内移）4)呋塞米40-80 mg静推（促钾排泄）5)必要时血液透析。",
+      "evidence_chunks": [
+        "5.3 高钾血症处理"
+      ],
+      "keywords": [
+        "高钾血症",
+        "CKD",
+        "紧急处理",
+        "葡萄糖酸钙",
+        "胰岛素",
+        "呋塞米",
+        "透析"
+      ],
+      "why_vector_may_fail": "需要完整的步骤序列，单次检索可能不完整",
+      "why_full_read_works": "需要读取完整处理流程",
+      "failure_risk": "medium",
+      "distractor_entities": [
+        "慢性高钾血症预防（不同场景）"
+      ]
+    },
+    {
+      "id": "Q018",
+      "query": "华法林治疗房颤时INR的目标范围是多少？",
+      "query_type": "simple",
+      "difficulty": "easy",
+      "recommended_retrieval": [
+        "vector_search",
+        "bm25_search"
+      ],
+      "answer": "房颤抗凝目标INR为2.0-3.0。",
+      "evidence_chunks": [
+        "6.1 华法林管理"
+      ],
+      "keywords": [
+        "华法林",
+        "Warfarin",
+        "房颤",
+        "INR",
+        "目标",
+        "2.0-3.0"
+      ],
+      "why_vector_works": "直接询问目标范围",
+      "why_bm25_works": "关键词'华法林'+'房颤'+'INR'+'目标'匹配",
+      "failure_risk": "low",
+      "distractor_entities": [
+        "机械瓣膜目标INR 2.5-3.5（不同适应症）"
+      ]
+    },
+    {
+      "id": "Q019",
+      "query": "哪些药物会增强华法林的抗凝作用？",
+      "query_type": "relation",
+      "difficulty": "medium",
+      "recommended_retrieval": [
+        "cypher_traverse",
+        "hybrid_search"
+      ],
+      "answer": "增强华法林抗凝作用的药物包括：阿司匹林、氯吡格雷、NSAIDs、抗生素（甲硝唑、环丙沙星）。",
+      "evidence_chunks": [
+        "6.1 华法林管理"
+      ],
+      "keywords": [
+        "华法林",
+        "药物相互作用",
+        "增强",
+        "阿司匹林",
+        "氯吡格雷",
+        "NSAIDs",
+        "抗生素"
+      ],
+      "reasoning_chain": [
+        "识别药物：华法林",
+        "查找相互作用：增强抗凝",
+        "列举药物：阿司匹林、氯吡格雷、NSAIDs、抗生素"
+      ],
+      "why_vector_works": "列表型问题，语义检索能找到相关段落",
+      "why_graph_works": "药物-药物相互作用的多对多关系",
+      "failure_risk": "low",
+      "distractor_entities": [
+        "减弱抗凝作用的药物（相反效果）"
+      ]
+    },
+    {
+      "id": "Q020",
+      "query": "达比加群在eGFR小于30时能否使用？",
+      "query_type": "relation",
+      "difficulty": "easy",
+      "recommended_retrieval": [
+        "cypher_traverse",
+        "hybrid_search"
+      ],
+      "answer": "达比加群在eGFR <30时禁用。",
+      "evidence_chunks": [
+        "6.2 新型口服抗凝药（NOAC）"
+      ],
+      "keywords": [
+        "达比加群",
+        "Dabigatran",
+        "eGFR",
+        "30",
+        "禁用"
+      ],
+      "reasoning_chain": [
+        "识别药物：达比加群",
+        "识别条件：eGFR <30",
+        "查找结论：禁用"
+      ],
+      "why_vector_works": "精确数值查询",
+      "why_bm25_works": "关键词'达比加群'+'eGFR'+'30'匹配",
+      "why_graph_works": "药物-禁忌症-数值阈值关系",
+      "failure_risk": "low",
+      "distractor_entities": [
+        "eGFR 30-50需减量（不同区间）"
+      ]
+    },
+    {
+      "id": "Q021",
+      "query": "CURB-65评分≥3分的肺炎患者应该如何处理？",
+      "query_type": "relation",
+      "difficulty": "easy",
+      "recommended_retrieval": [
+        "cypher_traverse",
+        "hybrid_search"
+      ],
+      "answer": "CURB-65评分≥3分的患者需要重症监护。",
+      "evidence_chunks": [
+        "7.1 社区获得性肺炎（CAP）"
+      ],
+      "keywords": [
+        "CURB-65",
+        "评分",
+        "3分",
+        "肺炎",
+        "重症监护"
+      ],
+      "reasoning_chain": [
+        "识别评分：CURB-65 ≥3分",
+        "查找处理：重症监护"
+      ],
+      "why_vector_works": "评分-处理的直接关联",
+      "why_graph_works": "评分-严重程度-处理方案的关系链",
+      "failure_risk": "low",
+      "distractor_entities": [
+        "0-1分门诊治疗",
+        "2分住院治疗"
+      ]
+    },
+    {
+      "id": "Q022",
+      "query": "轻中度CAP患者如果青霉素过敏应该使用什么抗生素？",
+      "query_type": "relation",
+      "difficulty": "medium",
+      "recommended_retrieval": [
+        "cypher_traverse",
+        "hybrid_search"
+      ],
+      "answer": "青霉素过敏患者应使用左氧氟沙星500 mg/日或莫西沙星400 mg/日。",
+      "evidence_chunks": [
+        "7.2 抗生素选择"
+      ],
+      "keywords": [
+        "CAP",
+        "肺炎",
+        "青霉素过敏",
+        "左氧氟沙星",
+        "莫西沙星",
+        "替代"
+      ],
+      "reasoning_chain": [
+        "识别患者特征：轻中度CAP + 青霉素过敏",
+        "查找替代方案：左氧氟沙星或莫西沙星"
+      ],
+      "why_vector_may_fail": "需要识别'过敏'这一特殊条件",
+      "why_graph_works": "药物-禁忌症-替代方案的关系链",
+      "failure_risk": "medium",
+      "distractor_entities": [
+        "无过敏时首选阿莫西林（标准方案）"
+      ]
+    },
+    {
+      "id": "Q023",
+      "query": "重症CAP的抗生素疗程是多久？",
+      "query_type": "simple",
+      "difficulty": "easy",
+      "recommended_retrieval": [
+        "vector_search",
+        "bm25_search"
+      ],
+      "answer": "重症CAP抗生素疗程为7-14天。",
+      "evidence_chunks": [
+        "7.3 抗生素疗程与降阶梯"
+      ],
+      "keywords": [
+        "重症CAP",
+        "抗生素",
+        "疗程",
+        "7-14天"
+      ],
+      "why_vector_works": "直接询问疗程",
+      "why_bm25_works": "关键词'重症CAP'+'疗程'匹配",
+      "failure_risk": "low",
+      "distractor_entities": [
+        "轻中度CAP 5-7天（不同严重程度）"
+      ]
+    },
+    {
+      "id": "Q024",
+      "query": "患者张某的入院诊断有哪些？",
+      "query_type": "global",
+      "difficulty": "medium",
+      "recommended_retrieval": [
+        "full_document_read",
+        "comprehensive_search"
+      ],
+      "answer": "主要诊断包括：1)慢性心力衰竭急性失代偿（HFrEF，NYHA III级）2)2型糖尿病伴肾病（CKD 3b期，G3b A3）3)高血压3级（极高危）4)冠心病，PCI术后 5)肾性贫血 6)高钾血症。",
+      "evidence_chunks": [
+        "8.3 诊断与问题清单"
+      ],
+      "keywords": [
+        "张某",
+        "诊断",
+        "心衰",
+        "糖尿病",
+        "高血压",
+        "冠心病",
+        "贫血",
+        "高钾"
+      ],
+      "why_vector_may_fail": "需要完整的诊断列表",
+      "why_full_read_works": "病例信息分散在多个段落",
+      "failure_risk": "medium",
+      "distractor_entities": []
+    },
+    {
+      "id": "Q025",
+      "query": "患者张某为什么要停用二甲双胍？",
+      "query_type": "multi_hop",
+      "difficulty": "hard",
+      "recommended_retrieval": [
+        "hybrid_search",
+        "comprehensive_search"
+      ],
+      "answer": "因为患者eGFR为35 mL/min/1.73m²，小于45，而二甲双胍在eGFR <45时禁用。",
+      "evidence_chunks": [
+        "8.2 入院检查结果",
+        "8.4 治疗方案调整",
+        "1.3 二甲双胍使用规范"
+      ],
+      "reasoning_chain": [
+        "识别患者：张某",
+        "查找肾功能：eGFR 35",
+        "查找二甲双胍禁忌：eGFR <45禁用（从1.3节）",
+        "推理结论：35 < 45，因此禁用"
+      ],
+      "why_vector_may_fail": "需要跨段落推理（病例数据+药物规范）",
+      "why_graph_works": "患者-检查值-药物-禁忌症的多跳关系",
+      "failure_risk": "high",
+      "distractor_entities": [
+        "eGFR <30禁用（更严格的阈值）",
+        "格列美脲停用原因（低血糖风险）"
+      ]
+    },
+    {
+      "id": "Q026",
+      "query": "患者张某为什么选择沙库巴曲缬沙坦而不是氨氯地平？",
+      "query_type": "multi_hop",
+      "difficulty": "hard",
+      "recommended_retrieval": [
+        "hybrid_search",
+        "comprehensive_search"
+      ],
+      "answer": "因为患者同时有心衰和高血压，沙库巴曲缬沙坦（ARNI）可以兼顾心衰治疗和血压控制，而氨氯地平只能降压。",
+      "evidence_chunks": [
+        "8.4 治疗方案调整",
+        "3.2 心衰'金三角'用药"
+      ],
+      "reasoning_chain": [
+        "识别患者疾病：心衰 + 高血压",
+        "查找沙库巴曲缬沙坦作用：ARNI，心衰标准治疗",
+        "查找氨氯地平作用：仅降压",
+        "推理结论：ARNI一药两用"
+      ],
+      "why_vector_may_fail": "需要理解药物选择的临床逻辑",
+      "why_graph_works": "患者-疾病-药物-适应症的复杂关系网",
+      "failure_risk": "high",
+      "distractor_entities": [
+        "ACEI/ARB也可用于心衰（但ARNI更优）"
+      ]
+    },
+    {
+      "id": "Q027",
+      "query": "患者张某的NT-proBNP是3500 pg/mL，这个值说明什么？",
+      "query_type": "multi_hop",
+      "difficulty": "medium",
+      "recommended_retrieval": [
+        "hybrid_search",
+        "cypher_traverse"
+      ],
+      "answer": "NT-proBNP 3500 pg/mL远高于诊断阈值（≥50岁患者>1800 pg/mL支持心衰诊断），结合患者68岁，强烈支持心衰诊断。",
+      "evidence_chunks": [
+        "8.2 入院检查结果",
+        "3.4 利钠肽与心衰诊断"
+      ],
+      "reasoning_chain": [
+        "识别患者数据：NT-proBNP 3500，年龄68岁",
+        "查找诊断标准：≥50岁 >1800支持心衰",
+        "推理：3500 > 1800，支持诊断"
+      ],
+      "why_vector_may_fail": "需要结合年龄分层的诊断标准",
+      "why_graph_works": "检查值-年龄-诊断标准的条件关系",
+      "failure_risk": "medium",
+      "distractor_entities": [
+        "<50岁阈值>900（不同年龄段）",
+        "<300排除心衰（相反逻辑）"
+      ]
+    },
+    {
+      "id": "Q028",
+      "query": "患者张某使用达格列净的主要目的是什么？",
+      "query_type": "multi_hop",
+      "difficulty": "hard",
+      "recommended_retrieval": [
+        "hybrid_search",
+        "comprehensive_search"
+      ],
+      "answer": "达格列净（SGLT-2i）用于心肾保护，可降低心血管死亡风险38%、延缓eGFR下降40%，同时辅助降糖。",
+      "evidence_chunks": [
+        "8.4 治疗方案调整",
+        "1.4 SGLT-2抑制剂心肾保护作用"
+      ],
+      "reasoning_chain": [
+        "识别患者疾病：糖尿病 + 心衰 + CKD 3b期",
+        "查找达格列净作用：心肾保护 + 降糖",
+        "推理：多重获益，主要为心肾保护"
+      ],
+      "why_vector_may_fail": "需要理解药物在复杂病例中的多重作用",
+      "why_graph_works": "药物-多种疾病-多重疗效的复杂关系",
+      "failure_risk": "high",
+      "distractor_entities": [
+        "降糖作用（次要目的）",
+        "SGLT-2i副作用（泌尿感染）"
+      ]
+    },
+    {
+      "id": "Q029",
+      "query": "患者张某出院后1个月随访的主要目的是什么？",
+      "query_type": "temporal",
+      "difficulty": "medium",
+      "recommended_retrieval": [
+        "temporal_query",
+        "hybrid_search"
+      ],
+      "answer": "1个月后随访主要目的是心脏超声评估LVEF改善情况，并调整心衰药物剂量（比索洛尔滴定至2.5 mg/日）。",
+      "evidence_chunks": [
+        "8.5 随访计划"
+      ],
+      "keywords": [
+        "随访",
+        "1个月",
+        "心脏超声",
+        "LVEF",
+        "比索洛尔",
+        "滴定"
+      ],
+      "reasoning_chain": [
+        "识别时间点：1个月后",
+        "查找随访内容：心脏超声、药物滴定"
+      ],
+      "why_vector_may_fail": "需要精确的时间点匹配",
+      "why_temporal_works": "时间序列查询，1个月是关键时间节点",
+      "failure_risk": "medium",
+      "distractor_entities": [
+        "2周随访（复查肾功能）",
+        "3个月随访（复查HbA1c）"
+      ]
+    },
+    {
+      "id": "Q030",
+      "query": "患者张某的长期治疗目标有哪些？",
+      "query_type": "global",
+      "difficulty": "medium",
+      "recommended_retrieval": [
+        "full_document_read",
+        "comprehensive_search"
+      ],
+      "answer": "长期目标包括：血压<130/80 mmHg、HbA1c <7.0%、LDL-C <1.8 mmol/L、eGFR下降速率<3 mL/min/1.73m²/年、LVEF改善至>40%。",
+      "evidence_chunks": [
+        "8.5 随访计划"
+      ],
+      "keywords": [
+        "长期目标",
+        "血压",
+        "HbA1c",
+        "LDL-C",
+        "eGFR",
+        "LVEF"
+      ],
+      "why_vector_works": "明确询问目标列表",
+      "why_full_read_works": "需要完整的目标清单",
+      "failure_risk": "low",
+      "distractor_entities": []
+    }
+  ]
+}

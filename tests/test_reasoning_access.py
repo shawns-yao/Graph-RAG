@@ -11,7 +11,7 @@ _RULES_DIR = Path(__file__).parent.parent / "agentic_graph_rag" / "reasoning" / 
 
 def _eval_access(extra_facts: str = "") -> object:
     """Parse access.mg with extra facts and evaluate."""
-    source = (_RULES_DIR / "access.mg").read_text()
+    source = (_RULES_DIR / "access.mg").read_text(encoding="utf-8")
     full = extra_facts + "\n" + source
     program = parse(full)
     return eval_program(program)

@@ -12,6 +12,7 @@ data/*.pdf
 data/*.docx
 .venv/
 venv/
+.tmp/
 
 # Playwright MCP logs
 .playwright-mcp/
@@ -36,3 +37,4 @@ docs/HABR_ARTICLE.md
 
 # Windows artifacts
 *:Zone.Identifier
+.ace-tool/

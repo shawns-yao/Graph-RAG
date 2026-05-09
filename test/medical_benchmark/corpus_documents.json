@@ -1,0 +1,67 @@
+[
+  {
+    "doc_id": "med_doc_001",
+    "title": "慢性阻塞性肺疾病（COPD）诊疗指南",
+    "language": "zh",
+    "doc_category": "疾病综述",
+    "body_markdown": "# 慢性阻塞性肺疾病（COPD）诊疗指南\n\n## 1. 疾病定义与诊断标准\n\n慢性阻塞性肺疾病（Chronic Obstructive Pulmonary Disease, COPD）是一种以持续气流受限为特征的可预防和可治疗的疾病。诊断依据肺功能检查：使用支气管舒张剂后，FEV1/FVC < 0.70即可确诊。\n\n### 1.1 GOLD分级标准\n\n根据FEV1占预计值百分比分为4级：\n- GOLD 1级（轻度）：FEV1 ≥ 80%预计值\n- GOLD 2级（中度）：50% ≤ FEV1 < 80%预计值\n- GOLD 3级（重度）：30% ≤ FEV1 < 50%预计值\n- GOLD 4级（极重度）：FEV1 < 30%预计值\n\n### 1.2 症状评估\n\nmMRC呼吸困难量表评分：\n- 0分：仅在剧烈活动时出现呼吸困难\n- 1分：平地快走或爬缓坡时出现呼吸困难\n- 2分：因呼吸困难而比同龄人走得慢，或需停下来休息\n- 3分：平地行走100米或数分钟后需停下来喘气\n- 4分：因严重呼吸困难而不能离开房间，或穿脱衣服时出现呼吸困难\n\nCAT评分（COPD评估测试）：总分0-40分，≥10分提示症状负担较重。\n\n## 2. 药物治疗方案\n\n### 2.1 支气管舒张剂\n\n**短效β2受体激动剂（SABA）**：\n- 沙丁胺醇（Salbutamol）：100-200 μg/次，按需使用，每日不超过8次\n- 起效时间：5-15分钟\n- 持续时间：4-6小时\n\n**长效β2受体激动剂（LABA）**：\n- 福莫特罗（Formoterol）：12 μg，每日2次\n- 茚达特罗（Indacaterol）：150 μg，每日1次\n- 持续时间：12-24小时\n\n**长效抗胆碱能药物（LAMA）**：\n- 噻托溴铵（Tiotropium）：18 μg，每日1次\n- 格隆溴铵（Glycopyrronium）：50 μg，每日1次\n- 起效时间：30-60分钟\n- 持续时间：24小时",
+    "tables": [
+      {
+        "table_id": "table_001_1",
+        "caption": "COPD药物治疗选择矩阵",
+        "markdown": "| GOLD分级 | 症状负担 | 急性加重史 | 嗜酸性粒细胞 | 推荐方案 |\n|---------|---------|-----------|------------|----------|\n| 1级 | 轻 | 0-1次/年 | 任意 | SABA按需 |\n| 2级 | 轻-中 | 0-1次/年 | 任意 | LABA或LAMA |\n| 2级 | 中-重 | ≥2次/年 | <100/μL | LABA+LAMA |\n| 2级 | 中-重 | ≥2次/年 | ≥300/μL | LABA+ICS |\n| 3-4级 | 重 | ≥2次/年 | <100/μL | LABA+LAMA |\n| 3-4级 | 重 | ≥2次/年 | ≥100/μL | LABA+LAMA+ICS |",
+        "key_facts": [
+          "GOLD 1级仅需按需使用SABA",
+          "嗜酸性粒细胞≥300/μL时考虑ICS",
+          "GOLD 3-4级且嗜酸性粒细胞≥100/μL时使用三联方案"
+        ]
+      }
+    ],
+    "image_descriptions": [],
+    "formulas": [],
+    "key_entities": [
+      {"name": "慢性阻塞性肺疾病", "entity_type": "疾病", "aliases": ["COPD", "慢阻肺"]},
+      {"name": "FEV1", "entity_type": "检查指标", "aliases": ["第一秒用力呼气容积"]},
+      {"name": "沙丁胺醇", "entity_type": "药物", "aliases": ["Salbutamol", "SABA"]},
+      {"name": "福莫特罗", "entity_type": "药物", "aliases": ["Formoterol", "LABA"]},
+      {"name": "噻托溴铵", "entity_type": "药物", "aliases": ["Tiotropium", "LAMA"]},
+      {"name": "嗜酸性粒细胞", "entity_type": "检查指标", "aliases": ["嗜酸细胞"]},
+      {"name": "mMRC", "entity_type": "评分量表", "aliases": ["呼吸困难量表"]},
+      {"name": "CAT", "entity_type": "评分量表", "aliases": ["COPD评估测试"]},
+      {"name": "GOLD分级", "entity_type": "分级系统", "aliases": ["GOLD标准"]},
+      {"name": "ICS", "entity_type": "药物", "aliases": ["吸入糖皮质激素"]},
+      {"name": "急性加重", "entity_type": "并发症", "aliases": ["AECOPD"]},
+      {"name": "肺功能检查", "entity_type": "检查", "aliases": ["肺功能测试"]},
+      {"name": "FVC", "entity_type": "检查指标", "aliases": ["用力肺活量"]},
+      {"name": "茚达特罗", "entity_type": "药物", "aliases": ["Indacaterol"]},
+      {"name": "格隆溴铵", "entity_type": "药物", "aliases": ["Glycopyrronium"]},
+      {"name": "支气管舒张剂", "entity_type": "药物类别", "aliases": ["舒张剂"]},
+      {"name": "SABA", "entity_type": "药物类别", "aliases": ["短效β2受体激动剂"]},
+      {"name": "LABA", "entity_type": "药物类别", "aliases": ["长效β2受体激动剂"]},
+      {"name": "LAMA", "entity_type": "药物类别", "aliases": ["长效抗胆碱能药物"]}
+    ],
+    "key_relations": [
+      {"source": "COPD", "relation": "诊断依据", "target": "FEV1/FVC < 0.70", "support_hint": "1. 疾病定义与诊断标准"},
+      {"source": "GOLD 1级", "relation": "定义为", "target": "FEV1 ≥ 80%预计值", "support_hint": "1.1 GOLD分级标准"},
+      {"source": "GOLD 2级", "relation": "定义为", "target": "50% ≤ FEV1 < 80%预计值", "support_hint": "1.1 GOLD分级标准"},
+      {"source": "GOLD 3级", "relation": "定义为", "target": "30% ≤ FEV1 < 50%预计值", "support_hint": "1.1 GOLD分级标准"},
+      {"source": "GOLD 4级", "relation": "定义为", "target": "FEV1 < 30%预计值", "support_hint": "1.1 GOLD分级标准"},
+      {"source": "CAT评分", "relation": "阈值", "target": "≥10分提示症状负担较重", "support_hint": "1.2 症状评估"},
+      {"source": "沙丁胺醇", "relation": "剂量", "target": "100-200 μg/次", "support_hint": "2.1 支气管舒张剂"},
+      {"source": "沙丁胺醇", "relation": "起效时间", "target": "5-15分钟", "support_hint": "2.1 支气管舒张剂"},
+      {"source": "沙丁胺醇", "relation": "持续时间", "target": "4-6小时", "support_hint": "2.1 支气管舒张剂"},
+      {"source": "福莫特罗", "relation": "剂量", "target": "12 μg每日2次", "support_hint": "2.1 支气管舒张剂"},
+      {"source": "噻托溴铵", "relation": "剂量", "target": "18 μg每日1次", "support_hint": "2.1 支气管舒张剂"},
+      {"source": "噻托溴铵", "relation": "起效时间", "target": "30-60分钟", "support_hint": "2.1 支气管舒张剂"},
+      {"source": "GOLD 1级", "relation": "推荐治疗", "target": "SABA按需", "support_hint": "table_001_1"},
+      {"source": "GOLD 2级且嗜酸性粒细胞≥300/μL", "relation": "推荐治疗", "target": "LABA+ICS", "support_hint": "table_001_1"},
+      {"source": "GOLD 3-4级且嗜酸性粒细胞≥100/μL", "relation": "推荐治疗", "target": "LABA+LAMA+ICS", "support_hint": "table_001_1"}
+    ],
+    "distractors": [
+      "GOLD 2级和GOLD 3级的FEV1阈值都是50%，容易混淆",
+      "SABA和LABA的起效时间不同",
+      "不同嗜酸性粒细胞阈值对应不同治疗方案（100 vs 300）"
+    ],
+    "expected_question_capacity": 30
+  }
+]

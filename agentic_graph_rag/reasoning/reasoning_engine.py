@@ -9,6 +9,7 @@ from pymangle.ast_nodes import Constant, TermType
 from pymangle.engine import eval_program
 from pymangle.external import ExternalPredicateRegistry
 from pymangle.parser import parse
+from rag_core.neo4j_utils import open_neo4j_session
 
 if TYPE_CHECKING:
     from neo4j import Driver
@@ -34,7 +35,7 @@ class _Neo4jEdgePredicate:
                 "WHERE a.name = $name "
                 "RETURN a.name AS src, type(r) AS rel, b.name AS tgt LIMIT 50"
             )
-            with self._driver.session() as session:
+            with open_neo4j_session(self._driver) as session:
                 result = session.run(cypher, name=source_name)
                 for record in result:
                     yield [
@@ -47,7 +48,7 @@ class _Neo4jEdgePredicate:
                 "MATCH (a:PhraseNode)-[r:RELATED_TO]->(b:PhraseNode) "
                 "RETURN a.name AS src, type(r) AS rel, b.name AS tgt LIMIT 200"
             )
-            with self._driver.session() as session:
+            with open_neo4j_session(self._driver) as session:
                 result = session.run(cypher)
                 for record in result:
                     yield [
@@ -76,7 +77,7 @@ class _Neo4jMentionedInPredicate:
                 "RETURN p.name AS entity, s.chunk_id AS passage_id, "
                 "LEFT(s.text, 200) AS text LIMIT 50"
             )
-            with self._driver.session() as session:
+            with open_neo4j_session(self._driver) as session:
                 result = session.run(cypher, name=entity_name)
                 for record in result:
                     yield [
@@ -152,7 +153,7 @@ class ReasoningEngine:
             logger.warning("Rules directory does not exist: %s", self._rules_dir)
             return
         for path in sorted(self._rules_dir.glob("*.mg")):
-            self._rule_sources[path.stem] = path.read_text()
+            self._rule_sources[path.stem] = path.read_text(encoding="utf-8")
             logger.info("Loaded rule file: %s", path.name)
 
     def _build_registry(self) -> ExternalPredicateRegistry:

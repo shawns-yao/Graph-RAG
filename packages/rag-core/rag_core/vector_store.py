@@ -11,6 +11,7 @@ from typing import TYPE_CHECKING
 
 from rag_core.config import get_settings
 from rag_core.models import Chunk, SearchResult
+from rag_core.neo4j_utils import open_neo4j_session
 
 if TYPE_CHECKING:
     from neo4j import Driver
@@ -43,7 +44,7 @@ class VectorStore:
     def init_index(self) -> None:
         """Create vector index in Neo4j if it doesn't exist."""
         cfg = get_settings()
-        with self._driver.session() as session:
+        with open_neo4j_session(self._driver) as session:
             session.run(
                 f"""
                 CREATE VECTOR INDEX {INDEX_NAME} IF NOT EXISTS
@@ -65,7 +66,7 @@ class VectorStore:
         if not chunks:
             return 0
 
-        with self._driver.session() as session:
+        with open_neo4j_session(self._driver) as session:
             for chunk in chunks:
                 chunk_id = chunk.id or hashlib.md5(chunk.content.encode()).hexdigest()
                 session.run(
@@ -95,7 +96,7 @@ class VectorStore:
         if top_k is None:
             top_k = get_settings().retrieval.top_k_vector
 
-        with self._driver.session() as session:
+        with open_neo4j_session(self._driver) as session:
             result = session.run(
                 f"""
                 CALL db.index.vector.queryNodes(
@@ -127,7 +128,7 @@ class VectorStore:
 
     def delete_all(self) -> int:
         """Delete all RagChunk nodes. Returns count deleted."""
-        with self._driver.session() as session:
+        with open_neo4j_session(self._driver) as session:
             result = session.run(
                 f"""
                 MATCH (c:{NODE_LABEL})
@@ -144,7 +145,7 @@ class VectorStore:
 
     def count(self) -> int:
         """Return total number of chunks."""
-        with self._driver.session() as session:
+        with open_neo4j_session(self._driver) as session:
             result = session.run(
                 f"MATCH (c:{NODE_LABEL}) RETURN count(c) AS total"
             )

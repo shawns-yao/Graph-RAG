@@ -12,9 +12,10 @@ from rag_core.config import get_settings, make_openai_client
 from rag_core.models import Chunk
 
 logger = logging.getLogger(__name__)
+_DEFAULT_EMBED_BATCH_SIZE = 64
 
 
-def embed_chunks(chunks: list[Chunk]) -> list[Chunk]:
+def embed_chunks(chunks: list[Chunk], openai_client=None) -> list[Chunk]:
     """Batch embed chunks using OpenAI Embeddings API.
 
     Uses enriched_content (context + content) if available.
@@ -24,18 +25,21 @@ def embed_chunks(chunks: list[Chunk]) -> list[Chunk]:
         return chunks
 
     cfg = get_settings()
-    client = make_openai_client(cfg)
+    client = openai_client or make_openai_client(cfg)
 
     texts = [chunk.enriched_content for chunk in chunks]
+    batch_size = max(1, getattr(cfg.ingest, "embedding_batch_size", _DEFAULT_EMBED_BATCH_SIZE))
 
     try:
-        response = client.embeddings.create(
-            model=cfg.openai.embedding_model,
-            input=texts,
-        )
-
-        for i, chunk in enumerate(chunks):
-            chunk.embedding = response.data[i].embedding
+        for offset in range(0, len(chunks), batch_size):
+            batch_chunks = chunks[offset : offset + batch_size]
+            batch_texts = texts[offset : offset + batch_size]
+            response = client.embeddings.create(
+                model=cfg.openai.embedding_model,
+                input=batch_texts,
+            )
+            for index, chunk in enumerate(batch_chunks):
+                chunk.embedding = response.data[index].embedding
 
         logger.info("Embedded %d chunks (%s)", len(chunks), cfg.openai.embedding_model)
 

@@ -1,383 +1,377 @@
-"""Benchmark runner — evaluate retrieval modes across test questions.
-
-Runs 5 modes: vector-only, cypher, hybrid, agent (pattern), agent (LLM).
-Computes accuracy via LLM-as-judge, records latency and retries.
-"""
+"""Local benchmark runner using GraphRAG-Benchmark style evaluation metrics."""
 
 from __future__ import annotations
 
+import argparse
+import asyncio
+from concurrent.futures import ThreadPoolExecutor, as_completed
 import json
-import logging
+import sys
 import time
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
-from rag_core.config import get_settings
-from rag_core.models import QAResult
+from neo4j import GraphDatabase
 
-if TYPE_CHECKING:
-    from openai import OpenAI
+from benchmark.adapters import OpenAIAsyncEmbeddings, OpenAIAsyncJudge
+from benchmark.generation_eval import evaluate_dataset as evaluate_generation_dataset
+from benchmark.retrieval_eval import evaluate_dataset as evaluate_retrieval_dataset
+from rag_core.config import get_settings, make_openai_client
+from rag_core.generator import generate_answer
 
-logger = logging.getLogger(__name__)
+from agentic_graph_rag.agent.retrieval_agent import run as agent_run
+from agentic_graph_rag.agent.tools import bm25_search, cypher_traverse, hybrid_search, vector_search
 
-QUESTIONS_PATH = Path(__file__).parent / "questions.json"
+QUESTION_TYPE_TO_GENERATION_METRICS = {
+    "Fact Retrieval": ["rouge_score", "answer_correctness"],
+    "Relation Reasoning": ["rouge_score", "answer_correctness"],
+    "Multi-hop Reasoning": ["rouge_score", "answer_correctness"],
+    "Temporal Reasoning": ["rouge_score", "answer_correctness"],
+    "Global Summarization": ["answer_correctness", "coverage_score"],
+}
 
-# ---------------------------------------------------------------------------
-# LLM-as-judge evaluation
-# ---------------------------------------------------------------------------
-
-_JUDGE_PROMPT = """You are evaluating a RAG system answer.
-
-Question: {question}
-Expected keywords/concepts: {keywords}
-System answer: {answer}
-
-IMPORTANT: The answer may be in Russian while keywords are in English.
-Match CONCEPTS and meanings, not exact strings.
-For example: "ontology" matches "онтология", "extraction" matches "извлечение",
-"graph" matches "граф", "temporal" matches "временных", etc.
-
-Does the answer correctly address the question and cover the expected concepts?
-For enumeration questions (list all, describe all, перечисли, опиши все), check that
-the answer lists MOST of the expected keywords/concepts (at least 50%).
-Reply with ONLY one word: PASS or FAIL"""
-
-
-def _keyword_overlap(answer: str, keywords: list[str]) -> float:
-    """Return fraction of keywords found in answer (case-insensitive)."""
-    if not keywords:
-        return 0.0
-    lower = answer.lower()
-    found = sum(1 for k in keywords if k.lower() in lower)
-    return found / len(keywords)
+EMPTY_ANSWER_PREFIX = "I don't have enough context to answer this question."
+DEFAULT_MAX_CONSECUTIVE_EMPTY_RESULTS = 3
+LEGACY_QUESTIONS_PATH = Path(__file__).with_name("questions.json")
+MEDICAL_QUESTIONS_PATH = (
+    Path(__file__).resolve().parent.parent
+    / "test"
+    / "medical_benchmark"
+    / "questions_master.json"
+)
 
 
-def _embedding_similarity(text_a: str, text_b: str, openai_client: OpenAI) -> float:
-    """Cosine similarity between embeddings of two texts."""
-    cfg = get_settings()
+def _write_payload(payload: dict[str, Any]) -> None:
+    text = json.dumps(payload, ensure_ascii=False, indent=2)
     try:
-        resp = openai_client.embeddings.create(
-            model=cfg.openai.embedding_model,
-            input=[text_a[:8000], text_b[:8000]],
-        )
-        vec_a = resp.data[0].embedding
-        vec_b = resp.data[1].embedding
-        dot = sum(a * b for a, b in zip(vec_a, vec_b))
-        norm_a = sum(a * a for a in vec_a) ** 0.5
-        norm_b = sum(b * b for b in vec_b) ** 0.5
-        return dot / (norm_a * norm_b) if norm_a and norm_b else 0.0
-    except Exception as e:
-        logger.error("Embedding similarity failed: %s", e)
-        return 0.0
+        print(text)
+    except UnicodeEncodeError:
+        if getattr(sys.stdout, "buffer", None) is not None:
+            sys.stdout.buffer.write((text + "\n").encode("utf-8"))
+            sys.stdout.buffer.flush()
+        else:
+            raise
 
 
-_JUDGE_PROMPT_REF = """You are evaluating a RAG system answer against a reference.
+def _load_questions(path: str) -> list[dict[str, Any]]:
+    payload = json.loads(Path(path).read_text(encoding="utf-8"))
+    if isinstance(payload, dict) and isinstance(payload.get("questions"), list):
+        payload = payload["questions"]
+    if not isinstance(payload, list):
+        raise ValueError("questions file must be a JSON array")
+    questions: list[dict[str, Any]] = []
+    for item in payload:
+        if not isinstance(item, dict):
+            continue
+        row = dict(item)
+        if "question" not in row and "query" in row:
+            row["question"] = row["query"]
+        if "question_type" in row:
+            row["question_type"] = _normalize_question_type(str(row["question_type"]))
+        if "evidence" not in row and isinstance(row.get("evidence_chunks"), list):
+            row["evidence"] = "; ".join(str(value) for value in row["evidence_chunks"])
+        questions.append(row)
+    return questions
 
-Question: {question}
-Reference answer: {reference_answer}
-System answer: {answer}
 
-Does the system answer cover the same THEMES as the reference?
-Match meanings and concepts, not exact words. The answer may use different terminology.
-For example: "Multi-backend strategy" matches "Southbound Execution Adapters",
-"Output contract with ConstraintSet" matches "Portable Semantic Outputs with provenance".
-For enumeration questions (7 items), PASS if at least 4 themes overlap semantically.
-Reply ONLY: PASS or FAIL"""
+def load_questions(path: str | None = None) -> list[dict[str, Any]]:
+    """Load legacy benchmark questions when no explicit path is supplied."""
+    if path is not None:
+        return _load_questions(path)
+    if LEGACY_QUESTIONS_PATH.exists():
+        return _load_questions(str(LEGACY_QUESTIONS_PATH))
+    return _load_questions(str(MEDICAL_QUESTIONS_PATH))
 
 
-def evaluate_answer(
-    question: str,
-    answer: str,
-    keywords: list[str],
-    openai_client: OpenAI,
-    reference_answer: str = "",
-) -> bool:
-    """Hybrid judge: embedding similarity / keyword overlap shortcut + LLM judge."""
-    # Fast path 1: embedding similarity with reference answer ≥ 0.65 → auto-PASS
-    # Threshold calibrated: correct SCL answer ~0.68, wrong Doc1 answer ~0.57
-    if reference_answer:
-        similarity = _embedding_similarity(answer, reference_answer, openai_client)
-        if similarity >= 0.65:
-            return True
+def _normalize_question_type(value: str) -> str:
+    mapping = {
+        "simple": "Fact Retrieval",
+        "fact": "Fact Retrieval",
+        "fact retrieval": "Fact Retrieval",
+        "relation": "Relation Reasoning",
+        "relation reasoning": "Relation Reasoning",
+        "multi_hop": "Multi-hop Reasoning",
+        "multihop": "Multi-hop Reasoning",
+        "multi-hop reasoning": "Multi-hop Reasoning",
+        "temporal": "Temporal Reasoning",
+        "temporal reasoning": "Temporal Reasoning",
+        "global": "Global Summarization",
+        "global summarization": "Global Summarization",
+    }
+    return mapping.get(value.strip().casefold(), value)
 
-    # Fast path 2: high keyword overlap → auto-PASS
-    overlap = _keyword_overlap(answer, keywords)
-    threshold = 0.65 if _is_global_query(question) else 0.4
-    if overlap >= threshold:
-        return True
 
-    # LLM judge fallback
-    cfg = get_settings()
-    if reference_answer:
-        prompt_text = _JUDGE_PROMPT_REF.format(
-            question=question,
-            reference_answer=reference_answer,
-            answer=answer[:2000],
-        )
+def _split_evidences(raw: str) -> list[str]:
+    return [part.strip() for part in raw.split(";") if part.strip()]
+
+
+def _run_mode(mode: str, question: str, driver: Any, client: Any) -> Any:
+    if mode == "graph_only":
+        results = cypher_traverse(question, driver, client)
+    elif mode == "graph_h2":
+        results = cypher_traverse(question, driver, client, max_hops=2)
+    elif mode == "graph_h3":
+        results = cypher_traverse(question, driver, client, max_hops=3)
+    elif mode == "vector_only":
+        results = vector_search(question, driver, client)
+    elif mode == "bm25_only":
+        results = bm25_search(question, driver, client)
+    elif mode == "hybrid":
+        results = hybrid_search(question, driver, client, rerank_enabled=False)
+    elif mode == "hybrid_rerank":
+        results = hybrid_search(question, driver, client, rerank_enabled=True)
     else:
-        prompt_text = _JUDGE_PROMPT.format(
-            question=question,
-            keywords=", ".join(keywords),
-            answer=answer[:2000],
-        )
-
-    try:
-        response = openai_client.chat.completions.create(
-            model=cfg.openai.llm_model_mini,
-            messages=[{"role": "user", "content": prompt_text}],
-            temperature=0.0,
-        )
-        text = (response.choices[0].message.content or "").strip()
-        verdict = text.split("\n")[-1].strip().upper()
-        return verdict == "PASS"
-    except Exception as e:
-        logger.error("Judge failed: %s", e)
-        return False
+        raise ValueError(f"Unsupported mode: {mode}")
+    return generate_answer(question, results, client)
 
 
-# ---------------------------------------------------------------------------
-# Global query detection
-# ---------------------------------------------------------------------------
-
-import re
-
-_GLOBAL_RE = re.compile(
-    r'\b('
-    r'все\b|всех\b|всё\b|перечисл|опиши все|резюмируй все|обзор\b'
-    r'|list all|describe all|summarize all|overview|every\b'
-    r'|все компоненты|все методы|все слои|все решения'
-    r'|all components|all layers|all methods|all decisions'
-    r')\b',
-    re.IGNORECASE,
-)
-
-# "What X are mentioned?" — frameworks scattered across chunks need comprehensive search
-_MENTION_RE = re.compile(
-    r'\b('
-    r'упоминаются|упоминается|упомянуты|упомянут'
-    r'|mentioned|are described|are discussed|are listed'
-    r'|какие\b.*\b(фреймворк|инструмент|технолог|метод|подход)'
-    r'|what\b.*\b(framework|tool|technolog|method|approach)s?\b.*\b(mentioned|described|used)'
-    r')\b',
-    re.IGNORECASE,
-)
+def _legacy_vector(question: str, driver: Any, client: Any) -> Any:
+    return generate_answer(question, vector_search(question, driver, client), client)
 
 
-def _is_global_query(query: str) -> bool:
-    """Detect global/enumeration queries that need comprehensive retrieval."""
-    return bool(_GLOBAL_RE.search(query))
+def _legacy_cypher(question: str, driver: Any, client: Any) -> Any:
+    return generate_answer(question, cypher_traverse(question, driver, client), client)
 
 
-def _needs_comprehensive(query: str) -> bool:
-    """Detect queries that need comprehensive retrieval (global or mention-type)."""
-    return _is_global_query(query) or bool(_MENTION_RE.search(query)) or _is_cross_language_query(query)
+def _legacy_hybrid(question: str, driver: Any, client: Any) -> Any:
+    return generate_answer(question, hybrid_search(question, driver, client), client)
 
 
-# Cross-language detection: RU question about EN-only concepts (Doc2)
-_DOC2_CONCEPTS_RE = re.compile(
-    r'\b('
-    r'semantic\s+c(ore|ompanion)|SCL|companion\s+layer'
-    r'|семантическ\w*\s+(ядр|компаньон|слой)'
-    r'|семантического\s+ядра|семантическое\s+ядро'
-    r'|пайплайн\w*\s+семантическ'
-    r')\b',
-    re.IGNORECASE,
-)
+def _legacy_agent_pattern(question: str, driver: Any, client: Any) -> Any:
+    return agent_run(question, driver, openai_client=client, use_llm_router=False)
 
 
-def _is_cross_language_query(query: str) -> bool:
-    """Detect RU queries that target EN Document 2 (SCL) content."""
-    # If query is in Russian but references Doc2-specific concepts
-    has_cyrillic = bool(re.search(r'[а-яА-ЯёЁ]', query))
-    has_doc2_concept = bool(_DOC2_CONCEPTS_RE.search(query))
-    return has_cyrillic and has_doc2_concept
+def _legacy_agent_llm(question: str, driver: Any, client: Any) -> Any:
+    return agent_run(question, driver, openai_client=client, use_llm_router=True)
 
 
-# ---------------------------------------------------------------------------
-# Benchmark modes
-# ---------------------------------------------------------------------------
-
-def _pick_retrieval(query: str, driver: Any, client: OpenAI, fallback_fn: Any) -> list:
-    """Pick retrieval strategy: full_document_read for cross-language global, comprehensive, or fallback."""
-    from agentic_graph_rag.agent.tools import comprehensive_search, full_document_read
-
-    # Cross-language global queries: vector_search returns Doc1, full_document_read finds Doc2
-    if _is_cross_language_query(query) and _is_global_query(query):
-        return full_document_read(query, driver, client, top_k=20)
-    if _needs_comprehensive(query):
-        return comprehensive_search(query, driver, client)
-    return fallback_fn(query, driver, client)
-
-
-def _run_vector_only(
-    query: str, driver: Any, client: OpenAI,
-) -> QAResult:
-    """Vector search → generate answer. Uses comprehensive for global queries."""
-    from rag_core.generator import generate_answer
-
-    from agentic_graph_rag.agent.tools import vector_search
-
-    results = _pick_retrieval(query, driver, client, vector_search)
-    return generate_answer(query, results, client)
-
-
-def _run_cypher(
-    query: str, driver: Any, client: OpenAI,
-) -> QAResult:
-    """Cypher traversal → generate answer. Uses comprehensive for global queries."""
-    from rag_core.generator import generate_answer
-
-    from agentic_graph_rag.agent.tools import cypher_traverse
-
-    results = _pick_retrieval(query, driver, client, cypher_traverse)
-    return generate_answer(query, results, client)
-
-
-def _run_hybrid(
-    query: str, driver: Any, client: OpenAI,
-) -> QAResult:
-    """Hybrid (vector + graph) → generate answer. Uses comprehensive for global queries."""
-    from rag_core.generator import generate_answer
-
-    from agentic_graph_rag.agent.tools import hybrid_search
-
-    results = _pick_retrieval(query, driver, client, hybrid_search)
-    return generate_answer(query, results, client)
-
-
-def _run_agent_pattern(
-    query: str, driver: Any, client: OpenAI,
-) -> QAResult:
-    """Agent with pattern-based router."""
-    from agentic_graph_rag.agent.retrieval_agent import run
-
-    return run(query, driver, openai_client=client, use_llm_router=False)
-
-
-def _run_agent_llm(
-    query: str, driver: Any, client: OpenAI,
-) -> QAResult:
-    """Agent with LLM-based router."""
-    from agentic_graph_rag.agent.retrieval_agent import run
-
-    return run(query, driver, openai_client=client, use_llm_router=True)
-
-
-def _run_agent_mangle(
-    query: str, driver: Any, client: OpenAI,
-) -> QAResult:
-    """Agent with Mangle-based router (declarative rules)."""
-    from agentic_graph_rag.agent.retrieval_agent import run
-    from agentic_graph_rag.reasoning.reasoning_engine import ReasoningEngine
-
-    rules_dir = str(Path(__file__).parent.parent / "agentic_graph_rag" / "reasoning" / "rules")
-    engine = ReasoningEngine(rules_dir)
-    return run(query, driver, openai_client=client, reasoning=engine)
+def _legacy_agent_mangle(question: str, driver: Any, client: Any) -> Any:
+    return agent_run(question, driver, openai_client=client, use_llm_router=False, reasoning="mangle")
 
 
 MODES = {
-    "vector": _run_vector_only,
-    "cypher": _run_cypher,
-    "hybrid": _run_hybrid,
-    "agent_pattern": _run_agent_pattern,
-    "agent_llm": _run_agent_llm,
-    "agent_mangle": _run_agent_mangle,
+    "vector": _legacy_vector,
+    "cypher": _legacy_cypher,
+    "hybrid": _legacy_hybrid,
+    "agent_pattern": _legacy_agent_pattern,
+    "agent_llm": _legacy_agent_llm,
+    "agent_mangle": _legacy_agent_mangle,
 }
 
 
-# ---------------------------------------------------------------------------
-# Runner
-# ---------------------------------------------------------------------------
+def _is_empty_generation_row(row: dict[str, Any]) -> bool:
+    if row["contexts"]:
+        return False
+    answer = row["answer"].strip()
+    return not answer or answer.startswith(EMPTY_ANSWER_PREFIX)
 
-def load_questions(path: Path | None = None) -> list[dict[str, Any]]:
-    """Load benchmark questions from JSON file."""
-    p = path or QUESTIONS_PATH
-    with open(p) as f:
-        return json.load(f)
+
+def _to_eval_row(question: dict[str, Any], qa: Any, latency: float) -> dict[str, Any]:
+    contexts = [
+        (result.chunk.enriched_content or result.chunk.content or "").strip()
+        for result in qa.sources
+        if (result.chunk.enriched_content or result.chunk.content or "").strip()
+    ]
+    return {
+        "id": question.get("id"),
+        "question": str(question.get("question") or ""),
+        "question_type": str(question.get("question_type") or "Fact Retrieval"),
+        "answer": qa.answer,
+        "ground_truth": str(question.get("answer") or ""),
+        "contexts": contexts,
+        "evidences": _split_evidences(str(question.get("evidence") or "")),
+        "latency": latency,
+    }
+
+async def _score_mode(
+    rows: list[dict[str, Any]],
+    llm: Any,
+    embeddings: Any,
+    *,
+    eval_concurrency: int,
+) -> dict[str, Any]:
+    grouped_rows: dict[tuple[str, ...], list[dict[str, Any]]] = {}
+    for row in rows:
+        metrics = tuple(
+            QUESTION_TYPE_TO_GENERATION_METRICS.get(
+                row["question_type"],
+                ["rouge_score", "answer_correctness"],
+            )
+        )
+        grouped_rows.setdefault(metrics, []).append(row)
+
+    generation_scores: dict[str, list[float]] = {}
+    for metrics, metric_rows in grouped_rows.items():
+        result = await evaluate_generation_dataset(
+            metric_rows,
+            list(metrics),
+            llm,
+            embeddings,
+            max_concurrent=eval_concurrency,
+        )
+        for metric_name, score in result.items():
+            generation_scores.setdefault(metric_name, []).append(score)
+
+    retrieval_scores = await evaluate_retrieval_dataset(
+        rows,
+        llm,
+        max_concurrent=eval_concurrency,
+    )
+    avg_latency = sum(row["latency"] for row in rows) / len(rows) if rows else 0.0
+    return {
+        "generation": {
+            metric_name: sum(scores) / len(scores)
+            for metric_name, scores in generation_scores.items()
+        },
+        "retrieval": retrieval_scores,
+        "avg_latency": avg_latency,
+        "total": len(rows),
+    }
 
 
 def run_benchmark(
-    driver: Any,
-    openai_client: OpenAI,
-    modes: list[str] | None = None,
-    questions: list[dict[str, Any]] | None = None,
-    lang: str = "ru",
-) -> dict[str, list[dict[str, Any]]]:
-    """Run benchmark across specified modes.
+    *,
+    questions_path: str,
+    modes: list[str],
+    limit: int | None = None,
+    max_workers: int = 1,
+    eval_concurrency: int = 1,
+    max_consecutive_empty_results: int = DEFAULT_MAX_CONSECUTIVE_EMPTY_RESULTS,
+) -> dict[str, Any]:
+    cfg = get_settings()
+    driver = GraphDatabase.driver(cfg.neo4j.uri, auth=(cfg.neo4j.user, cfg.neo4j.password))
+    client = make_openai_client(cfg, profile="benchmark")
+    async_llm = OpenAIAsyncJudge(client, model=cfg.openai.llm_model_mini)
+    async_embeddings = OpenAIAsyncEmbeddings(client, model=cfg.openai.embedding_model)
+    questions = _load_questions(questions_path)
+    if limit is not None:
+        questions = questions[:limit]
 
-    Returns dict[mode_name → list of result dicts].
-    """
-    if questions is None:
-        questions = load_questions()
+    raw_results: dict[str, list[dict[str, Any]]] = {mode: [] for mode in modes}
+    mode_stats: dict[str, dict[str, Any]] = {}
+    try:
+        for mode in modes:
+            consecutive_empty_results = 0
+            empty_result_count = 0
+            abort_reason = ""
 
-    run_modes = modes or list(MODES.keys())
-    all_results: dict[str, list[dict[str, Any]]] = {}
+            def _execute(question: dict[str, Any]) -> dict[str, Any]:
+                started = time.perf_counter()
+                qa = _run_mode(mode, str(question.get("question") or ""), driver, client)
+                latency = time.perf_counter() - started
+                return _to_eval_row(question, qa, latency)
 
-    for mode_name in run_modes:
-        mode_fn = MODES.get(mode_name)
-        if mode_fn is None:
-            logger.warning("Unknown mode: %s — skipping", mode_name)
-            continue
+            if max_workers <= 1:
+                for question in questions:
+                    row = _execute(question)
+                    raw_results[mode].append(row)
+                    if _is_empty_generation_row(row):
+                        empty_result_count += 1
+                        consecutive_empty_results += 1
+                        if consecutive_empty_results >= max_consecutive_empty_results:
+                            abort_reason = (
+                                f"aborted after {consecutive_empty_results} consecutive empty retrieval/generation results"
+                            )
+                            break
+                    else:
+                        consecutive_empty_results = 0
+                mode_stats[mode] = {
+                    "empty_result_count": empty_result_count,
+                    "processed_questions": len(raw_results[mode]),
+                    "requested_questions": len(questions),
+                    "abort_reason": abort_reason,
+                }
+                continue
 
-        mode_results: list[dict[str, Any]] = []
-        for q in questions:
-            query = q.get(f"question_{lang}", q["question"])
-            start = time.monotonic()
-            try:
-                qa: QAResult = mode_fn(query, driver, openai_client)
-                latency = time.monotonic() - start
-                passed = evaluate_answer(
-                    query, qa.answer, q.get("keywords", []), openai_client,
-                    reference_answer=q.get("reference_answer", ""),
-                )
-                mode_results.append({
-                    "id": q["id"],
-                    "question": query,
-                    "type": q["type"],
-                    "answer": qa.answer,
-                    "confidence": qa.confidence,
-                    "retries": qa.retries,
-                    "latency": round(latency, 3),
-                    "passed": passed,
-                })
-            except Exception as e:
-                latency = time.monotonic() - start
-                logger.error("Benchmark error [%s] q%d: %s", mode_name, q["id"], e)
-                mode_results.append({
-                    "id": q["id"],
-                    "question": query,
-                    "type": q["type"],
-                    "answer": f"ERROR: {e}",
-                    "confidence": 0.0,
-                    "retries": 0,
-                    "latency": round(latency, 3),
-                    "passed": False,
-                })
+            ordered_rows: list[dict[str, Any] | None] = [None] * len(questions)
+            with ThreadPoolExecutor(max_workers=max_workers) as executor:
+                future_to_index = {
+                    executor.submit(_execute, question): index
+                    for index, question in enumerate(questions)
+                }
+                for future in as_completed(future_to_index):
+                    index = future_to_index[future]
+                    ordered_rows[index] = future.result()
+            raw_results[mode] = [row for row in ordered_rows if row is not None]
+            for row in raw_results[mode]:
+                if _is_empty_generation_row(row):
+                    empty_result_count += 1
+                    consecutive_empty_results += 1
+                    if consecutive_empty_results >= max_consecutive_empty_results and not abort_reason:
+                        abort_reason = (
+                            "parallel execution hit consecutive empty retrieval/generation "
+                            f"threshold ({max_consecutive_empty_results})"
+                        )
+                else:
+                    consecutive_empty_results = 0
+            mode_stats[mode] = {
+                "empty_result_count": empty_result_count,
+                "processed_questions": len(raw_results[mode]),
+                "requested_questions": len(questions),
+                "abort_reason": abort_reason,
+            }
+    finally:
+        driver.close()
 
-        all_results[mode_name] = mode_results
-        logger.info(
-            "Mode %s: %d/%d passed",
-            mode_name,
-            sum(1 for r in mode_results if r["passed"]),
-            len(mode_results),
+    summary: dict[str, Any] = {}
+    for mode, rows in raw_results.items():
+        summary[mode] = asyncio.run(
+            _score_mode(
+                rows,
+                async_llm,
+                async_embeddings,
+                eval_concurrency=eval_concurrency,
+            )
         )
+        summary[mode]["empty_result_count"] = mode_stats.get(mode, {}).get("empty_result_count", 0)
+        summary[mode]["processed_questions"] = mode_stats.get(mode, {}).get("processed_questions", len(rows))
+        summary[mode]["requested_questions"] = mode_stats.get(mode, {}).get("requested_questions", len(rows))
+        summary[mode]["abort_reason"] = mode_stats.get(mode, {}).get("abort_reason", "")
+    return {
+        "questions_path": questions_path,
+        "modes": modes,
+        "max_workers": max_workers,
+        "eval_concurrency": eval_concurrency,
+        "max_consecutive_empty_results": max_consecutive_empty_results,
+        "summary": summary,
+        "results": raw_results,
+    }
 
-    return all_results
+
+def main() -> None:
+    parser = argparse.ArgumentParser(description="Run GraphRAG-Benchmark style evaluation locally")
+    parser.add_argument("--questions", required=True, help="Path to GraphRAG-Benchmark question JSON")
+    parser.add_argument(
+        "--modes",
+        default="graph_only,graph_h2,graph_h3,vector_only,bm25_only,hybrid,hybrid_rerank",
+        help="Comma-separated retrieval modes",
+    )
+    parser.add_argument("--limit", type=int, default=None, help="Optional max questions to run")
+    parser.add_argument("--max-workers", type=int, default=1, help="Execution concurrency per mode")
+    parser.add_argument("--eval-concurrency", type=int, default=1, help="Metric evaluation concurrency")
+    parser.add_argument(
+        "--max-consecutive-empty-results",
+        type=int,
+        default=DEFAULT_MAX_CONSECUTIVE_EMPTY_RESULTS,
+        help="Abort a mode after this many consecutive empty retrieval/generation results",
+    )
+    parser.add_argument("--output", default="", help="Optional output JSON file")
+    args = parser.parse_args()
+
+    payload = run_benchmark(
+        questions_path=args.questions,
+        modes=[mode.strip() for mode in args.modes.split(",") if mode.strip()],
+        limit=args.limit,
+        max_workers=max(1, args.max_workers),
+        eval_concurrency=max(1, args.eval_concurrency),
+        max_consecutive_empty_results=max(1, args.max_consecutive_empty_results),
+    )
+    if args.output:
+        output_path = Path(args.output)
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        output_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+    _write_payload(payload)
 
 
 if __name__ == "__main__":
-    from neo4j import GraphDatabase
-    from rag_core.config import make_openai_client
-
-    logging.basicConfig(level=logging.INFO)
-    cfg = get_settings()
-    driver = GraphDatabase.driver(cfg.neo4j.uri, auth=(cfg.neo4j.user, cfg.neo4j.password))
-    client = make_openai_client(cfg)
-
-    results = run_benchmark(driver, client)
-
-    passed = sum(1 for mode in results.values() for r in mode if r["passed"])
-    total = sum(len(mode) for mode in results.values())
-    print(f"\nOverall: {passed}/{total} ({100 * passed / total:.1f}%)")
-
-    driver.close()
+    main()

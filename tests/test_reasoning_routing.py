@@ -55,21 +55,7 @@ class TestRoutingRules:
     def test_confidence_returned(self):
         """Result always contains the query string."""
         engine = ReasoningEngine(_RULES_DIR)
-        result = engine.classify_query("связь между сущностями")
+        result = engine.classify_query("show the relationship between entities")
         assert result is not None
         assert "query" in result
-        assert result["query"] == "связь между сущностями"
-
-    def test_bilingual_ru(self):
-        """Russian keywords work: связь → relation → cypher_traverse."""
-        engine = ReasoningEngine(_RULES_DIR)
-        result = engine.classify_query("покажи связь между узлами")
-        assert result is not None
-        assert result["tool"] == "cypher_traverse"
-
-    def test_bilingual_temporal_ru(self):
-        """Russian temporal keyword: когда → temporal → temporal_query."""
-        engine = ReasoningEngine(_RULES_DIR)
-        result = engine.classify_query("когда это произошло")
-        assert result is not None
-        assert result["tool"] == "temporal_query"
+        assert result["query"] == "show the relationship between entities"

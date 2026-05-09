@@ -1,0 +1,886 @@
+[
+  {
+    "doc_id": "med_doc_001_v1",
+    "base_title": "慢性阻塞性肺疾病（COPD）诊疗指南",
+    "clean_text_version": {
+      "format_target": "plain_markdown",
+      "body_markdown": "# 慢性阻塞性肺疾病（COPD）诊疗指南\n\n## 1. 疾病定义与诊断标准\n\n慢性阻塞性肺疾病（COPD）是一种以持续气流受限为特征的可预防和可治疗的疾病。诊断依据肺功能检查：使用支气管舒张剂后，FEV1/FVC < 0.70即可确诊。\n\n### 1.1 GOLD分级标准\n\n根据FEV1占预计值百分比分为4级：\n- GOLD 1级（轻度）：FEV1 ≥ 80%预计值\n- GOLD 2级（中度）：50% ≤ FEV1 < 80%预计值\n- GOLD 3级（重度）：30% ≤ FEV1 < 50%预计值\n- GOLD 4级（极重度）：FEV1 < 30%预计值\n\n### 1.2 症状评估\n\nmMRC呼吸困难量表评分0-4分，CAT评分0-40分（≥10分提示症状负担较重）。\n\n## 2. 药物治疗方案\n\n### 2.1 支气管舒张剂\n\nSABA（沙丁胺醇）：100-200 μg/次，起效5-15分钟，持续4-6小时。\nLABA（福莫特罗、茚达特罗）：持续12-24小时。\nLAMA（噻托溴铵、格隆溴铵）：起效30-60分钟，持续24小时。",
+      "table_blocks": [
+        {
+          "table_id": "t1",
+          "caption": "COPD药物治疗选择矩阵",
+          "markdown": "| GOLD分级 | 症状负担 | 急性加重史 | 嗜酸性粒细胞 | 推荐方案 |\n|---------|---------|-----------|------------|----------|\n| 1级 | 轻 | 0-1次/年 | 任意 | SABA按需 |\n| 2级 | 轻-中 | 0-1次/年 | 任意 | LABA或LAMA |\n| 2级 | 中-重 | ≥2次/年 | <100/μL | LABA+LAMA |\n| 2级 | 中-重 | ≥2次/年 | ≥300/μL | LABA+ICS |\n| 3-4级 | 重 | ≥2次/年 | <100/μL | LABA+LAMA |\n| 3-4级 | 重 | ≥2次/年 | ≥100/μL | LABA+LAMA+ICS |",
+          "key_cells": []
+        }
+      ],
+      "image_blocks": [],
+      "formula_blocks": []
+    },
+    "complex_layout_version": {
+      "target_formats": ["docx", "pdf"],
+      "page_plan": [
+        {"page": 1, "elements": ["标题", "1.疾病定义", "1.1 GOLD分级", "图1开始"]},
+        {"page": 2, "elements": ["图1结束+图注", "1.2症状评估", "表1开始"]},
+        {"page": 3, "elements": ["表1跨页继续", "2.药物治疗", "公式1"]}
+      ],
+      "section_layouts": [
+        {"section": "标题", "style": "居中加粗", "font_size": 18},
+        {"section": "一级标题", "style": "左对齐加粗", "font_size": 16},
+        {"section": "二级标题", "style": "左对齐加粗", "font_size": 14},
+        {"section": "正文", "style": "两端对齐", "font_size": 12},
+        {"section": "列表", "style": "缩进编号", "font_size": 12}
+      ],
+      "table_blocks": [
+        {
+          "table_id": "t1",
+          "page_hint": "2-3",
+          "caption": "表1. COPD药物治疗选择矩阵（详见第2页）",
+          "markdown": "| GOLD分级 | 症状负担 | 急性加重史 | 嗜酸性粒细胞 | 推荐方案 |\n|---------|---------|-----------|------------|----------|\n| 1级 | 轻 | 0-1次/年 | 任意 | SABA按需 |\n| 2级 | 轻-中 | 0-1次/年 | 任意 | LABA或LAMA |\n| 2级 | 中-重 | ≥2次/年 | <100/μL | LABA+LAMA |\n| 2级 | 中-重 | ≥2次/年 | ≥300/μL | LABA+ICS |\n| 3-4级 | 重 | ≥2次/年 | <100/μL | LABA+LAMA |\n| 3-4级 | 重 | ≥2次/年 | ≥100/μL | LABA+LAMA+ICS |",
+          "should_span_pages": true,
+          "key_cells": ["GOLD 3-4级+≥100/μL→三联方案", "嗜酸性粒细胞≥300/μL→LABA+ICS"]
+        }
+      ],
+      "image_blocks": [
+        {
+          "image_id": "img1",
+          "page_hint": "1-2",
+          "caption": "图1. COPD诊断流程图（图注位于第2页顶部）",
+          "visible_text": "肺功能检查 → FEV1/FVC < 0.70 → COPD确诊 → GOLD分级",
+          "intended_ocr_text": "肺功能检查\nFEV1/FVC < 0.70\nCOPD确诊\nGOLD 1-4级分级",
+          "key_facts": ["FEV1/FVC < 0.70是诊断阈值", "GOLD分级依据FEV1占预计值百分比"]
+        }
+      ],
+      "formula_blocks": [
+        {
+          "formula_id": "f1",
+          "page_hint": "3",
+          "latex": "FEV1/FVC = \\frac{第一秒用力呼气容积}{用力肺活量}",
+          "rendered_caption": "公式1. FEV1/FVC比值计算",
+          "natural_language_meaning": "FEV1/FVC比值等于第一秒用力呼气容积除以用力肺活量，小于0.70提示气流受限"
+        }
+      ],
+      "cross_references": [
+        {"from": "正文1.1节", "to": "图1", "text": "如图1所示"},
+        {"from": "正文2.1节", "to": "表1", "text": "治疗方案详见表1"},
+        {"from": "正文1.疾病定义", "to": "公式1", "text": "诊断依据公式1"}
+      ],
+      "layout_noise": [
+        "图1跨页，图注与图片分离",
+        "表1跨页断裂",
+        "公式1位于第3页，但正文引用在第1页"
+      ],
+      "expected_parsing_risks": [
+        "图1的OCR文字可能与图注混淆",
+        "表1跨页后行对应关系可能错位",
+        "公式1的LaTeX可能被识别为普通文本"
+      ]
+    }
+  }
+]
+,
+  {
+    "doc_id": "med_doc_002_v1",
+    "base_title": "2型糖尿病诊疗规范",
+    "clean_text_version": {
+      "format_target": "plain_markdown",
+      "body_markdown": "# 2型糖尿病诊疗规范\n\n## 1. 诊断标准\n\n空腹血糖≥7.0 mmol/L，或餐后2小时血糖≥11.1 mmol/L，或HbA1c≥6.5%。\n\n## 2. 血糖控制目标\n\n一般成人：HbA1c < 7.0%\n老年人：HbA1c < 7.5-8.0%\n妊娠期：空腹血糖 < 5.3 mmol/L\n\n## 3. 降糖药物分类\n\n二甲双胍：首选，500-2000 mg/日\nSGLT-2抑制剂：达格列净10 mg/日\nGLP-1受体激动剂：利拉鲁肽1.2-1.8 mg/日\n胰岛素：根据血糖调整剂量",
+      "table_blocks": [
+        {
+          "table_id": "t1",
+          "caption": "降糖药物选择矩阵",
+          "markdown": "| HbA1c | 有无并发症 | 肾功能 | 首选方案 | 次选方案 |\n|-------|-----------|--------|---------|----------|\n| <8.0% | 无 | 正常 | 二甲双胍 | SGLT-2i |\n| <8.0% | 心血管病 | 正常 | GLP-1 RA | SGLT-2i |\n| ≥8.0% | 无 | 正常 | 二甲双胍+SGLT-2i | 二甲双胍+GLP-1 RA |\n| ≥9.0% | 任意 | 正常 | 胰岛素±二甲双胍 | 三联方案 |",
+          "key_cells": []
+        }
+      ],
+      "image_blocks": [],
+      "formula_blocks": []
+    },
+    "complex_layout_version": {
+      "target_formats": ["docx", "pdf"],
+      "page_plan": [
+        {"page": 1, "elements": ["标题", "1.诊断标准", "图1血糖监测流程"]},
+        {"page": 2, "elements": ["2.血糖控制目标", "表1开始", "附注1"]},
+        {"page": 3, "elements": ["表1跨页继续", "3.降糖药物", "图2药物作用机制"]},
+        {"page": 4, "elements": ["图2图注", "公式1", "公式2"]}
+      ],
+      "section_layouts": [
+        {"section": "标题", "style": "居中加粗", "font_size": 18},
+        {"section": "正文", "style": "两端对齐", "font_size": 12},
+        {"section": "附注", "style": "灰色小字", "font_size": 10}
+      ],
+      "table_blocks": [
+        {
+          "table_id": "t1",
+          "page_hint": "2-3",
+          "caption": "表1. 降糖药物选择矩阵（续表见第3页）",
+          "markdown": "| HbA1c | 有无并发症 | 肾功能 | 首选方案 | 次选方案 |\n|-------|-----------|--------|---------|----------|\n| <8.0% | 无 | 正常 | 二甲双胍 | SGLT-2i |\n| <8.0% | 心血管病 | 正常 | GLP-1 RA | SGLT-2i |\n| <8.0% | 肾病 | eGFR<30 | 胰岛素 | DPP-4i |\n| ≥8.0% | 无 | 正常 | 二甲双胍+SGLT-2i | 二甲双胍+GLP-1 RA |\n| ≥8.0% | 心血管病 | 正常 | 二甲双胍+GLP-1 RA | 二甲双胍+SGLT-2i |\n| ≥9.0% | 任意 | 正常 | 胰岛素±二甲双胍 | 三联方案 |",
+          "should_span_pages": true,
+          "key_cells": ["HbA1c≥9.0%→胰岛素", "心血管病→GLP-1 RA优先", "eGFR<30→避免二甲双胍"]
+        }
+      ],
+      "image_blocks": [
+        {
+          "image_id": "img1",
+          "page_hint": "1",
+          "caption": "图1. 血糖监测流程",
+          "visible_text": "空腹血糖 → ≥7.0 mmol/L → 确诊糖尿病\n餐后2h血糖 → ≥11.1 mmol/L → 确诊糖尿病\nHbA1c → ≥6.5% → 确诊糖尿病",
+          "intended_ocr_text": "空腹血糖≥7.0 mmol/L\n餐后2h血糖≥11.1 mmol/L\nHbA1c≥6.5%\n三项满足任一即可确诊",
+          "key_facts": ["三项诊断标准任一满足即可", "HbA1c≥6.5%是诊断阈值"]
+        },
+        {
+          "image_id": "img2",
+          "page_hint": "3-4",
+          "caption": "图2. 降糖药物作用机制示意图（图注见第4页）",
+          "visible_text": "二甲双胍 → 抑制肝糖输出\nSGLT-2i → 促进尿糖排泄\nGLP-1 RA → 促进胰岛素分泌\n胰岛素 → 直接降糖",
+          "intended_ocr_text": "二甲双胍：抑制肝糖输出，改善胰岛素抵抗\nSGLT-2抑制剂：促进尿糖排泄，降低肾糖阈\nGLP-1受体激动剂：促进胰岛素分泌，抑制胰高糖素\n胰岛素：直接补充，快速降糖",
+          "key_facts": ["二甲双胍作用于肝脏", "SGLT-2i作用于肾脏", "GLP-1 RA作用于胰岛"]
+        }
+      ],
+      "formula_blocks": [
+        {
+          "formula_id": "f1",
+          "page_hint": "4",
+          "latex": "eGFR = 175 \\times SCr^{-1.154} \\times Age^{-0.203} \\times (0.742\\ if\\ female)",
+          "rendered_caption": "公式1. eGFR计算公式（MDRD简化版）",
+          "natural_language_meaning": "估算肾小球滤过率，用于评估肾功能，决定二甲双胍是否可用"
+        },
+        {
+          "formula_id": "f2",
+          "page_hint": "4",
+          "latex": "胰岛素起始剂量 = 0.2 \\times 体重(kg)",
+          "rendered_caption": "公式2. 基础胰岛素起始剂量",
+          "natural_language_meaning": "基础胰岛素起始剂量为体重的0.2倍，后续根据血糖调整"
+        }
+      ],
+      "cross_references": [
+        {"from": "正文1.诊断标准", "to": "图1", "text": "诊断流程见图1"},
+        {"from": "正文3.降糖药物", "to": "表1", "text": "药物选择详见表1"},
+        {"from": "正文3.降糖药物", "to": "图2", "text": "作用机制见图2"},
+        {"from": "表1肾功能列", "to": "公式1", "text": "eGFR计算见公式1"},
+        {"from": "表1胰岛素行", "to": "公式2", "text": "剂量计算见公式2"}
+      ],
+      "layout_noise": [
+        "表1跨页，第2页只有表头和前3行",
+        "图2跨页，图片在第3页，图注在第4页",
+        "公式1和公式2紧邻，容易混淆",
+        "附注1打断正文和表1之间的连续性"
+      ],
+      "expected_parsing_risks": [
+        "表1跨页后列对齐可能错位",
+        "图2的OCR文字可能与第4页图注混淆",
+        "公式1的上标和下标可能丢失",
+        "附注1可能被误认为正文"
+      ]
+    }
+  }
+]
+,
+  {
+    "doc_id": "med_doc_003_v1",
+    "base_title": "高血压诊疗指南",
+    "clean_text_version": {
+      "format_target": "plain_markdown",
+      "body_markdown": "# 高血压诊疗指南\n\n## 1. 诊断标准\n\n收缩压≥140 mmHg或舒张压≥90 mmHg。\n\n## 2. 血压分级\n\n正常血压：<120/80 mmHg\n正常高值：120-139/80-89 mmHg\n1级高血压：140-159/90-99 mmHg\n2级高血压：160-179/100-109 mmHg\n3级高血压：≥180/110 mmHg\n\n## 3. 降压药物\n\nACEI：依那普利10-20 mg/日\nARB：缬沙坦80-160 mg/日\nCCB：氨氯地平5-10 mg/日\n利尿剂：氢氯噻嗪12.5-25 mg/日\nβ受体阻滞剂：美托洛尔50-100 mg/日",
+      "table_blocks": [
+        {
+          "table_id": "t1",
+          "caption": "降压药物选择",
+          "markdown": "| 血压级别 | 心血管风险 | 首选方案 | 联合方案 |\n|---------|-----------|---------|----------|\n| 1级 | 低-中危 | ACEI或ARB | ACEI+CCB |\n| 1级 | 高危 | ACEI+CCB | 三联 |\n| 2级 | 任意 | ACEI+CCB | 三联 |\n| 3级 | 任意 | 三联 | 四联 |",
+          "key_cells": []
+        }
+      ],
+      "image_blocks": [],
+      "formula_blocks": []
+    },
+    "complex_layout_version": {
+      "target_formats": ["docx", "pdf"],
+      "page_plan": [
+        {"page": 1, "elements": ["标题", "1.诊断标准", "2.血压分级", "表1开始"]},
+        {"page": 2, "elements": ["表1跨页继续", "表2心血管风险评估", "图1"]},
+        {"page": 3, "elements": ["图1图注", "3.降压药物", "表3药物禁忌证"]},
+        {"page": 4, "elements": ["表3续表", "公式1", "附注"]}
+      ],
+      "section_layouts": [
+        {"section": "标题", "style": "居中加粗", "font_size": 18},
+        {"section": "正文", "style": "两端对齐", "font_size": 12}
+      ],
+      "table_blocks": [
+        {
+          "table_id": "t1",
+          "page_hint": "1-2",
+          "caption": "表1. 降压药物选择策略",
+          "markdown": "| 血压级别 | 心血管风险 | 首选方案 | 联合方案 |\n|---------|-----------|---------|----------|\n| 1级 | 低-中危 | ACEI或ARB | ACEI+CCB |\n| 1级 | 高危 | ACEI+CCB | ACEI+CCB+利尿剂 |\n| 2级 | 低-中危 | ACEI+CCB | ACEI+CCB+利尿剂 |\n| 2级 | 高危 | ACEI+CCB+利尿剂 | 四联 |\n| 3级 | 任意 | ACEI+CCB+利尿剂 | 四联 |",
+          "should_span_pages": true,
+          "key_cells": ["3级高血压→三联起始", "高危患者→联合用药"]
+        },
+        {
+          "table_id": "t2",
+          "page_hint": "2",
+          "caption": "表2. 心血管风险评估因素",
+          "markdown": "| 危险因素 | 低危 | 中危 | 高危 | 极高危 |\n|---------|------|------|------|-------|\n| 年龄 | <55岁 | 55-65岁 | >65岁 | >75岁 |\n| 吸烟 | 否 | 否 | 是 | 是 |\n| 糖尿病 | 否 | 否 | 是 | 是+并发症 |\n| 肾病 | 否 | eGFR 60-89 | eGFR 30-59 | eGFR<30 |\n| 心血管病史 | 否 | 否 | 否 | 是 |",
+          "should_span_pages": false,
+          "key_cells": ["糖尿病+并发症→极高危", "eGFR<30→极高危"]
+        },
+        {
+          "table_id": "t3",
+          "page_hint": "3-4",
+          "caption": "表3. 降压药物禁忌证和注意事项",
+          "markdown": "| 药物类别 | 绝对禁忌证 | 相对禁忌证 | 优势适应症 |\n|---------|-----------|-----------|----------|\n| ACEI | 妊娠、双侧肾动脉狭窄 | 高钾血症 | 糖尿病肾病、心衰 |\n| ARB | 妊娠、双侧肾动脉狭窄 | 高钾血症 | ACEI不耐受 |\n| CCB | 无 | 心动过速 | 老年人、单纯收缩期高血压 |\n| 利尿剂 | 痛风急性期 | 糖尿病 | 老年人、心衰 |\n| β受体阻滞剂 | 哮喘、严重心动过缓 | COPD | 冠心病、心衰 |",
+          "should_span_pages": true,
+          "key_cells": ["ACEI/ARB禁用于妊娠", "β受体阻滞剂禁用于哮喘"]
+        }
+      ],
+      "image_blocks": [
+        {
+          "image_id": "img1",
+          "page_hint": "2-3",
+          "caption": "图1. 高血压诊疗流程图（图注位于第3页）",
+          "visible_text": "测量血压 → ≥140/90 → 评估心血管风险 → 选择降压方案\n→ 1级低危 → 单药\n→ 1级高危 → 联合\n→ 2-3级 → 联合或三联",
+          "intended_ocr_text": "血压≥140/90 mmHg\n评估心血管风险\n1级低-中危：单药治疗\n1级高危：联合用药\n2级：联合用药\n3级：三联用药",
+          "key_facts": ["血压级别和风险共同决定方案", "3级高血压直接三联"]
+        }
+      ],
+      "formula_blocks": [
+        {
+          "formula_id": "f1",
+          "page_hint": "4",
+          "latex": "MAP = \\frac{SBP + 2 \\times DBP}{3}",
+          "rendered_caption": "公式1. 平均动脉压（MAP）计算",
+          "natural_language_meaning": "平均动脉压等于收缩压加2倍舒张压除以3，用于评估器官灌注压"
+        }
+      ],
+      "cross_references": [
+        {"from": "正文2.血压分级", "to": "表1", "text": "治疗方案见表1"},
+        {"from": "表1心血管风险列", "to": "表2", "text": "风险评估见表2"},
+        {"from": "正文3.降压药物", "to": "表3", "text": "禁忌证见表3"},
+        {"from": "正文1.诊断标准", "to": "图1", "text": "诊疗流程见图1"},
+        {"from": "附注", "to": "公式1", "text": "MAP计算见公式1"}
+      ],
+      "layout_noise": [
+        "表1跨页，表2插入在表1中间",
+        "图1跨页，图片在第2页底部，图注在第3页顶部",
+        "表3跨页，且与图1图注交错",
+        "公式1位于第4页，但正文引用在第1页附注"
+      ],
+      "expected_parsing_risks": [
+        "表1和表2连续出现，可能被误认为同一表格",
+        "图1的OCR文字可能与表2混淆",
+        "表3跨页后列对齐可能错位",
+        "公式1的分数线可能丢失"
+      ]
+    }
+  }
+]
+,
+  {
+    "doc_id": "med_doc_004_v1",
+    "base_title": "急性心肌梗死诊疗规范",
+    "clean_text_version": {
+      "format_target": "plain_markdown",
+      "body_markdown": "# 急性心肌梗死诊疗规范\n\n## 1. 诊断标准\n\n心肌损伤标志物升高（肌钙蛋白I > 0.04 ng/mL）+ 心肌缺血症状或心电图改变。\n\n## 2. STEMI与NSTEMI分型\n\nSTEMI：ST段抬高型心肌梗死，需紧急再灌注治疗\nNSTEMI：非ST段抬高型心肌梗死，根据风险分层决定治疗时机\n\n## 3. 再灌注治疗\n\n首选PCI：发病12小时内，门球时间<90分钟\n溶栓治疗：无PCI条件，发病3小时内，门针时间<30分钟\n\n## 4. 抗栓治疗\n\n阿司匹林300 mg负荷+75-100 mg/日维持\n氯吡格雷600 mg负荷+75 mg/日维持\n替格瑞洛180 mg负荷+90 mg bid维持",
+      "table_blocks": [
+        {
+          "table_id": "t1",
+          "caption": "GRACE评分与治疗策略",
+          "markdown": "| GRACE评分 | 风险分层 | 住院死亡率 | 治疗策略 | 介入时机 |\n|-----------|---------|-----------|---------|----------|\n| <109 | 低危 | <1% | 保守治疗 | 择期 |\n| 109-140 | 中危 | 1-3% | 早期介入 | 24-72h |\n| >140 | 高危 | >3% | 紧急介入 | <24h |",
+          "key_cells": []
+        }
+      ],
+      "image_blocks": [],
+      "formula_blocks": []
+    },
+    "complex_layout_version": {
+      "target_formats": ["docx", "pdf"],
+      "page_plan": [
+        {"page": 1, "elements": ["标题", "1.诊断标准", "图1心电图示例", "2.分型"]},
+        {"page": 2, "elements": ["图1图注", "表1 GRACE评分", "3.再灌注治疗"]},
+        {"page": 3, "elements": ["表2时间窗对比", "图2治疗流程图", "4.抗栓治疗"]},
+        {"page": 4, "elements": ["图2图注", "表3抗栓药物对比", "公式1", "公式2"]}
+      ],
+      "section_layouts": [
+        {"section": "标题", "style": "居中加粗红色", "font_size": 18},
+        {"section": "正文", "style": "两端对齐", "font_size": 12},
+        {"section": "警示框", "style": "黄色背景边框", "font_size": 12}
+      ],
+      "table_blocks": [
+        {
+          "table_id": "t1",
+          "page_hint": "2",
+          "caption": "表1. GRACE评分与治疗策略",
+          "markdown": "| GRACE评分 | 风险分层 | 住院死亡率 | 6个月死亡率 | 治疗策略 | 介入时机 |\n|-----------|---------|-----------|------------|---------|----------|\n| <109 | 低危 | <1% | <3% | 保守治疗或择期介入 | 出院前或择期 |\n| 109-140 | 中危 | 1-3% | 3-8% | 早期介入策略 | 24-72小时 |\n| >140 | 高危 | >3% | >8% | 紧急介入策略 | <24小时 |",
+          "should_span_pages": false,
+          "key_cells": ["GRACE>140→紧急介入<24h", "低危可保守治疗"]
+        },
+        {
+          "table_id": "t2",
+          "page_hint": "3",
+          "caption": "表2. PCI与溶栓治疗时间窗对比",
+          "markdown": "| 治疗方式 | 最佳时间窗 | 最大时间窗 | 目标时间 | 禁忌证 |\n|---------|-----------|-----------|---------|--------|\n| 直接PCI | 发病12h内 | 发病24h内 | 门球<90min | 无绝对禁忌 |\n| 溶栓治疗 | 发病3h内 | 发病12h内 | 门针<30min | 活动性出血、近期手术 |\n| 补救PCI | 溶栓失败后 | 溶栓后90min | 尽快 | 同直接PCI |",
+          "should_span_pages": false,
+          "key_cells": ["PCI门球时间<90分钟", "溶栓门针时间<30分钟", "溶栓最佳时间窗3小时"]
+        },
+        {
+          "table_id": "t3",
+          "page_hint": "4",
+          "caption": "表3. 抗血小板药物对比",
+          "markdown": "| 药物 | 负荷剂量 | 维持剂量 | 起效时间 | 出血风险 | 优势 |\n|------|---------|---------|---------|---------|------|\n| 阿司匹林 | 300 mg | 75-100 mg/日 | 30分钟 | 低 | 基础用药 |\n| 氯吡格雷 | 600 mg | 75 mg/日 | 2-6小时 | 中 | 经典P2Y12抑制剂 |\n| 替格瑞洛 | 180 mg | 90 mg bid | 30分钟 | 中-高 | 起效快，可逆 |\n| 普拉格雷 | 60 mg | 10 mg/日 | 30分钟 | 高 | 强效，不可逆 |",
+          "should_span_pages": false,
+          "key_cells": ["替格瑞洛起效最快", "普拉格雷出血风险最高", "阿司匹林为基础用药"]
+        }
+      ],
+      "image_blocks": [
+        {
+          "image_id": "img1",
+          "page_hint": "1-2",
+          "caption": "图1. STEMI典型心电图表现（图注见第2页）",
+          "visible_text": "V1-V4导联ST段抬高\nⅡ、Ⅲ、aVF导联ST段抬高\n病理性Q波",
+          "intended_ocr_text": "前壁心肌梗死：V1-V4导联ST段抬高≥2mm\n下壁心肌梗死：Ⅱ、Ⅲ、aVF导联ST段抬高≥1mm\n病理性Q波：宽度≥0.04s，深度≥1/4R波",
+          "key_facts": ["ST段抬高是STEMI诊断关键", "不同导联对应不同梗死部位", "病理性Q波提示透壁性梗死"]
+        },
+        {
+          "image_id": "img2",
+          "page_hint": "3-4",
+          "caption": "图2. 急性心肌梗死治疗流程图（图注位于第4页）",
+          "visible_text": "胸痛患者 → 心电图 → STEMI → 发病<12h → 有PCI条件 → 直接PCI\n→ 无PCI条件 → 溶栓\n→ NSTEMI → GRACE评分 → 高危 → 早期介入\n→ 低中危 → 保守治疗",
+          "intended_ocr_text": "胸痛患者\n↓\n心电图检查\n↓\nSTEMI → 发病时间<12h → 有PCI条件 → 直接PCI（门球<90min）\n                    → 无PCI条件 → 溶栓（门针<30min）\nNSTEMI → GRACE评分 → 高危(>140) → 紧急介入<24h\n                  → 中危(109-140) → 早期介入24-72h\n                  → 低危(<109) → 保守治疗",
+          "key_facts": ["STEMI与NSTEMI治疗策略不同", "时间窗是关键决策因素", "GRACE评分决定NSTEMI治疗时机"]
+        }
+      ],
+      "formula_blocks": [
+        {
+          "formula_id": "f1",
+          "page_hint": "4",
+          "latex": "GRACE评分 = 年龄分 + 心率分 + 收缩压分 + 肌酐分 + Killip分级分 + 心脏骤停分 + ST段改变分 + 心肌标志物分",
+          "rendered_caption": "公式1. GRACE评分计算公式",
+          "natural_language_meaning": "GRACE评分综合8个因素评估急性冠脉综合征患者的死亡风险，分数越高风险越大"
+        },
+        {
+          "formula_id": "f2",
+          "page_hint": "4",
+          "latex": "肌钙蛋白I升高倍数 = \\frac{实测值}{正常上限(0.04\\ ng/mL)}",
+          "rendered_caption": "公式2. 肌钙蛋白I升高倍数计算",
+          "natural_language_meaning": "肌钙蛋白I升高倍数用于评估心肌损伤程度，>5倍提示大面积梗死"
+        }
+      ],
+      "cross_references": [
+        {"from": "正文1.诊断标准", "to": "图1", "text": "心电图表现见图1"},
+        {"from": "正文2.分型", "to": "表1", "text": "NSTEMI风险评估见表1"},
+        {"from": "正文3.再灌注治疗", "to": "表2", "text": "时间窗对比见表2"},
+        {"from": "正文3.再灌注治疗", "to": "图2", "text": "治疗流程见图2"},
+        {"from": "正文4.抗栓治疗", "to": "表3", "text": "药物对比见表3"},
+        {"from": "表1风险分层", "to": "公式1", "text": "GRACE评分计算见公式1"},
+        {"from": "正文1.诊断标准", "to": "公式2", "text": "肌钙蛋白升高倍数见公式2"}
+      ],
+      "layout_noise": [
+        "图1跨页，心电图在第1页，详细图注在第2页",
+        "表1插入在图1图注之后，打断连续性",
+        "图2跨页，流程图在第3页，图注在第4页",
+        "表3与图2图注交错排列",
+        "公式1和公式2紧邻，且公式1较长容易换行"
+      ],
+      "expected_parsing_risks": [
+        "图1的心电图OCR可能识别为乱码",
+        "图2的流程图箭头和分支可能丢失",
+        "表2的时间单位（h、min）可能与数值分离",
+        "公式1过长可能被截断或换行错位",
+        "公式2的分数线可能丢失"
+      ]
+    }
+  }
+]
+,
+  {
+    "doc_id": "med_doc_005_v1",
+    "base_title": "慢性肾脏病分期与管理",
+    "clean_text_version": {
+      "format_target": "plain_markdown",
+      "body_markdown": "# 慢性肾脏病分期与管理\n\n## 1. CKD分期标准\n\nG1期：eGFR ≥90 mL/min/1.73m²\nG2期：eGFR 60-89 mL/min/1.73m²\nG3a期：eGFR 45-59 mL/min/1.73m²\nG3b期：eGFR 30-44 mL/min/1.73m²\nG4期：eGFR 15-29 mL/min/1.73m²\nG5期：eGFR <15 mL/min/1.73m²\n\n## 2. 蛋白尿分级\n\nA1：<30 mg/g\nA2：30-300 mg/g\nA3：>300 mg/g\n\n## 3. 药物调整原则\n\neGFR 30-60：二甲双胍减量\neGFR <30：停用二甲双胍、NSAID\neGFR <15：多数药物需调整",
+      "table_blocks": [
+        {
+          "table_id": "t1",
+          "caption": "CKD风险分层",
+          "markdown": "| eGFR分期 | A1 | A2 | A3 |\n|---------|----|----|----|\n| G1 | 低危 | 中危 | 高危 |\n| G2 | 低危 | 中危 | 高危 |\n| G3a | 中危 | 高危 | 极高危 |\n| G3b | 高危 | 极高危 | 极高危 |\n| G4 | 极高危 | 极高危 | 极高危 |\n| G5 | 极高危 | 极高危 | 极高危 |",
+          "key_cells": []
+        }
+      ],
+      "image_blocks": [],
+      "formula_blocks": []
+    },
+    "complex_layout_version": {
+      "target_formats": ["docx", "pdf"],
+      "page_plan": [
+        {"page": 1, "elements": ["标题", "1.CKD分期", "表1风险分层", "公式1"]},
+        {"page": 2, "elements": ["公式2", "2.蛋白尿分级", "图1肾功能下降曲线", "表2开始"]},
+        {"page": 3, "elements": ["表2跨页继续", "3.药物调整", "图2"]},
+        {"page": 4, "elements": ["图2图注", "表3药物调整详表", "附注"]}
+      ],
+      "section_layouts": [
+        {"section": "标题", "style": "居中加粗", "font_size": 18},
+        {"section": "正文", "style": "两端对齐", "font_size": 12},
+        {"section": "附注", "style": "灰色小字脚注", "font_size": 9}
+      ],
+      "table_blocks": [
+        {
+          "table_id": "t1",
+          "page_hint": "1",
+          "caption": "表1. CKD风险分层矩阵（基于eGFR和蛋白尿）",
+          "markdown": "| eGFR分期 | A1 (<30) | A2 (30-300) | A3 (>300) |\n|---------|----------|-------------|----------|\n| G1 (≥90) | 低危 | 中危 | 高危 |\n| G2 (60-89) | 低危 | 中危 | 高危 |\n| G3a (45-59) | 中危 | 高危 | 极高危 |\n| G3b (30-44) | 高危 | 极高危 | 极高危 |\n| G4 (15-29) | 极高危 | 极高危 | 极高危 |\n| G5 (<15) | 极高危 | 极高危 | 极高危 |",
+          "should_span_pages": false,
+          "key_cells": ["G3b+A2→极高危", "G1+A1→低危", "蛋白尿越重风险越高"]
+        },
+        {
+          "table_id": "t2",
+          "page_hint": "2-3",
+          "caption": "表2. CKD各期管理要点",
+          "markdown": "| 分期 | eGFR | 管理重点 | 转诊指征 | 随访频率 |\n|------|------|---------|---------|----------|\n| G1 | ≥90 | 控制原发病、血压、血糖 | 蛋白尿A3 | 每年1次 |\n| G2 | 60-89 | 同G1 | 蛋白尿A3或进展快 | 每年1-2次 |\n| G3a | 45-59 | 监测并发症、调整药物 | 进展快或并发症 | 每3-6月 |\n| G3b | 30-44 | 同G3a+贫血筛查 | 建议转诊 | 每3月 |\n| G4 | 15-29 | 准备肾替代治疗 | 必须转诊 | 每1-3月 |\n| G5 | <15 | 启动肾替代治疗 | 必须转诊 | 每月 |",
+          "should_span_pages": true,
+          "key_cells": ["G4期准备肾替代治疗", "G3b开始贫血筛查", "随访频率随分期增加"]
+        },
+        {
+          "table_id": "t3",
+          "page_hint": "4",
+          "caption": "表3. 常用药物在CKD中的调整",
+          "markdown": "| 药物 | eGFR 30-60 | eGFR 15-30 | eGFR <15 | 注意事项 |\n|------|-----------|-----------|---------|----------|\n| 二甲双胍 | 减量至1000mg/日 | 禁用 | 禁用 | 乳酸酸中毒风险 |\n| ACEI/ARB | 正常剂量 | 减量 | 慎用 | 监测血钾、肌酐 |\n| NSAID | 慎用 | 禁用 | 禁用 | 肾毒性 |\n| 阿司匹林 | 正常剂量 | 正常剂量 | 正常剂量 | 出血风险增加 |\n| 他汀类 | 正常剂量 | 正常剂量 | 正常剂量 | 横纹肌溶解风险 |",
+          "should_span_pages": false,
+          "key_cells": ["二甲双胍eGFR<30禁用", "NSAID在G3b期禁用", "ACEI/ARB需监测血钾"]
+        }
+      ],
+      "image_blocks": [
+        {
+          "image_id": "img1",
+          "page_hint": "2",
+          "caption": "图1. 不同CKD病因的肾功能下降曲线",
+          "visible_text": "糖尿病肾病：快速下降\n高血压肾病：缓慢下降\n多囊肾：中速下降\neGFR (mL/min/1.73m²) vs 时间(年)",
+          "intended_ocr_text": "纵轴：eGFR (mL/min/1.73m²) 0-120\n横轴：时间(年) 0-20\n糖尿病肾病曲线：陡峭下降，10年降至G5\n高血压肾病曲线：平缓下降，20年降至G4\n多囊肾曲线：中等下降，15年降至G4",
+          "key_facts": ["糖尿病肾病进展最快", "高血压肾病进展最慢", "不同病因进展速度差异大"]
+        },
+        {
+          "image_id": "img2",
+          "page_hint": "3-4",
+          "caption": "图2. CKD管理流程图（图注位于第4页）",
+          "visible_text": "诊断CKD → 分期(G1-G5) → 评估蛋白尿(A1-A3) → 风险分层 → 制定管理方案\n→ 低危：年度随访\n→ 中危：半年随访\n→ 高危：季度随访\n→ 极高危：月度随访+转诊",
+          "intended_ocr_text": "CKD诊断\n↓\neGFR分期(G1-G5)\n↓\n蛋白尿分级(A1-A3)\n↓\n风险分层矩阵\n↓\n低危：年度随访，控制危险因素\n中危：半年随访，监测并发症\n高危：季度随访，调整药物\n极高危：月度随访，肾科转诊",
+          "key_facts": ["分期和蛋白尿共同决定风险", "风险越高随访越频繁", "极高危必须转诊"]
+        }
+      ],
+      "formula_blocks": [
+        {
+          "formula_id": "f1",
+          "page_hint": "1",
+          "latex": "eGFR_{CKD-EPI} = 141 \\times \\min(SCr/\\kappa, 1)^{\\alpha} \\times \\max(SCr/\\kappa, 1)^{-1.209} \\times 0.993^{Age} \\times (1.018\\ if\\ female) \\times (1.159\\ if\\ black)",
+          "rendered_caption": "公式1. CKD-EPI公式计算eGFR",
+          "natural_language_meaning": "CKD-EPI公式是目前最准确的eGFR计算方法，考虑了肌酐、年龄、性别、种族因素"
+        },
+        {
+          "formula_id": "f2",
+          "page_hint": "2",
+          "latex": "尿白蛋白/肌酐比值(ACR) = \\frac{尿白蛋白(mg)}{尿肌酐(g)}",
+          "rendered_caption": "公式2. 尿白蛋白/肌酐比值计算",
+          "natural_language_meaning": "ACR用于评估蛋白尿程度，单位mg/g，<30为A1，30-300为A2，>300为A3"
+        }
+      ],
+      "cross_references": [
+        {"from": "正文1.CKD分期", "to": "表1", "text": "风险分层见表1"},
+        {"from": "正文1.CKD分期", "to": "公式1", "text": "eGFR计算见公式1"},
+        {"from": "正文2.蛋白尿分级", "to": "公式2", "text": "ACR计算见公式2"},
+        {"from": "正文2.蛋白尿分级", "to": "图1", "text": "进展曲线见图1"},
+        {"from": "表2管理重点", "to": "图2", "text": "管理流程见图2"},
+        {"from": "正文3.药物调整", "to": "表3", "text": "详细调整方案见表3"}
+      ],
+      "layout_noise": [
+        "公式1过长，跨行显示",
+        "表2跨页，第2页只有前3行",
+        "图2跨页，流程图在第3页，图注在第4页",
+        "表3与图2图注交错",
+        "附注位于第4页底部，与正文分离"
+      ],
+      "expected_parsing_risks": [
+        "公式1的上下标和希腊字母可能丢失",
+        "表2跨页后行对应关系可能错位",
+        "图1的曲线可能被识别为装饰线",
+        "图2的箭头和分支可能丢失",
+        "附注可能被误认为页脚"
+      ]
+    }
+  }
+]
+,
+  {
+    "doc_id": "med_doc_006_v1",
+    "base_title": "抗凝治疗管理规范",
+    "clean_text_version": {
+      "format_target": "plain_markdown",
+      "body_markdown": "# 抗凝治疗管理规范\n\n## 1. 抗凝适应症\n\n房颤：CHA₂DS₂-VASc评分≥2分（男性）或≥3分（女性）\n深静脉血栓：急性期及长期预防\n肺栓塞：急性期及长期预防\n机械瓣膜：终身抗凝\n\n## 2. 抗凝药物选择\n\n华法林：INR目标2.0-3.0\nNOAC：达比加群、利伐沙班、阿哌沙班、依度沙班\n\n## 3. 出血风险评估\n\nHAS-BLED评分：≥3分为高出血风险",
+      "table_blocks": [
+        {
+          "table_id": "t1",
+          "caption": "CHA₂DS₂-VASc评分",
+          "markdown": "| 危险因素 | 评分 |\n|---------|------|\n| 充血性心衰 | 1 |\n| 高血压 | 1 |\n| 年龄≥75岁 | 2 |\n| 糖尿病 | 1 |\n| 卒中/TIA史 | 2 |\n| 血管病史 | 1 |\n| 年龄65-74岁 | 1 |\n| 女性 | 1 |",
+          "key_cells": []
+        }
+      ],
+      "image_blocks": [],
+      "formula_blocks": []
+    },
+    "complex_layout_version": {
+      "target_formats": ["docx", "pdf"],
+      "page_plan": [
+        {"page": 1, "elements": ["标题", "1.适应症", "表1 CHA₂DS₂-VASc", "公式1"]},
+        {"page": 2, "elements": ["表2 HAS-BLED", "2.药物选择", "图1抗凝决策树", "表3开始"]},
+        {"page": 3, "elements": ["表3跨页继续", "图2", "3.出血风险"]},
+        {"page": 4, "elements": ["图2图注", "表4 NOAC对比", "公式2", "附注"]}
+      ],
+      "section_layouts": [
+        {"section": "标题", "style": "居中加粗", "font_size": 18},
+        {"section": "正文", "style": "两端对齐", "font_size": 12},
+        {"section": "警示框", "style": "红色边框", "font_size": 12}
+      ],
+      "table_blocks": [
+        {
+          "table_id": "t1",
+          "page_hint": "1",
+          "caption": "表1. CHA₂DS₂-VASc评分系统",
+          "markdown": "| 危险因素 | 英文缩写 | 评分 | 说明 |\n|---------|---------|------|------|\n| 充血性心衰 | C | 1 | LVEF<40%或近期心衰住院 |\n| 高血压 | H | 1 | 正在治疗或BP≥140/90 |\n| 年龄≥75岁 | A₂ | 2 | 高龄是强危险因素 |\n| 糖尿病 | D | 1 | 正在治疗或FPG≥7.0 |\n| 卒中/TIA史 | S₂ | 2 | 既往卒中是强危险因素 |\n| 血管病史 | V | 1 | 心梗、外周动脉病、主动脉斑块 |\n| 年龄65-74岁 | A | 1 | 中等年龄危险因素 |\n| 女性 | Sc | 1 | 女性本身是危险因素 |",
+          "should_span_pages": false,
+          "key_cells": ["年龄≥75岁计2分", "卒中史计2分", "男性≥2分需抗凝", "女性≥3分需抗凝"]
+        },
+        {
+          "table_id": "t2",
+          "page_hint": "2",
+          "caption": "表2. HAS-BLED出血风险评分",
+          "markdown": "| 危险因素 | 英文缩写 | 评分 | 说明 |\n|---------|---------|------|------|\n| 高血压 | H | 1 | 收缩压>160 mmHg |\n| 肝肾功能异常 | A | 1或2 | 各1分 |\n| 卒中史 | S | 1 | 既往卒中 |\n| 出血史或倾向 | B | 1 | 既往出血或贫血 |\n| INR不稳定 | L | 1 | INR波动大或TTR<60% |\n| 老年 | E | 1 | 年龄>65岁 |\n| 药物或酒精 | D | 1或2 | 抗血小板或酗酒，各1分 |",
+          "should_span_pages": false,
+          "key_cells": ["≥3分为高出血风险", "肝肾功能异常各计1分", "药物和酒精各计1分"]
+        },
+        {
+          "table_id": "t3",
+          "page_hint": "2-3",
+          "caption": "表3. 华法林INR目标范围",
+          "markdown": "| 适应症 | INR目标 | INR范围 | 监测频率 |\n|-------|---------|---------|----------|\n| 房颤 | 2.5 | 2.0-3.0 | 稳定后每月1次 |\n| 深静脉血栓 | 2.5 | 2.0-3.0 | 稳定后每月1次 |\n| 肺栓塞 | 2.5 | 2.0-3.0 | 稳定后每月1次 |\n| 机械二尖瓣 | 3.0 | 2.5-3.5 | 稳定后每月1次 |\n| 机械主动脉瓣 | 2.5 | 2.0-3.0 | 稳定后每月1次 |\n| 抗磷脂综合征 | 3.0 | 2.5-3.5 | 稳定后每2周1次 |",
+          "should_span_pages": true,
+          "key_cells": ["机械二尖瓣INR目标3.0", "大多数适应症INR 2.0-3.0", "稳定后每月监测"]
+        },
+        {
+          "table_id": "t4",
+          "page_hint": "4",
+          "caption": "表4. 新型口服抗凝药(NOAC)对比",
+          "markdown": "| 药物 | 作用靶点 | 剂量 | 半衰期 | 肾清除率 | 优势 | 劣势 |\n|------|---------|------|--------|---------|------|------|\n| 达比加群 | 凝血酶 | 150mg bid | 12-17h | 80% | 可逆转 | 肾功能依赖 |\n| 利伐沙班 | Xa因子 | 20mg qd | 5-9h | 33% | 每日1次 | 无逆转剂 |\n| 阿哌沙班 | Xa因子 | 5mg bid | 12h | 27% | 出血少 | 每日2次 |\n| 依度沙班 | Xa因子 | 60mg qd | 10-14h | 50% | 每日1次 | 肾功能依赖 |",
+          "should_span_pages": false,
+          "key_cells": ["达比加群肾清除率最高", "阿哌沙班出血风险最低", "利伐沙班和依度沙班每日1次"]
+        }
+      ],
+      "image_blocks": [
+        {
+          "image_id": "img1",
+          "page_hint": "2",
+          "caption": "图1. 房颤抗凝决策树",
+          "visible_text": "房颤患者 → CHA₂DS₂-VASc评分 → 男性≥2或女性≥3 → 评估出血风险 → HAS-BLED<3 → 推荐抗凝\n→ HAS-BLED≥3 → 权衡利弊后抗凝\n→ 男性<2或女性<3 → 不需抗凝",
+          "intended_ocr_text": "房颤患者\n↓\nCHA₂DS₂-VASc评分\n↓\n男性≥2分或女性≥3分 → 评估HAS-BLED\n                    → <3分：推荐抗凝\n                    → ≥3分：权衡利弊，仍建议抗凝\n男性<2分或女性<3分 → 不需抗凝或阿司匹林",
+          "key_facts": ["CHA₂DS₂-VASc决定是否抗凝", "HAS-BLED评估出血风险", "高出血风险不是抗凝禁忌"]
+        },
+        {
+          "image_id": "img2",
+          "page_hint": "3-4",
+          "caption": "图2. 华法林剂量调整流程（图注见第4页）",
+          "visible_text": "测INR → <2.0 → 增加剂量10-20%\n→ 2.0-3.0 → 维持剂量\n→ 3.0-4.0 → 减少剂量10-20%\n→ >4.0 → 停药1-2天，重新评估",
+          "intended_ocr_text": "测量INR\n↓\nINR<2.0：增加周剂量10-20%，1周后复查\nINR 2.0-3.0：维持剂量，1月后复查\nINR 3.0-4.0：减少周剂量10-20%，1周后复查\nINR>4.0无出血：停药1-2天，减少周剂量20%，3天后复查\nINR>4.0有出血：停药，维生素K，必要时输血",
+          "key_facts": ["INR目标2.0-3.0", "剂量调整幅度10-20%", "INR>4.0需停药"]
+        }
+      ],
+      "formula_blocks": [
+        {
+          "formula_id": "f1",
+          "page_hint": "1",
+          "latex": "CHA_2DS_2-VASc = C(1) + H(1) + A_2(2) + D(1) + S_2(2) + V(1) + A(1) + Sc(1)",
+          "rendered_caption": "公式1. CHA₂DS₂-VASc评分计算",
+          "natural_language_meaning": "CHA₂DS₂-VASc评分总分0-9分，男性≥2分或女性≥3分需要抗凝治疗"
+        },
+        {
+          "formula_id": "f2",
+          "page_hint": "4",
+          "latex": "华法林周剂量调整 = 当前周剂量 \\times (1 \\pm 0.1\\sim0.2)",
+          "rendered_caption": "公式2. 华法林剂量调整公式",
+          "natural_language_meaning": "根据INR结果，每次调整周剂量的10-20%，避免大幅度调整"
+        }
+      ],
+      "cross_references": [
+        {"from": "正文1.适应症", "to": "表1", "text": "CHA₂DS₂-VASc评分见表1"},
+        {"from": "正文1.适应症", "to": "公式1", "text": "评分计算见公式1"},
+        {"from": "正文1.适应症", "to": "图1", "text": "决策流程见图1"},
+        {"from": "正文3.出血风险", "to": "表2", "text": "HAS-BLED评分见表2"},
+        {"from": "正文2.药物选择", "to": "表3", "text": "华法林INR目标见表3"},
+        {"from": "正文2.药物选择", "to": "表4", "text": "NOAC对比见表4"},
+        {"from": "表3监测频率", "to": "图2", "text": "剂量调整见图2"},
+        {"from": "图2剂量调整", "to": "公式2", "text": "计算公式见公式2"}
+      ],
+      "layout_noise": [
+        "表1和表2连续出现，中间无明显分隔",
+        "图1插入在表2和表3之间",
+        "表3跨页，第2页只有前3行",
+        "图2跨页，流程图在第3页，详细图注在第4页",
+        "表4与图2图注交错",
+        "公式1的下标₂可能显示异常"
+      ],
+      "expected_parsing_risks": [
+        "表1和表2可能被误认为同一表格",
+        "图1的决策分支可能丢失",
+        "表3跨页后行对应关系可能错位",
+        "图2的INR范围可能与图注分离",
+        "公式1的下标₂可能丢失或错位",
+        "附注可能被误认为页脚"
+      ]
+    }
+  }
+]
+,
+  {
+    "doc_id": "med_doc_007_v1",
+    "base_title": "社区获得性肺炎诊疗指南",
+    "clean_text_version": {
+      "format_target": "plain_markdown",
+      "body_markdown": "# 社区获得性肺炎诊疗指南\n\n## 1. 诊断标准\n\n新发肺部浸润影 + 以下至少1项：\n- 咳嗽、咳痰\n- 发热≥38°C\n- 肺部实变体征\n- WBC>10×10⁹/L或<4×10⁹/L\n\n## 2. 病原体\n\n肺炎链球菌（最常见）\n肺炎支原体\n流感嗜血杆菌\n病毒（流感、RSV）\n\n## 3. 抗生素选择\n\n门诊：阿莫西林或大环内酯类\n住院：β-内酰胺类+大环内酯类\nICU：β-内酰胺类+大环内酯类或氟喹诺酮",
+      "table_blocks": [
+        {
+          "table_id": "t1",
+          "caption": "CURB-65评分",
+          "markdown": "| 指标 | 评分 |\n|------|------|\n| 意识障碍 | 1 |\n| 尿素>7 mmol/L | 1 |\n| 呼吸频率≥30次/分 | 1 |\n| 血压<90/60 mmHg | 1 |\n| 年龄≥65岁 | 1 |",
+          "key_cells": []
+        }
+      ],
+      "image_blocks": [],
+      "formula_blocks": []
+    },
+    "complex_layout_version": {
+      "target_formats": ["docx", "pdf"],
+      "page_plan": [
+        {"page": 1, "elements": ["标题", "1.诊断标准", "图1胸片示例", "2.病原体"]},
+        {"page": 2, "elements": ["图1图注", "表1 CURB-65", "表2 PSI评分", "公式1"]},
+        {"page": 3, "elements": ["3.抗生素选择", "表3抗生素方案", "图2治疗流程"]},
+        {"page": 4, "elements": ["图2图注", "表4病原体覆盖", "公式2", "附注"]}
+      ],
+      "section_layouts": [
+        {"section": "标题", "style": "居中加粗", "font_size": 18},
+        {"section": "正文", "style": "两端对齐", "font_size": 12},
+        {"section": "警示框", "style": "黄色背景", "font_size": 12}
+      ],
+      "table_blocks": [
+        {
+          "table_id": "t1",
+          "page_hint": "2",
+          "caption": "表1. CURB-65评分系统",
+          "markdown": "| 指标 | 英文 | 评分 | 说明 |\n|------|------|------|------|\n| 意识障碍 | Confusion | 1 | 新发意识障碍 |\n| 尿素氮升高 | Urea | 1 | BUN>7 mmol/L (20 mg/dL) |\n| 呼吸频率增快 | Respiratory rate | 1 | RR≥30次/分 |\n| 血压降低 | Blood pressure | 1 | SBP<90或DBP≤60 mmHg |\n| 年龄 | Age | 1 | ≥65岁 |",
+          "should_span_pages": false,
+          "key_cells": ["0-1分门诊治疗", "2分住院治疗", "≥3分ICU治疗"]
+        },
+        {
+          "table_id": "t2",
+          "page_hint": "2",
+          "caption": "表2. PSI评分与风险分层",
+          "markdown": "| 风险分层 | PSI评分 | 30天死亡率 | 治疗场所 |\n|---------|---------|-----------|----------|\n| I类 | <50岁无基础病 | 0.1% | 门诊 |\n| II类 | ≤70分 | 0.6% | 门诊 |\n| III类 | 71-90分 | 2.8% | 短期住院或门诊 |\n| IV类 | 91-130分 | 8.2% | 住院 |\n| V类 | >130分 | 29.2% | 住院或ICU |",
+          "should_span_pages": false,
+          "key_cells": ["PSI>130分死亡率29%", "PSI≤70分可门诊治疗"]
+        },
+        {
+          "table_id": "t3",
+          "page_hint": "3",
+          "caption": "表3. 社区获得性肺炎抗生素方案",
+          "markdown": "| 场所 | 无合并症 | 有合并症 | 重症 |\n|------|---------|---------|------|\n| 门诊 | 阿莫西林1g tid或大环内酯类 | 阿莫西林/克拉维酸或呼吸氟喹诺酮 | 不适用 |\n| 普通病房 | 头孢曲松2g qd+阿奇霉素500mg qd | 头孢曲松+阿奇霉素或呼吸氟喹诺酮 | 不适用 |\n| ICU | 头孢曲松+阿奇霉素 | β-内酰胺类+氟喹诺酮 | +万古霉素(MRSA风险) |",
+          "should_span_pages": false,
+          "key_cells": ["门诊首选阿莫西林", "住院联合大环内酯类", "ICU考虑MRSA覆盖"]
+        },
+        {
+          "table_id": "t4",
+          "page_hint": "4",
+          "caption": "表4. 常见抗生素病原体覆盖范围",
+          "markdown": "| 抗生素 | 肺炎链球菌 | 支原体 | 流感杆菌 | 金葡菌 | 厌氧菌 |\n|-------|-----------|--------|---------|--------|--------|\n| 阿莫西林 | +++ | - | ++ | - | + |\n| 阿莫西林/克拉维酸 | +++ | - | +++ | + | +++ |\n| 头孢曲松 | +++ | - | +++ | + | + |\n| 阿奇霉素 | ++ | +++ | + | - | - |\n| 左氧氟沙星 | +++ | +++ | +++ | ++ | ++ |\n| 万古霉素 | +++ | - | - | +++ | - |",
+          "should_span_pages": false,
+          "key_cells": ["阿奇霉素覆盖支原体", "万古霉素覆盖MRSA", "左氧氟沙星覆盖广"]
+        }
+      ],
+      "image_blocks": [
+        {
+          "image_id": "img1",
+          "page_hint": "1-2",
+          "caption": "图1. 社区获得性肺炎典型胸片表现（图注位于第2页）",
+          "visible_text": "右下肺大片实变影\n左下肺斑片状阴影\n双肺间质性改变",
+          "intended_ocr_text": "A. 右下肺大片实变影（肺炎链球菌）\nB. 左下肺斑片状阴影（支原体肺炎）\nC. 双肺间质性改变（病毒性肺炎）\n典型表现：实变影、空气支气管征、胸腔积液",
+          "key_facts": ["实变影提示细菌性肺炎", "间质性改变提示非典型病原体", "胸片是诊断金标准"]
+        },
+        {
+          "image_id": "img2",
+          "page_hint": "3-4",
+          "caption": "图2. 社区获得性肺炎治疗流程图（图注见第4页）",
+          "visible_text": "疑似CAP → 胸片确诊 → CURB-65评分 → 0-1分门诊 → 阿莫西林或大环内酯\n→ 2分住院 → β-内酰胺+大环内酯\n→ ≥3分ICU → β-内酰胺+氟喹诺酮±万古霉素",
+          "intended_ocr_text": "疑似社区获得性肺炎\n↓\n胸片或CT确诊\n↓\nCURB-65评分\n↓\n0-1分：门诊治疗\n  无合并症：阿莫西林1g tid\n  有合并症：阿莫西林/克拉维酸或呼吸氟喹诺酮\n2分：住院治疗\n  头孢曲松2g qd + 阿奇霉素500mg qd\n≥3分：ICU治疗\n  头孢曲松 + 左氧氟沙星 ± 万古霉素",
+          "key_facts": ["CURB-65决定治疗场所", "门诊单药，住院联合", "ICU考虑MRSA覆盖"]
+        }
+      ],
+      "formula_blocks": [
+        {
+          "formula_id": "f1",
+          "page_hint": "2",
+          "latex": "CURB-65 = C(1) + U(1) + R(1) + B(1) + 65(1)",
+          "rendered_caption": "公式1. CURB-65评分计算",
+          "natural_language_meaning": "CURB-65总分0-5分，0-1分门诊，2分住院，≥3分ICU"
+        },
+        {
+          "formula_id": "f2",
+          "page_hint": "4",
+          "latex": "氧合指数 = \\frac{PaO_2}{FiO_2}",
+          "rendered_caption": "公式2. 氧合指数计算",
+          "natural_language_meaning": "氧合指数<300提示急性呼吸窘迫综合征(ARDS)，<200为重度ARDS"
+        }
+      ],
+      "cross_references": [
+        {"from": "正文1.诊断标准", "to": "图1", "text": "胸片表现见图1"},
+        {"from": "正文3.抗生素选择", "to": "表1", "text": "CURB-65评分见表1"},
+        {"from": "正文3.抗生素选择", "to": "表2", "text": "PSI评分见表2"},
+        {"from": "正文3.抗生素选择", "to": "表3", "text": "具体方案见表3"},
+        {"from": "表3抗生素方案", "to": "表4", "text": "病原体覆盖见表4"},
+        {"from": "正文3.抗生素选择", "to": "图2", "text": "治疗流程见图2"},
+        {"from": "表1评分", "to": "公式1", "text": "计算公式见公式1"},
+        {"from": "附注", "to": "公式2", "text": "氧合指数见公式2"}
+      ],
+      "layout_noise": [
+        "图1跨页，胸片在第1页，详细图注在第2页",
+        "表1和表2连续出现在第2页",
+        "图2跨页，流程图在第3页，详细图注在第4页",
+        "表4与图2图注交错",
+        "公式2位于第4页底部，接近附注"
+      ],
+      "expected_parsing_risks": [
+        "图1的胸片可能无法OCR识别",
+        "表1和表2可能被误认为同一表格",
+        "图2的分支箭头可能丢失",
+        "表4的+++符号可能被识别为乱码",
+        "公式2的分数线和下标可能丢失"
+      ]
+    }
+  },
+  {
+    "doc_id": "med_doc_008_v1",
+    "base_title": "脓毒症与感染性休克管理",
+    "clean_text_version": {
+      "format_target": "plain_markdown",
+      "body_markdown": "# 脓毒症与感染性休克管理\n\n## 1. 定义\n\n脓毒症：感染+SOFA评分增加≥2分\n感染性休克：脓毒症+需血管活性药+乳酸>2 mmol/L\n\n## 2. 初始复苏（1小时集束化治疗）\n\n- 测量乳酸\n- 抽血培养\n- 广谱抗生素\n- 液体复苏30 mL/kg\n- 血管活性药（MAP≥65 mmHg）\n\n## 3. 抗生素选择\n\n社区感染：头孢曲松+甲硝唑\n医院感染：美罗培南或哌拉西林/他唑巴坦\n真菌风险：加用氟康唑或棘白菌素",
+      "table_blocks": [
+        {
+          "table_id": "t1",
+          "caption": "SOFA评分",
+          "markdown": "| 系统 | 0分 | 1分 | 2分 | 3分 | 4分 |\n|------|-----|-----|-----|-----|-----|\n| 呼吸 | ≥400 | <400 | <300 | <200 | <100 |\n| 凝血 | ≥150 | <150 | <100 | <50 | <20 |\n| 肝脏 | <1.2 | 1.2-1.9 | 2.0-5.9 | 6.0-11.9 | ≥12.0 |\n| 心血管 | MAP≥70 | MAP<70 | 多巴胺≤5 | 多巴胺>5 | 多巴胺>15 |\n| 神经 | 15 | 13-14 | 10-12 | 6-9 | <6 |\n| 肾脏 | <1.2 | 1.2-1.9 | 2.0-3.4 | 3.5-4.9 | ≥5.0 |",
+          "key_cells": []
+        }
+      ],
+      "image_blocks": [],
+      "formula_blocks": []
+    },
+    "complex_layout_version": {
+      "target_formats": ["docx", "pdf"],
+      "page_plan": [
+        {"page": 1, "elements": ["标题", "1.定义", "表1 SOFA评分", "公式1"]},
+        {"page": 2, "elements": ["表1跨页继续", "2.初始复苏", "图1集束化治疗时间轴", "表2"]},
+        {"page": 3, "elements": ["表2续表", "3.抗生素选择", "图2治疗流程", "表3"]},
+        {"page": 4, "elements": ["图2图注", "表3续表", "公式2", "公式3", "附注"]}
+      ],
+      "section_layouts": [
+        {"section": "标题", "style": "居中加粗红色", "font_size": 18},
+        {"section": "正文", "style": "两端对齐", "font_size": 12},
+        {"section": "警示框", "style": "红色边框黄色背景", "font_size": 12}
+      ],
+      "table_blocks": [
+        {
+          "table_id": "t1",
+          "page_hint": "1-2",
+          "caption": "表1. SOFA评分系统（序贯器官衰竭评估）",
+          "markdown": "| 系统 | 指标 | 0分 | 1分 | 2分 | 3分 | 4分 |\n|------|------|-----|-----|-----|-----|-----|\n| 呼吸 | PaO₂/FiO₂ | ≥400 | <400 | <300 | <200+呼吸支持 | <100+呼吸支持 |\n| 凝血 | 血小板(×10⁹/L) | ≥150 | <150 | <100 | <50 | <20 |\n| 肝脏 | 胆红素(mg/dL) | <1.2 | 1.2-1.9 | 2.0-5.9 | 6.0-11.9 | ≥12.0 |\n| 心血管 | MAP/升压药 | MAP≥70 | MAP<70 | 多巴胺≤5或多巴酚丁胺任意剂量 | 多巴胺>5或肾上腺素≤0.1或去甲肾上腺素≤0.1 | 多巴胺>15或肾上腺素>0.1或去甲肾上腺素>0.1 |\n| 神经 | GCS评分 | 15 | 13-14 | 10-12 | 6-9 | <6 |\n| 肾脏 | 肌酐(mg/dL)或尿量 | <1.2 | 1.2-1.9 | 2.0-3.4 | 3.5-4.9或<500mL/日 | ≥5.0或<200mL/日 |",
+          "should_span_pages": true,
+          "key_cells": ["SOFA增加≥2分诊断脓毒症", "心血管评分包含升压药剂量", "肾脏评分包含尿量"]
+        },
+        {
+          "table_id": "t2",
+          "page_hint": "2-3",
+          "caption": "表2. 1小时集束化治疗清单",
+          "markdown": "| 时间 | 措施 | 目标 | 注意事项 |\n|------|------|------|----------|\n| 0-15分钟 | 测量乳酸 | 获得基线值 | 乳酸>2提示组织低灌注 |\n| 0-30分钟 | 抽血培养（2套） | 病原学诊断 | 抗生素前抽取 |\n| 0-45分钟 | 广谱抗生素 | 覆盖可能病原体 | 每延迟1小时死亡率增加7.6% |\n| 0-60分钟 | 液体复苏30mL/kg | 改善组织灌注 | 晶体液优先 |\n| 持续 | 血管活性药 | MAP≥65 mmHg | 去甲肾上腺素首选 |\n| 6小时 | 复查乳酸 | 评估复苏效果 | 乳酸清除率>10%为目标 |",
+          "should_span_pages": true,
+          "key_cells": ["抗生素1小时内给予", "液体30mL/kg", "MAP目标≥65"]
+        },
+        {
+          "table_id": "t3",
+          "page_hint": "3-4",
+          "caption": "表3. 脓毒症经验性抗生素方案",
+          "markdown": "| 感染来源 | 社区感染 | 医院感染 | 免疫抑制 | 疗程 |\n|---------|---------|---------|---------|------|\n| 肺炎 | 头孢曲松+阿奇霉素 | 美罗培南或哌拉西林/他唑巴坦 | 加万古霉素+伏立康唑 | 7-10天 |\n| 腹腔感染 | 头孢曲松+甲硝唑 | 美罗培南 | 加万古霉素+卡泊芬净 | 4-7天（源控制后） |\n| 泌尿系感染 | 头孢曲松 | 美罗培南 | 加万古霉素 | 7-14天 |\n| 皮肤软组织 | 头孢唑林+克林霉素 | 万古霉素+美罗培南 | 加两性霉素B | 7-14天 |\n| 导管相关 | 万古霉素 | 万古霉素+美罗培南 | 加卡泊芬净 | 10-14天 |\n| 不明来源 | 头孢曲松+甲硝唑 | 美罗培南+万古霉素 | 加伏立康唑或卡泊芬净 | 根据培养调整 |",
+          "should_span_pages": true,
+          "key_cells": ["医院感染首选碳青霉烯类", "免疫抑制加抗MRSA和抗真菌", "源控制是腹腔感染关键"]
+        }
+      ],
+      "image_blocks": [
+        {
+          "image_id": "img1",
+          "page_hint": "2",
+          "caption": "图1. 脓毒症1小时集束化治疗时间轴",
+          "visible_text": "0分钟：识别脓毒症\n15分钟：测乳酸\n30分钟：血培养\n45分钟：抗生素\n60分钟：液体30mL/kg\n持续：升压药维持MAP≥65",
+          "intended_ocr_text": "时间轴（0-60分钟）\n0分钟：识别脓毒症（感染+SOFA≥2）\n0-15分钟：测量乳酸水平\n0-30分钟：抽取血培养（抗生素前）\n0-45分钟：给予广谱抗生素\n0-60分钟：液体复苏30mL/kg晶体液\n持续：血管活性药维持MAP≥65 mmHg\n6小时：复查乳酸，评估复苏效果",
+          "key_facts": ["1小时内完成5项措施", "抗生素是关键", "时间就是生命"]
+        },
+        {
+          "image_id": "img2",
+          "page_hint": "3-4",
+          "caption": "图2. 脓毒症与感染性休克治疗流程（图注见第4页）",
+          "visible_text": "疑似感染 → SOFA评分 → ≥2分脓毒症 → 1小时集束化治疗 → 评估反应\n→ 血压稳定 → 继续抗感染\n→ 低血压 → 感染性休克 → 液体+升压药 → 乳酸>2 → 强化治疗",
+          "intended_ocr_text": "疑似感染患者\n↓\nSOFA评分\n↓\n增加≥2分 → 脓毒症诊断\n↓\n1小时集束化治疗\n  - 测乳酸\n  - 血培养\n  - 抗生素\n  - 液体30mL/kg\n  - 升压药(MAP≥65)\n↓\n评估反应\n↓\n血压稳定 → 继续抗感染治疗\n低血压+乳酸>2 → 感染性休克\n  → 强化液体复苏\n  → 去甲肾上腺素\n  → 考虑氢化可的松\n  → 源控制",
+          "key_facts": ["SOFA≥2诊断脓毒症", "低血压+乳酸>2诊断感染性休克", "源控制是根本"]
+        }
+      ],
+      "formula_blocks": [
+        {
+          "formula_id": "f1",
+          "page_hint": "1",
+          "latex": "SOFA评分 = 呼吸分 + 凝血分 + 肝脏分 + 心血管分 + 神经分 + 肾脏分",
+          "rendered_caption": "公式1. SOFA总分计算",
+          "natural_language_meaning": "SOFA总分0-24分，基线增加≥2分诊断脓毒症，分数越高死亡率越高"
+        },
+        {
+          "formula_id": "f2",
+          "page_hint": "4",
+          "latex": "乳酸清除率 = \\frac{初始乳酸 - 复查乳酸}{初始乳酸} \\times 100\\%",
+          "rendered_caption": "公式2. 乳酸清除率计算",
+          "natural_language_meaning": "乳酸清除率>10%提示复苏有效，>30%预后较好"
+        },
+        {
+          "formula_id": "f3",
+          "page_hint": "4",
+          "latex": "液体复苏量(mL) = 30 \\times 体重(kg)",
+          "rendered_caption": "公式3. 初始液体复苏量计算",
+          "natural_language_meaning": "脓毒症初始液体复苏量为30mL/kg，应在1小时内完成"
+        }
+      ],
+      "cross_references": [
+        {"from": "正文1.定义", "to": "表1", "text": "SOFA评分见表1"},
+        {"from": "正文1.定义", "to": "公式1", "text": "SOFA计算见公式1"},
+        {"from": "正文2.初始复苏", "to": "表2", "text": "集束化治疗清单见表2"},
+        {"from": "正文2.初始复苏", "to": "图1", "text": "时间轴见图1"},
+        {"from": "正文2.初始复苏", "to": "公式3", "text": "液体量计算见公式3"},
+        {"from": "正文3.抗生素选择", "to": "表3", "text": "具体方案见表3"},
+        {"from": "正文2.初始复苏", "to": "图2", "text": "治疗流程见图2"},
+        {"from": "表2复查乳酸", "to": "公式2", "text": "乳酸清除率见公式2"}
+      ],
+      "layout_noise": [
+        "表1跨页，第1页只有前3行",
+        "图1插入在表1和表2之间",
+        "表2跨页，第2页只有前3行",
+        "图2跨页，流程图在第3页，详细图注在第4页",
+        "表3跨页，且与图2图注交错",
+        "公式2和公式3紧邻，容易混淆"
+      ],
+      "expected_parsing_risks": [
+        "表1的升压药剂量单位可能丢失",
+        "图1的时间轴可能被识别为装饰线",
+        "表2的时间范围可能与措施分离",
+        "图2的分支箭头可能丢失",
+        "表3跨页后行对应关系可能错位",
+        "公式2的分数线可能丢失",
+        "附注可能被误认为页脚"
+      ]
+    }
+  }
+]

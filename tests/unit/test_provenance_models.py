@@ -5,11 +5,14 @@ from rag_core.models import (
     EscalationStep,
     GeneratorStep,
     PipelineTrace,
+    ProviderDiagnostic,
     QAResult,
     QueryType,
+    ReflectionStep,
     RouterDecision,
     RouterStep,
     ToolStep,
+    WorkflowMemoryEntry,
 )
 
 
@@ -20,6 +23,21 @@ def test_tool_step_defaults():
     assert step.relevance_score == 0.0
     assert step.duration_ms == 0
     assert step.query_used == ""
+    assert step.cache_hit is False
+    assert step.reused_sources == []
+    assert step.executed_sources == []
+    assert step.provider_diagnostics == []
+
+
+def test_provider_diagnostic_defaults():
+    diagnostic = ProviderDiagnostic(source="vector")
+    assert diagnostic.source == "vector"
+    assert diagnostic.results_count == 0
+    assert diagnostic.top_score == 0.0
+    assert diagnostic.average_score == 0.0
+    assert diagnostic.reused is False
+    assert diagnostic.executed is False
+    assert diagnostic.top_chunk_ids == []
 
 
 def test_escalation_step():
@@ -31,6 +49,7 @@ def test_escalation_step():
     )
     assert step.from_tool == "vector_search"
     assert step.to_tool == "cypher_traverse"
+    assert step.cached_sources_reused == []
 
 
 def test_router_step_with_rules():
@@ -69,14 +88,40 @@ def test_pipeline_trace_serialization():
         timestamp="2026-02-17T14:30:00Z",
         query="test query",
         tool_steps=[
-            ToolStep(tool_name="vector_search", results_count=5, relevance_score=3.2),
+            ToolStep(
+                tool_name="vector_search",
+                results_count=5,
+                relevance_score=3.2,
+                provider_diagnostics=[ProviderDiagnostic(source="vector", results_count=5)],
+            ),
+        ],
+        reflection_steps=[
+            ReflectionStep(
+                attempt=0,
+                tool_name="vector_search",
+                overall_score=3.2,
+                relevance=3.5,
+                entity_completeness=3.0,
+                logical_consistency=3.0,
+                context_sufficiency=3.0,
+            ),
+        ],
+        workflow_memory=[
+            WorkflowMemoryEntry(
+                stage="retrieval",
+                message="vector recall missed one entity",
+                metadata={"tool": "vector_search"},
+            )
         ],
         total_duration_ms=1200,
     )
     data = trace.model_dump()
     assert data["trace_id"] == "tr_abc123"
     assert len(data["tool_steps"]) == 1
+    assert len(data["reflection_steps"]) == 1
+    assert len(data["workflow_memory"]) == 1
     assert data["tool_steps"][0]["tool_name"] == "vector_search"
+    assert data["tool_steps"][0]["provider_diagnostics"][0]["source"] == "vector"
 
     # Round-trip
     restored = PipelineTrace.model_validate(data)
@@ -93,6 +138,7 @@ def test_pipeline_trace_json():
     parsed = json.loads(json_str)
     assert parsed["trace_id"] == "tr_xyz"
     assert parsed["tool_steps"] == []
+    assert parsed["reflection_steps"] == []
     assert parsed["escalation_steps"] == []
 
 
@@ -126,6 +172,10 @@ def test_full_pipeline_trace():
             ToolStep(tool_name="vector_search", results_count=10, relevance_score=1.5, duration_ms=300),
             ToolStep(tool_name="cypher_traverse", results_count=8, relevance_score=3.1, duration_ms=500),
         ],
+        reflection_steps=[
+            ReflectionStep(tool_name="vector_search", overall_score=1.5, failure_type="insufficient_recall"),
+            ReflectionStep(tool_name="cypher_traverse", overall_score=3.1, failure_type="acceptable"),
+        ],
         escalation_steps=[
             EscalationStep(
                 from_tool="vector_search",
@@ -138,5 +188,6 @@ def test_full_pipeline_trace():
     )
     data = trace.model_dump()
     assert len(data["tool_steps"]) == 2
+    assert len(data["reflection_steps"]) == 2
     assert len(data["escalation_steps"]) == 1
     assert data["generator_step"]["model"] == "gpt-4o-mini"

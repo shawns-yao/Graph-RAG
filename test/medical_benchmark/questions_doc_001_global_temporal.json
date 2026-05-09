@@ -1,0 +1,213 @@
+[
+  {
+    "question_id": "q_001_23",
+    "doc_id": "med_doc_001",
+    "question": "COPD的诊断和分级需要哪些检查指标？这些指标如何使用？",
+    "question_type": "global",
+    "difficulty": "medium",
+    "expected_best_route": "full_document",
+    "gold_answer": "需要FEV1和FVC用于诊断（FEV1/FVC < 0.70确诊），FEV1%预计值用于GOLD分级（1-4级），mMRC和CAT评分用于症状评估，嗜酸性粒细胞用于指导治疗方案选择。",
+    "gold_evidence": [
+      {
+        "evidence_type": "passage",
+        "section_title": "1. 疾病定义与诊断标准",
+        "evidence_locator": "多个段落",
+        "support_snippet": "诊断和分级相关指标"
+      }
+    ],
+    "reasoning_chain": [
+      "汇总诊断指标：FEV1/FVC",
+      "汇总分级指标：FEV1%预计值",
+      "汇总症状评估：mMRC、CAT",
+      "汇总治疗指导：嗜酸性粒细胞"
+    ],
+    "distractors": [],
+    "failure_risk": "中等风险",
+    "why_other_routes_may_fail": "需要完整汇总诊断、分级、评估、治疗指导的所有指标，full_document最佳"
+  },
+  {
+    "question_id": "q_001_24",
+    "doc_id": "med_doc_001",
+    "question": "文档中提到了哪些COPD药物？请按药物类别分类列出。",
+    "question_type": "global",
+    "difficulty": "medium",
+    "expected_best_route": "full_document",
+    "gold_answer": "SABA类：沙丁胺醇；LABA类：福莫特罗、茚达特罗；LAMA类：噻托溴铵、格隆溴铵；ICS类：吸入糖皮质激素。",
+    "gold_evidence": [
+      {
+        "evidence_type": "passage",
+        "section_title": "2.1 支气管舒张剂",
+        "evidence_locator": "各药物段落",
+        "support_snippet": "所有药物列表"
+      }
+    ],
+    "reasoning_chain": [
+      "汇总SABA：沙丁胺醇",
+      "汇总LABA：福莫特罗、茚达特罗",
+      "汇总LAMA：噻托溴铵、格隆溴铵",
+      "汇总ICS"
+    ],
+    "distractors": [],
+    "failure_risk": "低风险",
+    "why_other_routes_may_fail": "需要完整汇总所有药物，full_document最佳"
+  },
+  {
+    "question_id": "q_001_25",
+    "doc_id": "med_doc_001",
+    "question": "GOLD分级系统的4个级别分别对应什么FEV1范围？",
+    "question_type": "global",
+    "difficulty": "easy",
+    "expected_best_route": "full_document",
+    "gold_answer": "GOLD 1级：FEV1 ≥ 80%；GOLD 2级：50% ≤ FEV1 < 80%；GOLD 3级：30% ≤ FEV1 < 50%；GOLD 4级：FEV1 < 30%。",
+    "gold_evidence": [
+      {
+        "evidence_type": "passage",
+        "section_title": "1.1 GOLD分级标准",
+        "evidence_locator": "完整列表",
+        "support_snippet": "4个级别的FEV1范围"
+      }
+    ],
+    "reasoning_chain": [
+      "汇总GOLD 1级：≥80%",
+      "汇总GOLD 2级：50%-80%",
+      "汇总GOLD 3级：30%-50%",
+      "汇总GOLD 4级：<30%"
+    ],
+    "distractors": [],
+    "failure_risk": "低风险",
+    "why_other_routes_may_fail": "需要完整的4级列表，full_document最佳"
+  },
+  {
+    "question_id": "q_001_26",
+    "doc_id": "med_doc_001",
+    "question": "治疗方案选择需要考虑哪些因素？",
+    "question_type": "global",
+    "difficulty": "medium",
+    "expected_best_route": "full_document",
+    "gold_answer": "需要考虑GOLD分级、症状负担、急性加重史（次数/年）、嗜酸性粒细胞水平四个因素。",
+    "gold_evidence": [
+      {
+        "evidence_type": "table",
+        "section_title": "table_001_1",
+        "evidence_locator": "表头",
+        "support_snippet": "GOLD分级 | 症状负担 | 急性加重史 | 嗜酸性粒细胞"
+      }
+    ],
+    "reasoning_chain": [
+      "从表格表头提取决策因素",
+      "汇总：GOLD分级、症状、加重史、嗜酸性粒细胞"
+    ],
+    "distractors": [],
+    "failure_risk": "低风险",
+    "why_other_routes_may_fail": "需要理解治疗决策的完整框架，full_document最佳"
+  },
+  {
+    "question_id": "q_001_27",
+    "doc_id": "med_doc_001",
+    "question": "mMRC评分从0分到4分的进展反映了什么变化趋势？",
+    "question_type": "temporal",
+    "difficulty": "medium",
+    "expected_best_route": "temporal",
+    "gold_answer": "反映了呼吸困难逐渐加重的趋势：从仅剧烈活动时出现（0分）→平地快走时出现（1分）→比同龄人慢（2分）→行走100米需停下（3分）→不能离开房间（4分），活动耐量逐步下降。",
+    "gold_evidence": [
+      {
+        "evidence_type": "passage",
+        "section_title": "1.2 症状评估",
+        "evidence_locator": "mMRC完整列表",
+        "support_snippet": "0-4分的完整描述"
+      }
+    ],
+    "reasoning_chain": [
+      "识别0分：剧烈活动",
+      "识别1分：快走/爬坡",
+      "识别2分：比同龄人慢",
+      "识别3分：100米需停",
+      "识别4分：不能离开房间",
+      "推理趋势：活动耐量逐步下降"
+    ],
+    "distractors": [],
+    "failure_risk": "中等风险",
+    "why_other_routes_may_fail": "需要理解评分的渐进性和时间顺序，temporal最佳"
+  },
+  {
+    "question_id": "q_001_28",
+    "doc_id": "med_doc_001",
+    "question": "COPD患者的治疗方案会随着GOLD分级的进展如何升级？",
+    "question_type": "temporal",
+    "difficulty": "hard",
+    "expected_best_route": "temporal",
+    "gold_answer": "从GOLD 1级的SABA按需→GOLD 2级的LABA或LAMA→GOLD 2级症状重时的LABA+LAMA或LABA+ICS→GOLD 3-4级的LABA+LAMA+ICS三联方案，治疗强度逐步升级。",
+    "gold_evidence": [
+      {
+        "evidence_type": "table",
+        "section_title": "table_001_1",
+        "evidence_locator": "完整表格",
+        "support_snippet": "不同GOLD分级的治疗方案"
+      }
+    ],
+    "reasoning_chain": [
+      "GOLD 1级：SABA按需",
+      "GOLD 2级轻症：LABA或LAMA",
+      "GOLD 2级重症：双药或含ICS",
+      "GOLD 3-4级：三联方案",
+      "推理：治疗强度递增"
+    ],
+    "distractors": [],
+    "failure_risk": "高风险",
+    "why_other_routes_may_fail": "需要理解疾病进展与治疗升级的时间关系，temporal最佳"
+  },
+  {
+    "question_id": "q_001_29",
+    "doc_id": "med_doc_001",
+    "question": "如果患者从GOLD 2级进展到GOLD 4级，FEV1会经历怎样的变化？",
+    "question_type": "temporal",
+    "difficulty": "medium",
+    "expected_best_route": "temporal",
+    "gold_answer": "FEV1会从50%-80%预计值下降到<30%预计值，至少下降20个百分点，反映肺功能持续恶化。",
+    "gold_evidence": [
+      {
+        "evidence_type": "passage",
+        "section_title": "1.1 GOLD分级标准",
+        "evidence_locator": "GOLD 2级和4级",
+        "support_snippet": "GOLD 2级：50% ≤ FEV1 < 80%；GOLD 4级：FEV1 < 30%"
+      }
+    ],
+    "reasoning_chain": [
+      "GOLD 2级起点：50%-80%",
+      "GOLD 4级终点：<30%",
+      "计算变化：至少下降20个百分点",
+      "推理：肺功能持续恶化"
+    ],
+    "distractors": [
+      "GOLD 3级是30%-50%"
+    ],
+    "failure_risk": "中等风险",
+    "why_other_routes_may_fail": "需要理解FEV1随时间下降的趋势，temporal最佳"
+  },
+  {
+    "question_id": "q_001_30",
+    "doc_id": "med_doc_001",
+    "question": "从药物起效速度来看，如果患者需要快速缓解症状，应该按什么顺序选择药物？",
+    "question_type": "temporal",
+    "difficulty": "medium",
+    "expected_best_route": "temporal",
+    "gold_answer": "应该首选SABA（5-15分钟起效），其次考虑LAMA（30-60分钟起效）。SABA起效最快，适合急性症状缓解。",
+    "gold_evidence": [
+      {
+        "evidence_type": "passage",
+        "section_title": "2.1 支气管舒张剂",
+        "evidence_locator": "SABA和LAMA段落",
+        "support_snippet": "SABA起效5-15分钟，LAMA起效30-60分钟"
+      }
+    ],
+    "reasoning_chain": [
+      "查找SABA起效：5-15分钟",
+      "查找LAMA起效：30-60分钟",
+      "排序：SABA最快",
+      "推理：急性缓解首选SABA"
+    ],
+    "distractors": [],
+    "failure_risk": "低风险",
+    "why_other_routes_may_fail": "需要按起效时间排序，temporal最佳"
+  }
+]

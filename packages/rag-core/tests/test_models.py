@@ -3,6 +3,7 @@
 
 from rag_core.models import (
     Chunk,
+    DocumentBlock,
     Entity,
     GraphContext,
     PassageNode,
@@ -42,11 +43,24 @@ class TestChunk:
         assert c2 == c
 
 
+class TestDocumentBlock:
+    def test_creation(self):
+        block = DocumentBlock(
+            block_type="paragraph",
+            text="content",
+            heading_path=["Intro"],
+            order_index=1,
+        )
+        assert block.block_type == "paragraph"
+        assert block.heading_path == ["Intro"]
+
+
 class TestEntity:
     def test_creation(self):
-        e = Entity(name="Neo4j", entity_type="Technology")
+        e = Entity(name="Neo4j", entity_type="Technology", entity_confidence=0.9)
         assert e.name == "Neo4j"
         assert e.entity_type == "Technology"
+        assert e.entity_confidence == 0.9
 
     def test_serialization(self):
         e = Entity(id="e1", name="Test", description="desc")
@@ -77,9 +91,10 @@ class TestTemporalEvent:
 
 class TestPhraseNode:
     def test_creation(self):
-        p = PhraseNode(name="GraphRAG", pagerank_score=0.85)
+        p = PhraseNode(name="GraphRAG", pagerank_score=0.85, confidence=0.8)
         assert p.name == "GraphRAG"
         assert p.pagerank_score == 0.85
+        assert p.confidence == 0.8
         assert p.passage_ids == []
 
     def test_with_passages(self):
@@ -141,8 +156,9 @@ class TestRouterDecision:
 class TestSearchResult:
     def test_creation(self):
         c = Chunk(content="test")
-        sr = SearchResult(chunk=c, score=0.95, rank=1, source="graph")
+        sr = SearchResult(chunk=c, score=0.95, score_normalized=0.95, rank=1, source="graph")
         assert sr.score == 0.95
+        assert sr.score_normalized == 0.95
         assert sr.source == "graph"
 
     def test_default_source(self):

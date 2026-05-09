@@ -24,8 +24,7 @@ class TestMangleRouterIntegration:
         """When Mangle returns no match, fall back to pattern matching."""
         engine = ReasoningEngine(_RULES_DIR)
         # Query with no Mangle keyword match but with a pattern match
-        d = classify_query("Покажи историю изменений за 2024-01", reasoning=engine)
-        # "истори" matches temporal keyword in routing.mg
+        d = classify_query("Show timeline changes for 2024-01", reasoning=engine)
         assert d.query_type == QueryType.TEMPORAL
 
     def test_no_mangle_backward_compat(self):

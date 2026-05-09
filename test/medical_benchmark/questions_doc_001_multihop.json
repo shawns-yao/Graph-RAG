@@ -1,0 +1,202 @@
+[
+  {
+    "question_id": "q_001_16",
+    "doc_id": "med_doc_001",
+    "question": "一个GOLD 2级患者，症状中-重，急性加重≥2次/年，嗜酸性粒细胞80/μL，应该用什么方案？为什么不用含ICS的方案？",
+    "question_type": "multi_hop",
+    "difficulty": "hard",
+    "expected_best_route": "graph",
+    "gold_answer": "应该用LABA+LAMA方案。不用含ICS方案是因为嗜酸性粒细胞80/μL < 100/μL，未达到使用ICS的阈值。",
+    "gold_evidence": [
+      {
+        "evidence_type": "table",
+        "section_title": "table_001_1",
+        "evidence_locator": "第3行",
+        "support_snippet": "2级 | 中-重 | ≥2次/年 | <100/μL | LABA+LAMA"
+      }
+    ],
+    "reasoning_chain": [
+      "识别患者特征：GOLD 2级，症状中-重，急性加重≥2次/年",
+      "识别嗜酸性粒细胞：80/μL",
+      "判断：80 < 100，属于<100/μL组",
+      "查找方案：LABA+LAMA",
+      "解释：未达到ICS使用阈值"
+    ],
+    "distractors": [
+      "嗜酸性粒细胞≥300/μL时才用LABA+ICS"
+    ],
+    "failure_risk": "高风险",
+    "why_other_routes_may_fail": "需要多步推理：数值判断→表格匹配→解释原因，graph最佳"
+  },
+  {
+    "question_id": "q_001_17",
+    "doc_id": "med_doc_001",
+    "question": "如果患者FEV1为35%预计值，CAT评分12分，急性加重3次/年，嗜酸性粒细胞150/μL，应该用什么治疗方案？",
+    "question_type": "multi_hop",
+    "difficulty": "hard",
+    "expected_best_route": "graph",
+    "gold_answer": "应该用LABA+LAMA+ICS三联方案。",
+    "gold_evidence": [
+      {
+        "evidence_type": "passage",
+        "section_title": "1.1 GOLD分级标准",
+        "evidence_locator": "GOLD 3级",
+        "support_snippet": "30% ≤ FEV1 < 50%为GOLD 3级"
+      },
+      {
+        "evidence_type": "table",
+        "section_title": "table_001_1",
+        "evidence_locator": "第6行",
+        "support_snippet": "3-4级 | 重 | ≥2次/年 | ≥100/μL | LABA+LAMA+ICS"
+      }
+    ],
+    "reasoning_chain": [
+      "判断GOLD分级：FEV1 35%属于GOLD 3级",
+      "识别症状：CAT 12分≥10分",
+      "识别急性加重：3次/年≥2次/年",
+      "识别嗜酸性粒细胞：150/μL≥100/μL",
+      "查找表格：LABA+LAMA+ICS"
+    ],
+    "distractors": [
+      "如果嗜酸性粒细胞<100/μL则用LABA+LAMA"
+    ],
+    "failure_risk": "高风险",
+    "why_other_routes_may_fail": "需要先判断GOLD分级，再匹配表格，graph多跳推理最佳"
+  },
+  {
+    "question_id": "q_001_18",
+    "doc_id": "med_doc_001",
+    "question": "为什么沙丁胺醇适合按需使用而噻托溴铵适合每日规律使用？",
+    "question_type": "multi_hop",
+    "difficulty": "hard",
+    "expected_best_route": "graph",
+    "gold_answer": "因为沙丁胺醇是SABA，起效快（5-15分钟）但持续时间短（4-6小时），适合按需缓解症状；噻托溴铵是LAMA，持续时间长（24小时），适合每日规律使用维持治疗。",
+    "gold_evidence": [
+      {
+        "evidence_type": "passage",
+        "section_title": "2.1 支气管舒张剂",
+        "evidence_locator": "SABA和LAMA段落",
+        "support_snippet": "沙丁胺醇起效5-15分钟，持续4-6小时；噻托溴铵持续24小时"
+      }
+    ],
+    "reasoning_chain": [
+      "查找沙丁胺醇特性：起效快，持续短",
+      "推理：快速起效适合急性缓解",
+      "查找噻托溴铵特性：持续长",
+      "推理：长效适合维持治疗"
+    ],
+    "distractors": [],
+    "failure_risk": "高风险",
+    "why_other_routes_may_fail": "需要理解药代动力学与临床应用的因果关系，graph最佳"
+  },
+  {
+    "question_id": "q_001_19",
+    "doc_id": "med_doc_001",
+    "question": "COPD患者从GOLD 2级进展到GOLD 3级，治疗方案会如何变化？",
+    "question_type": "multi_hop",
+    "difficulty": "hard",
+    "expected_best_route": "hybrid",
+    "gold_answer": "如果嗜酸性粒细胞≥100/μL，从GOLD 2级的LABA+ICS升级到GOLD 3级的LABA+LAMA+ICS三联方案；如果嗜酸性粒细胞<100/μL，则维持LABA+LAMA方案。",
+    "gold_evidence": [
+      {
+        "evidence_type": "table",
+        "section_title": "table_001_1",
+        "evidence_locator": "第3-6行",
+        "support_snippet": "GOLD 2级和3-4级在嗜酸性粒细胞阈值和方案上的差异"
+      }
+    ],
+    "reasoning_chain": [
+      "查找GOLD 2级方案：根据嗜酸性粒细胞选择",
+      "查找GOLD 3级方案：根据嗜酸性粒细胞选择",
+      "对比：3级可能需要三联方案"
+    ],
+    "distractors": [],
+    "failure_risk": "高风险",
+    "why_other_routes_may_fail": "需要跨行对比表格并理解治疗升级逻辑，hybrid最佳"
+  },
+  {
+    "question_id": "q_001_20",
+    "doc_id": "med_doc_001",
+    "question": "如果患者mMRC评分从2分进展到4分，说明什么？",
+    "question_type": "multi_hop",
+    "difficulty": "medium",
+    "expected_best_route": "graph",
+    "gold_answer": "说明呼吸困难明显加重，从'因呼吸困难而比同龄人走得慢'进展到'因严重呼吸困难而不能离开房间'，提示疾病恶化。",
+    "gold_evidence": [
+      {
+        "evidence_type": "passage",
+        "section_title": "1.2 症状评估",
+        "evidence_locator": "mMRC列表",
+        "support_snippet": "2分和4分的描述"
+      }
+    ],
+    "reasoning_chain": [
+      "查找mMRC 2分：比同龄人走得慢",
+      "查找mMRC 4分：不能离开房间",
+      "推理：活动能力明显下降，疾病恶化"
+    ],
+    "distractors": [],
+    "failure_risk": "中等风险",
+    "why_other_routes_may_fail": "需要对比两个评分并推理临床意义，graph最佳"
+  },
+  {
+    "question_id": "q_001_21",
+    "doc_id": "med_doc_001",
+    "question": "一个患者FEV1为25%预计值，嗜酸性粒细胞200/μL，急性加重3次/年，应该用什么方案？请说明判断过程。",
+    "question_type": "multi_hop",
+    "difficulty": "hard",
+    "expected_best_route": "graph",
+    "gold_answer": "应该用LABA+LAMA+ICS三联方案。判断过程：FEV1 25% < 30%属于GOLD 4级，嗜酸性粒细胞200/μL≥100/μL，急性加重≥2次/年，符合三联方案指征。",
+    "gold_evidence": [
+      {
+        "evidence_type": "passage",
+        "section_title": "1.1 GOLD分级标准",
+        "evidence_locator": "GOLD 4级",
+        "support_snippet": "GOLD 4级：FEV1 < 30%预计值"
+      },
+      {
+        "evidence_type": "table",
+        "section_title": "table_001_1",
+        "evidence_locator": "第6行",
+        "support_snippet": "3-4级 | 重 | ≥2次/年 | ≥100/μL | LABA+LAMA+ICS"
+      }
+    ],
+    "reasoning_chain": [
+      "判断GOLD分级：FEV1 25% < 30%，属于GOLD 4级",
+      "识别嗜酸性粒细胞：200/μL≥100/μL",
+      "识别急性加重：3次/年≥2次/年",
+      "查找表格：LABA+LAMA+ICS"
+    ],
+    "distractors": [
+      "GOLD 3级是30% ≤ FEV1 < 50%"
+    ],
+    "failure_risk": "高风险",
+    "why_other_routes_may_fail": "需要多步推理：GOLD分级→条件匹配→方案选择，graph最佳"
+  },
+  {
+    "question_id": "q_001_22",
+    "doc_id": "med_doc_001",
+    "question": "比较SABA、LABA和LAMA三类药物在起效时间和持续时间上的特点。",
+    "question_type": "multi_hop",
+    "difficulty": "hard",
+    "expected_best_route": "comprehensive",
+    "gold_answer": "SABA起效最快（5-15分钟）但持续时间最短（4-6小时）；LABA持续时间长（12-24小时）；LAMA起效较慢（30-60分钟）但持续时间最长（24小时）。",
+    "gold_evidence": [
+      {
+        "evidence_type": "passage",
+        "section_title": "2.1 支气管舒张剂",
+        "evidence_locator": "SABA、LABA、LAMA段落",
+        "support_snippet": "三类药物的起效时间和持续时间"
+      }
+    ],
+    "reasoning_chain": [
+      "查找SABA：起效5-15分钟，持续4-6小时",
+      "查找LABA：持续12-24小时",
+      "查找LAMA：起效30-60分钟，持续24小时",
+      "综合对比"
+    ],
+    "distractors": [],
+    "failure_risk": "中等风险",
+    "why_other_routes_may_fail": "需要同时召回三类药物并对比，comprehensive最佳"
+  }
+]
