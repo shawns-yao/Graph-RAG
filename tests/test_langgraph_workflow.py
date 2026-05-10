@@ -2,6 +2,8 @@
 
 from unittest.mock import MagicMock, patch
 
+import pytest
+
 from rag_core.models import (
     Chunk,
     PipelineTrace,
@@ -34,9 +36,12 @@ def _make_results(prefix: str, count: int) -> list[SearchResult]:
     ]
 
 
-def _make_decision(tool: str = "vector_search") -> RouterDecision:
+def _make_decision(
+    tool: str = "vector_search",
+    query_type: QueryType = QueryType.SIMPLE,
+) -> RouterDecision:
     return RouterDecision(
-        query_type=QueryType.SIMPLE,
+        query_type=query_type,
         confidence=0.8,
         reasoning="test",
         suggested_tool=tool,
@@ -68,6 +73,7 @@ class _FakeWorkflowRuntime:
         self.rewrite_enabled = rewrite_enabled
         self.reranked_results = reranked_results
         self.run_calls: list[tuple[str, str]] = []
+        self.reflection_calls = 0
         self.retry_query_calls: list[str] = []
         self.rerank_calls: list[tuple[str, list[str]]] = []
 
@@ -130,6 +136,7 @@ class _FakeWorkflowRuntime:
         attempt,
     ):
         del query, results, openai_client, reflection_history, workflow_memory, tool_name, attempt
+        self.reflection_calls += 1
         return self.reflections.pop(0)
 
     def plan_incremental_retry(self, query, current_tool, reflection, channel_cache, provider_results):
@@ -240,6 +247,62 @@ class TestLangGraphSelfCorrectionWorkflow:
         assert results == vector_results
         assert retries == 0
         assert runtime.run_calls == [("vector_search", "test query")]
+
+    def test_relation_query_falls_back_to_graph_when_reflection_transport_fails(self):
+        vector_results = _make_results("vector", 2)
+        graph_results = _make_results("graph", 3)
+        runtime = _FakeWorkflowRuntime(
+            tool_results={
+                "vector_search": vector_results,
+                "cypher_traverse": graph_results,
+            },
+            reflections=[
+                ReflectionStep(
+                    evidence_status="insufficient",
+                    gap_type="off_topic",
+                    action="stop",
+                    required_tool="none",
+                    verdict="stop",
+                    overall_score=0.0,
+                    failure_type="insufficient_context",
+                    recommended_action="stop_due_to_invalid_reflection",
+                    should_retry=False,
+                    retry_scope="stop",
+                    reasoning="Reflection policy guard: Error code: 522 connection timed out retryable.",
+                ),
+                ReflectionStep(
+                    evidence_status="sufficient",
+                    gap_type="none",
+                    action="answer",
+                    required_tool="none",
+                    verdict="answer",
+                    overall_score=5.0,
+                    failure_type="acceptable",
+                    recommended_action="answer_ready",
+                    should_retry=False,
+                    retry_scope="stop",
+                ),
+            ],
+            next_tools={"vector_search": "cypher_traverse"},
+        )
+
+        results, retries = run_self_correction_workflow(
+            query="FEV1和肺功能检查有什么关系？",
+            driver=MagicMock(),
+            openai_client=MagicMock(),
+            decision=_make_decision(query_type=QueryType.RELATION),
+            max_retries=2,
+            relevance_threshold=3.0,
+            trace=None,
+            ops=runtime.as_ops(),
+        )
+
+        assert results == graph_results
+        assert retries == 1
+        assert runtime.run_calls == [
+            ("vector_search", "FEV1和肺功能检查有什么关系？"),
+            ("cypher_traverse", "FEV1和肺功能检查有什么关系？"),
+        ]
 
     def test_escalates_with_rewritten_query_and_records_trace(self):
         vector_results = _make_results("vector", 1)
@@ -543,6 +606,7 @@ class TestLangGraphSelfCorrectionWorkflow:
         assert results == vector_results
         assert retries == 0
         assert runtime.run_calls == [("vector_search", "original query")]
+        assert runtime.reflection_calls == 0
 
     def test_reflection_hallucination_guard_blocks_repeated_missing_claims(self):
         vector_results = [
@@ -758,7 +822,8 @@ class TestTopLevelAgentWorkflow:
             ops=ops,
         )
 
-        assert final_result.confidence == 0.35
+        assert final_result.confidence < 0.82  # Guard applies a scale-down
+        assert final_result.confidence == pytest.approx(0.82 * 0.6, abs=0.01)
         assert "not decisive enough" in final_result.answer
 
     def test_global_query_runs_completeness_retry_nodes(self):

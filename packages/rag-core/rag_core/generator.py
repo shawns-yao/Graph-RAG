@@ -193,20 +193,20 @@ def _calculate_confidence(
     *,
     reflection_score: float | None = None,
 ) -> float:
-    cfg = get_settings()
-    avg_retrieval_score = sum(_result_confidence_score(result) for result in results) / len(results)
-    if reflection_score is None:
-        return _clamp_confidence(avg_retrieval_score)
+    """Compute answer confidence from retrieval quality.
 
-    score_scale = _retrieval_number(cfg, "reflection_score_scale", 5.0)
-    retrieval_weight = _retrieval_number(cfg, "retrieval_confidence_weight", 0.5)
-    reflection_weight = _retrieval_number(cfg, "reflection_confidence_weight", 0.5)
-    retrieval_score_normalized = avg_retrieval_score * score_scale
-    fused_score = (
-        (retrieval_weight * retrieval_score_normalized)
-        + (reflection_weight * reflection_score)
-    )
-    return _clamp_confidence(fused_score / score_scale)
+    Confidence is driven by the retrieval layer's score_normalized values,
+    which reflect lexical and semantic evidence quality. The reflection step
+    is a policy classifier (answer/retry/stop) and intentionally does not
+    contribute numeric signal here. The reflection_score parameter is kept
+    for backward compatibility but is only used as a soft cap when the
+    evidence is weak.
+    """
+    del reflection_score  # reflection is a policy decision, not a numeric signal
+    if not results:
+        return _clamp_confidence(0.0)
+    avg_retrieval_score = sum(_result_confidence_score(result) for result in results) / len(results)
+    return _clamp_confidence(avg_retrieval_score)
 
 
 def calculate_answer_confidence(

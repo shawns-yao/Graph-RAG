@@ -65,19 +65,31 @@ class TestGenerateAnswer:
         assert len(qa.sources) == 1
         client.chat.completions.create.assert_called_once()
 
-    def test_fuses_reflection_score_into_confidence(self):
+    def test_reflection_score_does_not_affect_confidence(self):
+        """Reflection is a policy decision (answer/retry/stop), not a numeric signal.
+
+        Confidence should reflect retrieval quality only.
+        """
         client = MagicMock()
         client.chat.completions.create.return_value = _mock_openai_response("answer")
 
         results = [_make_scored_result("relevant content", 0.8)]
-        qa = generate_answer(
+        qa_with_reflection = generate_answer(
             "What is X?",
             results,
             openai_client=client,
             reflection_score=2.0,
         )
+        qa_without_reflection = generate_answer(
+            "What is X?",
+            results,
+            openai_client=client,
+            reflection_score=None,
+        )
 
-        assert qa.confidence == 0.6
+        # Confidence is driven by retrieval evidence, not reflection score
+        assert qa_with_reflection.confidence == qa_without_reflection.confidence
+        assert qa_with_reflection.confidence == 0.8
 
     def test_public_confidence_helper_matches_generate_answer(self):
         client = MagicMock()

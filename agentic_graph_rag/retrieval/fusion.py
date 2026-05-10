@@ -114,6 +114,7 @@ class FusionView:
     fusion_score: float
     fusion_rank: int
     fused_source: str = "hybrid"
+    preserved_normalized: float | None = None
 
 
 @dataclass(slots=True)
@@ -130,6 +131,7 @@ class FusionEngine:
     ) -> list[FusionView]:
         """Build fusion score views without rewriting upstream SearchResult objects."""
         scores: dict[str, float] = {}
+        normalized_scores: dict[str, list[float]] = {}
         result_map: dict[str, SearchResult] = {}
         source_weights = weights or {}
 
@@ -138,18 +140,25 @@ class FusionEngine:
                 key = result.chunk.id or result.chunk.content[:50]
                 weight = source_weights.get(result.source, 1.0)
                 scores[key] = scores.get(key, 0.0) + weight * (1.0 / (self.rrf_k + rank))
+                if result.score_normalized is not None:
+                    normalized_scores.setdefault(key, []).append(result.score_normalized)
                 if key not in result_map:
                     result_map[key] = result
 
         sorted_keys = sorted(scores, key=lambda item: scores[item], reverse=True)[:top_k]
-        return [
-            FusionView(
-                result=result_map[key],
-                fusion_score=scores[key],
-                fusion_rank=index,
+        views: list[FusionView] = []
+        for index, key in enumerate(sorted_keys, start=1):
+            upstream_normalized = normalized_scores.get(key)
+            preserved = max(upstream_normalized) if upstream_normalized else None
+            views.append(
+                FusionView(
+                    result=result_map[key],
+                    fusion_score=scores[key],
+                    fusion_rank=index,
+                    preserved_normalized=preserved,
+                )
             )
-            for index, key in enumerate(sorted_keys, start=1)
-        ]
+        return views
 
     def fuse(
         self,
@@ -162,7 +171,7 @@ class FusionEngine:
             view.result.model_copy(
                 update={
                     "score": view.fusion_score,
-                    "score_normalized": None,
+                    "score_normalized": view.preserved_normalized,
                     "rank": view.fusion_rank,
                     "source": view.fused_source,
                 }

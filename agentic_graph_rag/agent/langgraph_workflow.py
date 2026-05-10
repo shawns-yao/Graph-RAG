@@ -27,9 +27,19 @@ from rag_core.models import (
 from rag_core.reflector import resolve_reflection_verdict
 
 _ANCHOR_PATTERN = re.compile(r"[A-Za-z0-9_.-]+|[\u4e00-\u9fff]{2,}")
-_ANSWER_GUARD_CONFIDENCE_CAP = 0.35
+_ANSWER_GUARD_CONFIDENCE_SCALE = 0.6
 _GLOBAL_COMPLETENESS_CONFIDENCE_THRESHOLD = 0.45
 _REFLECTION_RETRY_SCORE_THRESHOLD = 3.0
+_REFLECTION_MIN_REMAINING_BUDGET_MS = 1000
+_REFLECTION_TRANSPORT_FAILURE_MARKERS = (
+    "connection error",
+    "connection timed out",
+    "connection_timeout",
+    "error code: 522",
+    "eof occurred",
+    "retryable",
+    "timed out",
+)
 _ANCHOR_STOPWORDS = {
     "a",
     "an",
@@ -187,6 +197,10 @@ def _record_reflection_trace(
         return
     ops = state["ops"]
     if not state.get("tool_step_logged_for_attempt", False):
+        provider_results = state.get("provider_results_sink")
+        executed_sources = state.get("executed_sources", [])
+        if provider_results is None and len(executed_sources) == 1:
+            provider_results = {executed_sources[0]: state["results"]}
         trace.tool_steps.append(
             ToolStep(
                 tool_name=state["current_tool"],
@@ -198,7 +212,7 @@ def _record_reflection_trace(
                 reused_sources=state.get("reused_sources", []),
                 executed_sources=state.get("executed_sources", []),
                 provider_diagnostics=ops.build_provider_diagnostics(
-                    state.get("provider_results_sink"),
+                    provider_results,
                     state.get("reused_sources", []),
                     state.get("executed_sources", []),
                 ),
@@ -219,6 +233,10 @@ def _build_skip_reflection(
         attempt=state["attempt"],
         tool_name=state["current_tool"],
         query_used=state["current_query"],
+        evidence_status="sufficient",
+        gap_type="none",
+        action="answer",
+        required_tool="none",
         verdict="answer",
         overall_score=max_score,
         relevance=max_score,
@@ -243,6 +261,40 @@ def _build_skip_reflection(
         should_rewrite_query=False,
         should_rerank_again=False,
         comparison_to_previous="Auto-accepted due to strong retrieval evidence.",
+    )
+
+
+def _build_budget_exhausted_reflection(state: SelfCorrectionState) -> ReflectionStep:
+    """Stop before an expensive judge call when the request budget is gone."""
+    return ReflectionStep(
+        attempt=state["attempt"],
+        tool_name=state["current_tool"],
+        query_used=state["current_query"],
+        evidence_status="insufficient",
+        gap_type="off_topic",
+        action="stop",
+        required_tool="none",
+        verdict="retry",
+        overall_score=0.0,
+        relevance=0.0,
+        entity_completeness=0.0,
+        logical_consistency=0.0,
+        context_sufficiency=0.0,
+        missing_information=["Request time budget is too low for reflection."],
+        missing_entities=[],
+        missing_relationships=[],
+        coverage_gap_sources=[],
+        candidate_fix_paths=["skip_reflection_due_to_budget"],
+        preferred_tools=[],
+        preferred_providers=[],
+        retry_scope="tool_escalation",
+        reasoning="Skipped LLM reflection because the remaining request time budget was too low.",
+        failure_type="insufficient_context",
+        recommended_action="stop_due_to_time_budget",
+        should_retry=True,
+        should_rewrite_query=False,
+        should_rerank_again=False,
+        comparison_to_previous="Budget guard stop.",
     )
 
 
@@ -378,7 +430,75 @@ def _remaining_budget_ms(state: SelfCorrectionState) -> int:
 
 def _budget_exhausted(state: SelfCorrectionState) -> bool:
     """Whether the request-level budget has been exhausted."""
+    if "time_budget_ms" not in state:
+        return False
     return _remaining_budget_ms(state) <= 0
+
+
+def _reflection_budget_too_low(state: SelfCorrectionState) -> bool:
+    """Avoid starting an LLM judge call that cannot fit the remaining budget."""
+    if "time_budget_ms" not in state:
+        return False
+    return _remaining_budget_ms(state) < _REFLECTION_MIN_REMAINING_BUDGET_MS
+
+
+def _is_reflection_transport_failure(reflection: ReflectionStep) -> bool:
+    """Identify policy stops caused by retryable transport failures, not bad JSON."""
+    if (reflection.recommended_action or "") != "stop_due_to_invalid_reflection":
+        return False
+    reason = (reflection.reasoning or "").casefold()
+    return any(marker in reason for marker in _REFLECTION_TRANSPORT_FAILURE_MARKERS)
+
+
+def _relation_query_can_retry_graph(
+    state: SelfCorrectionState,
+    reflection: ReflectionStep,
+) -> bool:
+    """Use deterministic graph fallback when the reflection judge is unavailable."""
+    decision = state.get("decision")
+    if decision is None:
+        return False
+    return (
+        _is_reflection_transport_failure(reflection)
+        and decision.query_type in {QueryType.RELATION, QueryType.MULTI_HOP}
+        and state["current_tool"] != "cypher_traverse"
+        and "cypher_traverse" not in set(state.get("tried_tools", []))
+        and state["attempt"] < state["max_retries"]
+        and bool(state.get("results"))
+    )
+
+
+def _build_graph_retry_after_reflection_failure(
+    state: SelfCorrectionState,
+    reflection: ReflectionStep,
+) -> ReflectionStep:
+    """Preserve the transport failure while routing relation queries to graph."""
+    candidate_fix_paths = list(reflection.candidate_fix_paths)
+    if "reflection_transport_failure_graph_fallback" not in candidate_fix_paths:
+        candidate_fix_paths.append("reflection_transport_failure_graph_fallback")
+    return reflection.model_copy(
+        update={
+            "evidence_status": "partial",
+            "gap_type": "missing_relation",
+            "action": "retry_graph",
+            "required_tool": "cypher_traverse",
+            "verdict": "retry",
+            "overall_score": max(reflection.overall_score, _REFLECTION_RETRY_SCORE_THRESHOLD),
+            "failure_type": "relation_missing",
+            "recommended_action": "use_graph_traversal",
+            "preferred_tools": ["cypher_traverse"],
+            "preferred_providers": ["graph"],
+            "retry_scope": "tool_escalation",
+            "reasoning": (
+                "Reflection LLM transport failed; relation query is falling back "
+                f"deterministically to graph traversal. Original reason: {reflection.reasoning}"
+            ),
+            "should_retry": True,
+            "should_rewrite_query": False,
+            "should_rerank_again": False,
+            "candidate_fix_paths": candidate_fix_paths,
+        }
+    )
 
 
 def _reflection_rank(
@@ -570,6 +690,7 @@ def _evaluate_reflection_node(state: SelfCorrectionState) -> dict[str, Any]:
     """Evaluate the current retrieval attempt without mutating workflow history."""
     ops = state["ops"]
     results = state.get("results", [])
+
     cfg = get_settings()
     threshold = cfg.agent.reflection_skip_score_threshold
     has_normalized_scores = any(result.score_normalized is not None for result in results)
@@ -594,6 +715,11 @@ def _evaluate_reflection_node(state: SelfCorrectionState) -> dict[str, Any]:
                 "pending_reflection_threshold": threshold,
             }
 
+    if results and _reflection_budget_too_low(state):
+        return {
+            "pending_reflection": _build_budget_exhausted_reflection(state),
+        }
+
     reflection = ops.evaluate_reflection(
         state["current_query"],
         results,
@@ -612,6 +738,11 @@ def _interpret_verdict_node(state: SelfCorrectionState) -> dict[str, Any]:
     if reflection is None:
         return {"next_step": "finish"}
 
+    if _relation_query_can_retry_graph(state, reflection):
+        reflection = _build_graph_retry_after_reflection_failure(state, reflection)
+
+    reflection.verdict = resolve_reflection_verdict(reflection)
+
     if "skip_reflection" in reflection.candidate_fix_paths:
         memory_message = (
             f"{state['current_tool']} skipped LLM reflection with "
@@ -627,10 +758,15 @@ def _interpret_verdict_node(state: SelfCorrectionState) -> dict[str, Any]:
         }
     else:
         memory_message = (
-            f"{state['current_tool']} scored {reflection.overall_score:.2f} "
-            f"with action {reflection.recommended_action or 'unknown'}"
+            f"{state['current_tool']} classified evidence as "
+            f"{reflection.evidence_status or 'unknown'} "
+            f"with action {reflection.action or reflection.recommended_action or 'unknown'}"
         )
         memory_metadata = {
+            "evidence_status": reflection.evidence_status,
+            "gap_type": reflection.gap_type,
+            "action": reflection.action,
+            "verdict": reflection.verdict,
             "failure_type": reflection.failure_type,
             "missing_information": reflection.missing_information,
             "missing_entities": reflection.missing_entities,
@@ -1092,7 +1228,7 @@ def _generate_answer_node(state: AgentWorkflowState) -> dict[str, Any]:
         qa_result = qa_result.model_copy(
             update={
                 "answer": answer_text,
-                "confidence": min(qa_result.confidence, _ANSWER_GUARD_CONFIDENCE_CAP),
+                "confidence": round(qa_result.confidence * _ANSWER_GUARD_CONFIDENCE_SCALE, 3),
             }
         )
     settings = state.get("settings")
