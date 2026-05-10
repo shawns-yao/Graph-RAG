@@ -188,8 +188,6 @@ class PipelineService:
         for token in PipelineService._iter_answer_tokens(qa.answer):
             yield {"event": "token", "data": {"text": token}}
 
-        confidence = qa.confidence
-
         yield {
             "event": "done",
             "data": {
@@ -198,7 +196,10 @@ class PipelineService:
                 "session_id": session_id,
                 "retries": qa.retries,
                 "sources": len(qa.sources),
-                "confidence": confidence,
+                "evidence_score": qa.evidence_score,
+                "confidence_level": qa.confidence_level,
+                # Deprecated: kept for backward compatibility with older stream consumers.
+                "confidence": qa.confidence,
             },
         }
 

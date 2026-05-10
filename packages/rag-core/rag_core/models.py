@@ -43,7 +43,13 @@ class Chunk(BaseModel):
 # ---------------------------------------------------------------------------
 
 class Entity(BaseModel):
-    """An entity extracted from text."""
+    """An entity extracted from text.
+
+    `entity_confidence` is the LLM's self-reported confidence when extracting
+    the entity. Known to be poorly calibrated — used here only as a filter
+    threshold (<0.7 entities skip phrase-link building) to drop obvious junk.
+    Not a probability; do not aggregate arithmetically.
+    """
 
     id: str = ""
     name: str
@@ -81,7 +87,13 @@ class TemporalEvent(BaseModel):
 # ---------------------------------------------------------------------------
 
 class PhraseNode(BaseModel):
-    """Entity-level node for graph navigation (HippoRAG 2)."""
+    """Entity-level node for graph navigation (HippoRAG 2).
+
+    `pagerank_score` comes from NetworkX PageRank over the KNN graph and has
+    rigorous mathematical meaning. `confidence` inherits from Entity's
+    extraction-time LLM self-report and is treated as a quality filter, not
+    a probability.
+    """
 
     id: str = ""
     name: str
@@ -125,7 +137,13 @@ class QueryType(str, Enum):
 
 
 class RouterDecision(BaseModel):
-    """Output of the query router."""
+    """Output of the query router.
+
+    Note on `confidence`: this is a heuristic rule-match strength (0-1), not a
+    calibrated probability. It is used only for logging / trace display and
+    does not drive any retrieval decisions. Hard-rule matches report 0.84-0.99
+    based on how specific the matched pattern is.
+    """
 
     query_type: QueryType
     confidence: float = 0.0

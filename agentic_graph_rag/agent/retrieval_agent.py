@@ -674,7 +674,10 @@ def run(
     trace.total_duration_ms = int((time.perf_counter() - t_start) * 1000)
 
     logger.info(
-        "Agent result: %d sources, %d retries, confidence=%.2f",
-        len(qa_result.sources), qa_result.retries, qa_result.confidence,
+        "Agent result: %d sources, %d retries, evidence_score=%.2f, confidence_level=%s",
+        len(qa_result.sources),
+        qa_result.retries,
+        qa_result.evidence_score,
+        qa_result.confidence_level,
     )
     return qa_result

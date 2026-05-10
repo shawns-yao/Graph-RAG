@@ -60,6 +60,7 @@ def explain_trace(trace: PipelineTrace) -> dict[str, Any]:
             for step in trace.escalation_steps
         ],
         "generation": _explain_generation(trace),
+        "verification": _explain_verification(trace),
     }
 
 
@@ -176,7 +177,31 @@ def _explain_generation(trace: PipelineTrace) -> dict[str, Any] | None:
         "model": trace.generator_step.model,
         "prompt_tokens": trace.generator_step.prompt_tokens,
         "completion_tokens": trace.generator_step.completion_tokens,
-        "confidence": trace.generator_step.confidence,
+        "evidence_score": trace.generator_step.evidence_score,
+        "confidence_level": trace.generator_step.confidence_level,
         "completeness_check": trace.generator_step.completeness_check,
         "duration_ms": trace.generator_step.duration_ms,
+    }
+
+
+def _explain_verification(trace: PipelineTrace) -> dict[str, Any] | None:
+    """Serialize Chain-of-Verification results for explain consumers."""
+    step = trace.verification_step
+    if step is None:
+        return None
+
+    return {
+        "claims_total": step.claims_total,
+        "claims_supported": step.claims_supported,
+        "support_rate": round(step.support_rate, 3),
+        "unsupported_claims": [
+            {"text": vc.text, "key_terms": vc.key_terms}
+            for vc in step.unsupported_claims
+        ],
+        "verified_claims": [
+            {"text": vc.text, "top_chunk_id": vc.top_chunk_id}
+            for vc in step.verified_claims
+        ],
+        "skipped_reason": step.skipped_reason,
+        "duration_ms": step.duration_ms,
     }

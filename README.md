@@ -104,7 +104,7 @@ agentic-graph-rag/
 │   │   ├── retrieval_agent.py # Orchestrator + self-correction loop + provenance
 │   │   └── tools.py           # 7 tools: vector, cypher, community, hybrid, temporal, full_read, comprehensive
 │   ├── generation/
-│   │   └── graph_verifier.py  # Contradiction detection + claim verification
+│   │   └── claim_verifier.py  # Chain-of-Verification: extract claims + graph-based verification
 │   ├── reasoning/
 │   │   ├── reasoning_engine.py # PyMangle Datalog engine wrapper
 │   │   └── rules/             # Mangle rules: routing.mg, access.mg, graph.mg
