@@ -35,7 +35,7 @@ class TestGraphContextSerialization:
         ctx = GraphContext(
             triplets=[{"source": "Alice", "relation": "WORKS_ON", "target": "Project X"}],
             entities=[Entity(name="Alice", entity_type="Person")],
-            passages=["Alice is assigned to Project X."],
+            passages=["Alice works on Project X."],
             source_ids=["c1"],
         )
 
@@ -49,6 +49,31 @@ class TestGraphContextSerialization:
         assert "Graph paths:" in results[0].chunk.content
         assert "Entities:" in results[0].chunk.content
         assert "Evidence:" in results[0].chunk.content
+
+    def test_binds_graph_paths_to_matching_passage_only(self):
+        ctx = GraphContext(
+            triplets=[
+                {"source": "COPD", "relation": "RELATED_TO", "target": "FEV1"},
+                {"source": "COPD", "relation": "TREATED_BY", "target": "LABA"},
+            ],
+            passages=[
+                "COPD 诊断依据 FEV1/FVC < 0.70。",
+                "COPD 治疗方案包括 LABA。",
+            ],
+            source_ids=["diagnosis", "treatment"],
+        )
+
+        results = graph_context_to_search_results(
+            ctx,
+            source="graph",
+            include_graph_structure=True,
+            query="COPD 诊断标准",
+        )
+
+        by_id = {item.chunk.id: item for item in results}
+        assert "COPD -[RELATED_TO]-> FEV1" in by_id["diagnosis"].chunk.content
+        assert "TREATED_BY" not in by_id["diagnosis"].chunk.content
+        assert "COPD -[TREATED_BY]-> LABA" in by_id["treatment"].chunk.content
 
     def test_respects_top_k_cap(self):
         ctx = GraphContext(
@@ -100,7 +125,8 @@ class TestProviders:
         assert len(results) == 1
         assert results[0].chunk.id == "c1"
         assert results[0].source == "vector"
-        mock_vector_store.return_value.search.assert_called_once_with([1.0, 0.0], top_k=5)
+        assert results[0].score_normalized == 0.91
+        mock_vector_store.return_value.search.assert_called_once_with([1.0, 0.0], top_k=15)
 
     @patch("agentic_graph_rag.retrieval.providers.VectorStore")
     def test_vector_provider_preserves_vector_store_ranking(self, mock_vector_store):
@@ -115,8 +141,30 @@ class TestProviders:
             RetrievalRequest(query="q", query_embedding=[1.0, 0.0], top_k=2)
         )
 
-        assert [item.chunk.id for item in results] == ["c1", "c2", "c3"]
-        assert [item.rank for item in results] == [1, 2, 3]
+        assert [item.chunk.id for item in results] == ["c1", "c2"]
+        assert [item.rank for item in results] == [1, 2]
+
+    @patch("agentic_graph_rag.retrieval.providers.VectorStore")
+    def test_vector_provider_deduplicates_near_identical_content(self, mock_vector_store):
+        duplicate_prefix = "COPD 诊断标准 FEV1/FVC < 0.70 " * 30
+        mock_vector_store.return_value.search.return_value = [
+            SearchResult(chunk=Chunk(id="c1", content=duplicate_prefix + "A"), score=0.91, rank=1),
+            SearchResult(chunk=Chunk(id="c2", content=duplicate_prefix + "B"), score=0.90, rank=2),
+            SearchResult(chunk=Chunk(id="c3", content="其他 COPD 评估内容"), score=0.80, rank=3),
+        ]
+
+        provider = VectorRetrievalProvider(_mock_driver())
+        results = provider.retrieve(
+            RetrievalRequest(
+                query="COPD 诊断标准",
+                query_embedding=[1.0, 0.0],
+                top_k=3,
+            )
+        )
+
+        assert [item.chunk.id for item in results] == ["c1", "c3"]
+        assert [item.rank for item in results] == [1, 2]
+        assert results[0].score_normalized == 1.0
 
     @patch("agentic_graph_rag.retrieval.providers.vector_cypher_search")
     def test_graph_provider_serializes_graph_context(self, mock_search):
@@ -139,6 +187,7 @@ class TestProviders:
         assert len(results) == 1
         assert results[0].source == "graph"
         assert "Graph paths:" in results[0].chunk.content
+        assert results[0].score_normalized == 0.6
         mock_search.assert_called_once_with(
             [1.0, 0.0],
             provider._driver,
@@ -171,6 +220,8 @@ class TestProviders:
         assert [item.chunk.id for item in results] == ["c1", "c2"]
         assert results[0].source == "bm25"
         assert results[0].score == 3.2
+        assert results[0].score_normalized is not None
+        assert results[0].score_normalized > 0.75
         mock_ensure_index.assert_called_once_with(driver)
         assert session.run.call_args.kwargs["search_text"] == "+lady"
 
@@ -261,6 +312,33 @@ class TestProviders:
         )
 
         assert [item.chunk.id for item in results] == ["c1", "c2"]
+
+    @patch("agentic_graph_rag.retrieval.providers.vector_cypher_search")
+    def test_graph_provider_prioritizes_medical_diagnostic_evidence(self, mock_search):
+        mock_search.return_value = GraphContext(
+            triplets=[
+                {"source": "COPD", "relation": "RELATED_TO", "target": "FEV1"},
+                {"source": "FEV1", "relation": "RELATED_TO", "target": "肺功能检查"},
+            ],
+            passages=[
+                "COPD 治疗方案包括 LABA 或 LAMA。",
+                "COPD 诊断依据肺功能检查，FEV1/FVC < 0.70 即可确诊。",
+            ],
+            source_ids=["treatment", "diagnosis"],
+        )
+
+        provider = GraphRetrievalProvider(_mock_driver())
+        results = provider.retrieve(
+            RetrievalRequest(
+                query="COPD的诊断标准是什么？",
+                query_embedding=[1.0, 0.0],
+                top_k=2,
+                filters={"max_hops": 4},
+            )
+        )
+
+        assert results[0].chunk.id == "diagnosis"
+        assert results[0].score_normalized >= 0.95
 
     @patch("agentic_graph_rag.retrieval.providers.get_settings")
     @patch("agentic_graph_rag.retrieval.providers.vector_cypher_search")

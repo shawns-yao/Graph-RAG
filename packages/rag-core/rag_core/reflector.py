@@ -39,6 +39,28 @@ _INCOMPLETE_ANSWER_CUES = (
     "未提及",
 )
 _VALID_VERDICTS = {"answer", "rerank", "retry", "stop"}
+_VALID_EVIDENCE_STATUSES = {"empty", "insufficient", "partial", "sufficient"}
+_VALID_GAP_TYPES = {
+    "conflicting_evidence",
+    "missing_comparison_target",
+    "missing_diagnostic_criterion",
+    "missing_entity",
+    "missing_numeric_threshold",
+    "missing_relation",
+    "missing_treatment_option",
+    "none",
+    "off_topic",
+}
+_VALID_REFLECTION_ACTIONS = {
+    "answer",
+    "answer_with_caveat",
+    "rerank",
+    "retry_bm25",
+    "retry_graph",
+    "retry_hybrid",
+    "retry_vector",
+    "stop",
+}
 _VALID_RETRY_SCOPES = {"stop", "provider_refresh", "tool_escalation", "rerank_only"}
 _VALID_FAILURE_TYPES = {
     "acceptable",
@@ -66,11 +88,10 @@ _REFLECTION_SCORE_WEIGHTS = {
     "context_sufficiency": 0.20,
 }
 _REFLECTION_SCHEMA_FIELDS = {
-    "verdict",
-    "relevance",
-    "entity_completeness",
-    "logical_consistency",
-    "context_sufficiency",
+    "evidence_status",
+    "gap_type",
+    "action",
+    "required_tool",
     "missing_information",
     "missing_entities",
     "missing_relationships",
@@ -78,13 +99,8 @@ _REFLECTION_SCHEMA_FIELDS = {
     "candidate_fix_paths",
     "preferred_tools",
     "preferred_providers",
-    "retry_scope",
     "reasoning",
     "failure_type",
-    "recommended_action",
-    "should_retry",
-    "should_rewrite_query",
-    "should_rerank_again",
     "comparison_to_previous",
 }
 _REFLECTION_JSON_SCHEMA: dict[str, object] = {
@@ -92,11 +108,10 @@ _REFLECTION_JSON_SCHEMA: dict[str, object] = {
     "additionalProperties": False,
     "required": sorted(_REFLECTION_SCHEMA_FIELDS),
     "properties": {
-        "verdict": {"type": "string", "enum": sorted(_VALID_VERDICTS)},
-        "relevance": {"type": "number"},
-        "entity_completeness": {"type": "number"},
-        "logical_consistency": {"type": "number"},
-        "context_sufficiency": {"type": "number"},
+        "evidence_status": {"type": "string", "enum": sorted(_VALID_EVIDENCE_STATUSES)},
+        "gap_type": {"type": "string", "enum": sorted(_VALID_GAP_TYPES)},
+        "action": {"type": "string", "enum": sorted(_VALID_REFLECTION_ACTIONS)},
+        "required_tool": {"type": "string", "enum": ["none", *sorted(_VALID_TOOL_NAMES)]},
         "missing_information": {"type": "array", "items": {"type": "string"}},
         "missing_entities": {"type": "array", "items": {"type": "string"}},
         "missing_relationships": {"type": "array", "items": {"type": "string"}},
@@ -113,38 +128,48 @@ _REFLECTION_JSON_SCHEMA: dict[str, object] = {
             "type": "array",
             "items": {"type": "string", "enum": sorted(_VALID_PROVIDER_NAMES)},
         },
-        "retry_scope": {"type": "string", "enum": sorted(_VALID_RETRY_SCOPES)},
         "reasoning": {"type": "string"},
         "failure_type": {"type": "string", "enum": sorted(_VALID_FAILURE_TYPES)},
-        "recommended_action": {"type": "string"},
-        "should_retry": {"type": "boolean"},
-        "should_rewrite_query": {"type": "boolean"},
-        "should_rerank_again": {"type": "boolean"},
         "comparison_to_previous": {"type": "string"},
     },
 }
 
-REFLECTION_PROMPT = """You are a strict retrieval judge for a Graph RAG system.
-Evaluate the retrieved evidence for the query across four dimensions on a 0-5 scale:
-- relevance: how directly the evidence matches the query
-- entity_completeness: whether key entities / concepts requested by the query are covered
-- logical_consistency: whether the retrieved evidence agrees internally
-- context_sufficiency: whether the evidence is enough to answer without guessing
+REFLECTION_PROMPT = """You are a strict retrieval policy classifier for a Graph RAG system.
+Do not assign numeric scores. Choose only from the fixed enums below.
 
-Think explicitly about what is still missing before you decide.
-Do NOT output a free-form score-only judgement. First choose one final verdict:
-- answer: evidence is sufficient, stop retrieval
-- rerank: evidence is probably present but ranking is poor, rerank once
-- retry: evidence is insufficient, try another retrieval route
-- stop: further retries are not worthwhile, stop with best known evidence
+Evidence status:
+- sufficient: evidence directly answers the query.
+- partial: evidence answers part of the query but has a specific gap.
+- insufficient: evidence is relevant but not enough for a reliable answer.
+- empty: no useful evidence was retrieved.
+
+Gap type:
+- none
+- missing_entity
+- missing_relation
+- missing_numeric_threshold
+- missing_comparison_target
+- missing_treatment_option
+- missing_diagnostic_criterion
+- conflicting_evidence
+- off_topic
+
+Action:
+- answer
+- answer_with_caveat
+- rerank
+- retry_vector
+- retry_bm25
+- retry_graph
+- retry_hybrid
+- stop
 
 Return ONLY valid JSON with this exact schema:
 {
-  "verdict": "one of: answer, rerank, retry, stop",
-  "relevance": 0.0,
-  "entity_completeness": 0.0,
-  "logical_consistency": 0.0,
-  "context_sufficiency": 0.0,
+  "evidence_status": "one of: sufficient, partial, insufficient, empty",
+  "gap_type": "one of the fixed gap types",
+  "action": "one of the fixed actions",
+  "required_tool": "none|vector_search|bm25_search|cypher_traverse|hybrid_search|comprehensive_search|full_document_read",
   "missing_information": ["..."],
   "missing_entities": ["..."],
   "missing_relationships": ["..."],
@@ -154,28 +179,21 @@ Return ONLY valid JSON with this exact schema:
     "vector_search|bm25_search|cypher_traverse|hybrid_search|comprehensive_search|full_document_read"
   ],
   "preferred_providers": ["vector|bm25|graph"],
-  "retry_scope": "one of: stop, provider_refresh, tool_escalation, rerank_only",
   "reasoning": "short explanation",
   "failure_type": "one of: no_results, insufficient_recall, missing_entity,
                    inconsistent_evidence, insufficient_context, acceptable",
-  "recommended_action": "short action such as expand_recall,
-                         target_missing_entity, use_graph_traversal,
-                         use_comprehensive_search, answer_ready",
-  "should_retry": true,
-  "should_rewrite_query": false,
-  "should_rerank_again": false,
   "comparison_to_previous": "short note"
 }
 
 Example 1:
 Query: Which projects were jointly handled by Alice and Bob?
 Missing information: Bob's project membership is absent.
-Recommended action: target_missing_entity
+Choose: evidence_status=partial, gap_type=missing_entity, action=retry_bm25
 
 Example 2:
 Query: What is the relationship between service A and service B?
 Missing information: direct edge or shared passage connecting A and B.
-Recommended action: use_graph_traversal
+Choose: evidence_status=partial, gap_type=missing_relation, action=retry_graph
 """
 
 RETRY_QUERY_PROMPT = """You are rewriting a retrieval query for a Graph RAG system.
@@ -240,6 +258,11 @@ def resolve_reflection_verdict(
     if verdict:
         return verdict
 
+    action = (reflection.action or "").strip().lower()
+    evidence_status = (reflection.evidence_status or "").strip().lower()
+    if action:
+        return _verdict_for_action(action, evidence_status)
+
     failure_type = (reflection.failure_type or "").strip().lower()
     recommended_action = (reflection.recommended_action or "").strip().lower()
     retry_scope = (reflection.retry_scope or "").strip().lower()
@@ -255,6 +278,8 @@ def resolve_reflection_verdict(
         and failure_type in {"", "acceptable"}
     ):
         return "answer"
+    if retry_scope in {"provider_refresh", "tool_escalation"}:
+        return "retry"
     if reflection.should_rerank_again and retry_scope in {"", "rerank_only"}:
         return "rerank"
     if (
@@ -354,6 +379,10 @@ def _policy_stop_reflection(
         attempt=attempt,
         tool_name=tool_name,
         query_used=query,
+        evidence_status="insufficient",
+        gap_type="off_topic",
+        action="stop",
+        required_tool="none",
         verdict="stop",
         overall_score=0.0,
         relevance=0.0,
@@ -378,6 +407,78 @@ def _policy_stop_reflection(
     )
 
 
+def _verdict_for_action(action: str, evidence_status: str) -> str:
+    action = action.strip().lower()
+    evidence_status = evidence_status.strip().lower()
+    if action == "answer":
+        return "answer"
+    if action == "rerank":
+        return "rerank"
+    if action == "stop":
+        return "stop"
+    if action == "answer_with_caveat":
+        return "stop" if evidence_status in {"partial", "insufficient"} else "answer"
+    return "retry"
+
+
+def _failure_type_for_gap(gap_type: str, evidence_status: str) -> str:
+    if evidence_status == "empty":
+        return "no_results"
+    return {
+        "conflicting_evidence": "inconsistent_evidence",
+        "missing_entity": "missing_entity",
+        "missing_relation": "relation_missing",
+        "none": "acceptable",
+        "off_topic": "insufficient_recall",
+    }.get(gap_type, "insufficient_context")
+
+
+def _retry_scope_for_action(action: str) -> str:
+    if action in {"answer", "answer_with_caveat", "stop"}:
+        return "stop"
+    if action == "rerank":
+        return "rerank_only"
+    return "tool_escalation"
+
+
+def _tool_for_action(action: str, required_tool: str) -> str:
+    if required_tool and required_tool != "none":
+        return required_tool
+    return {
+        "retry_bm25": "bm25_search",
+        "retry_graph": "cypher_traverse",
+        "retry_hybrid": "hybrid_search",
+        "retry_vector": "vector_search",
+    }.get(action, "")
+
+
+def _recommended_action_for_choice(action: str, gap_type: str) -> str:
+    if action == "answer":
+        return "answer_ready"
+    if action == "answer_with_caveat":
+        return "answer_with_caveat"
+    if action == "rerank":
+        return "rerank_results"
+    if action == "retry_graph" or gap_type == "missing_relation":
+        return "use_graph_traversal"
+    if action == "retry_bm25":
+        return "target_missing_entity"
+    if action == "retry_hybrid":
+        return "use_comprehensive_search"
+    if action == "retry_vector":
+        return "expand_recall"
+    return action
+
+
+def _legacy_score_for_status(evidence_status: str) -> float:
+    return {
+        "sufficient": 5.0,
+        "partial": 3.0,
+        "insufficient": 1.5,
+        "empty": 0.0,
+    }.get(evidence_status, 0.0)
+
+
 def _validate_reflection_payload(data: dict[str, object]) -> str:
     """Return empty string when payload is safe, otherwise a policy error."""
     if set(data) != _REFLECTION_SCHEMA_FIELDS:
@@ -390,10 +491,18 @@ def _validate_reflection_payload(data: dict[str, object]) -> str:
             details.append(f"missing fields: {', '.join(missing)}")
         return "; ".join(details) or "schema mismatch"
 
-    if not _normalize_verdict(data.get("verdict")):
-        return "invalid verdict"
-    if str(data.get("retry_scope", "")).strip().lower() not in _VALID_RETRY_SCOPES:
-        return "invalid retry_scope"
+    evidence_status = str(data.get("evidence_status", "")).strip().lower()
+    if evidence_status not in _VALID_EVIDENCE_STATUSES:
+        return "invalid evidence_status"
+    gap_type = str(data.get("gap_type", "")).strip().lower()
+    if gap_type not in _VALID_GAP_TYPES:
+        return "invalid gap_type"
+    action = str(data.get("action", "")).strip().lower()
+    if action not in _VALID_REFLECTION_ACTIONS:
+        return "invalid action"
+    required_tool = str(data.get("required_tool", "")).strip().lower()
+    if required_tool not in {"none", *_VALID_TOOL_NAMES}:
+        return "invalid required_tool"
     failure_type = str(data.get("failure_type", "")).strip().lower()
     if failure_type not in _VALID_FAILURE_TYPES:
         return "invalid failure_type"
@@ -405,16 +514,6 @@ def _validate_reflection_payload(data: dict[str, object]) -> str:
     if any(provider not in _VALID_PROVIDER_NAMES for provider in provider_values):
         return "invalid preferred_providers"
 
-    should_retry = _coerce_bool(data.get("should_retry"), default=False)
-    should_rerank_again = _coerce_bool(data.get("should_rerank_again"), default=False)
-    retry_scope = str(data.get("retry_scope", "")).strip().lower()
-    verdict = str(data.get("verdict", "")).strip().lower()
-    if verdict == "rerank" and (not should_retry or not should_rerank_again):
-        return "rerank verdict contradicts retry flags"
-    if verdict == "stop" and (should_retry or should_rerank_again or retry_scope != "stop"):
-        return "stop verdict contradicts retry flags"
-    if verdict == "answer" and should_retry:
-        return "answer verdict contradicts retry flag"
     return ""
 
 
@@ -536,57 +635,62 @@ def _build_reflection_step(
     tool_name: str,
     attempt: int,
 ) -> ReflectionStep:
-    relevance = _clamp_score(data.get("relevance"))
-    entity_completeness = _clamp_score(data.get("entity_completeness"))
-    logical_consistency = _clamp_score(data.get("logical_consistency"))
-    context_sufficiency = _clamp_score(data.get("context_sufficiency"))
-    overall_score = round(
-        (
-            _REFLECTION_SCORE_WEIGHTS["relevance"] * relevance
-            + _REFLECTION_SCORE_WEIGHTS["entity_completeness"] * entity_completeness
-            + _REFLECTION_SCORE_WEIGHTS["logical_consistency"] * logical_consistency
-            + _REFLECTION_SCORE_WEIGHTS["context_sufficiency"] * context_sufficiency
-        ),
-        3,
+    evidence_status = str(data.get("evidence_status", "")).strip().lower()
+    gap_type = str(data.get("gap_type", "")).strip().lower()
+    action = str(data.get("action", "")).strip().lower()
+    required_tool = str(data.get("required_tool", "")).strip().lower()
+    verdict = _verdict_for_action(action, evidence_status)
+    score = _legacy_score_for_status(evidence_status)
+    failure_type = str(data.get("failure_type", "")).strip().lower() or _failure_type_for_gap(
+        gap_type,
+        evidence_status,
     )
-    failure_type = str(data.get("failure_type", "")).strip().lower()
-    recommended_action = str(data.get("recommended_action", "")).strip().lower()
-    raw_verdict = data.get("verdict")
-    verdict = _normalize_verdict(raw_verdict)
-    invalid_verdict = raw_verdict not in (None, "") and not verdict
+    recommended_action = str(data.get("recommended_action", "")).strip().lower() or action
+    recommended_action = recommended_action or _recommended_action_for_choice(action, gap_type)
+    if recommended_action == action:
+        recommended_action = _recommended_action_for_choice(action, gap_type)
+    retry_scope = str(data.get("retry_scope", "")).strip().lower() or _retry_scope_for_action(action)
+    preferred_tools = _coerce_str_list(data.get("preferred_tools"))
+    action_tool = _tool_for_action(action, required_tool)
+    if action_tool and action_tool not in preferred_tools:
+        preferred_tools.insert(0, action_tool)
     step = ReflectionStep(
         attempt=attempt,
         tool_name=tool_name,
         query_used=query,
+        evidence_status=evidence_status,
+        gap_type=gap_type,
+        action=action,
+        required_tool=required_tool,
         verdict=verdict,
-        overall_score=overall_score,
-        relevance=relevance,
-        entity_completeness=entity_completeness,
-        logical_consistency=logical_consistency,
-        context_sufficiency=context_sufficiency,
+        overall_score=score,
+        relevance=score,
+        entity_completeness=score,
+        logical_consistency=score,
+        context_sufficiency=score,
         missing_information=_coerce_str_list(data.get("missing_information")),
         missing_entities=_coerce_str_list(data.get("missing_entities")),
         missing_relationships=_coerce_str_list(data.get("missing_relationships")),
         coverage_gap_sources=_coerce_str_list(data.get("coverage_gap_sources")),
         candidate_fix_paths=_coerce_str_list(data.get("candidate_fix_paths")),
-        preferred_tools=_coerce_str_list(data.get("preferred_tools")),
+        preferred_tools=preferred_tools,
         preferred_providers=_coerce_str_list(data.get("preferred_providers")),
-        retry_scope=str(data.get("retry_scope", "")).strip().lower(),
+        retry_scope=retry_scope,
         reasoning=str(data.get("reasoning", "")).strip(),
         failure_type=failure_type,
         recommended_action=recommended_action,
-        should_retry=_coerce_bool(data.get("should_retry"), default=overall_score < 3.0),
+        should_retry=_coerce_bool(data.get("should_retry"), default=verdict in {"retry", "rerank"}),
         should_rewrite_query=_coerce_bool(
             data.get("should_rewrite_query"),
             default=recommended_action in {"target_missing_entity", "use_comprehensive_search"},
         ),
-        should_rerank_again=_coerce_bool(data.get("should_rerank_again"), default=False),
+        should_rerank_again=_coerce_bool(data.get("should_rerank_again"), default=verdict == "rerank"),
         comparison_to_previous=str(data.get("comparison_to_previous", "")).strip(),
     )
     return _sanitize_reflection_step(
         step,
         has_results=True,
-        invalid_verdict=invalid_verdict,
+        invalid_verdict=False,
     )
 
 
@@ -617,6 +721,10 @@ def _fallback_reflection(
             attempt=attempt,
             tool_name=tool_name,
             query_used=query,
+            evidence_status="empty",
+            gap_type="missing_entity",
+            action="retry_hybrid",
+            required_tool="hybrid_search",
             verdict="retry",
             overall_score=0.0,
             relevance=0.0,
@@ -648,6 +756,10 @@ def _fallback_reflection(
         attempt=attempt,
         tool_name=tool_name,
         query_used=query,
+        evidence_status="insufficient",
+        gap_type="off_topic",
+        action="retry_hybrid",
+        required_tool="hybrid_search",
         verdict="retry",
         overall_score=2.5,
         relevance=2.5,

@@ -134,7 +134,7 @@ def traverse_graph(
                 connected.name AS connected_name,
                 connected.entity_type AS connected_type,
                 src.id AS src_id, src.name AS src_name,
-                type(rel) AS rel_type,
+                coalesce(rel.relation_type, type(rel)) AS rel_type,
                 tgt.id AS tgt_id, tgt.name AS tgt_name
             """,
             entry_ids=entry_ids,

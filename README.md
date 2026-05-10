@@ -121,9 +121,6 @@ agentic-graph-rag/
 │
 ├── pymangle/                  # PyMangle Datalog engine (~5K lines)
 │
-├── ui/
-│   └── streamlit_app.py       # 7-tab Streamlit UI (port 8506, httpx thin client)
-│
 ├── benchmark/
 │   ├── questions.json         # 30 test questions (5 types, EN/RU, 2 documents)
 │   ├── runner.py              # 6-mode benchmark runner
@@ -221,29 +218,16 @@ PYTHONPATH=.:pymangle python scripts/ingest.py /path/to/your/document.pdf
 PYTHONPATH=.:pymangle python scripts/ingest.py /path/to/documents/  # entire directory
 ```
 
-Or use the Streamlit UI Ingest tab (see below).
-
 ### 5. Run the System
 
-The simplest way to try it — run Streamlit standalone (no API server needed):
+Start the API server:
 
 ```bash
-PYTHONPATH=.:pymangle streamlit run ui/streamlit_app.py --server.port 8506
-```
-
-Open **http://localhost:8506** in your browser. You'll see 7 tabs: Ingest, Search & Q&A, Graph Explorer, Agent Trace, Benchmark, Reasoning, Settings.
-
-**Optional: API Server** (for programmatic access or MCP):
-
-```bash
-# Terminal 1: start API
 PYTHONPATH=.:pymangle python run_api.py  # http://localhost:8507
-
-# Terminal 2: start Streamlit with API backend
-AGR_API_URL=http://localhost:8507 PYTHONPATH=.:pymangle streamlit run ui/streamlit_app.py --server.port 8506
 ```
 
-When `AGR_API_URL` is set, Streamlit routes queries through the API. Without it, Streamlit calls Python directly — both modes work identically.
+The API is the supported runtime for demo and programmatic access.
+Use the HTTP endpoints or MCP mount on port `8507`.
 
 > **Why PYTHONPATH?** The project uses two source roots: the main project directory and
 > `pymangle/` (the Datalog engine). Setting `PYTHONPATH=.:pymangle` makes both importable.
@@ -361,18 +345,7 @@ All settings via `.env` or environment variables:
 - **Doc Parsing**: Docling (PDF/DOCX/PPTX + GPU)
 - **Graph Algorithms**: NetworkX (PageRank, KNN, PPR)
 - **API**: FastAPI (REST + MCP via FastMCP)
-- **UI**: Streamlit (7 tabs, httpx thin client)
 - **Testing**: pytest (586 tests) + ruff
-
-## Streamlit UI Tabs
-
-1. **Ingest** — Upload documents, skeleton indexing with progress
-2. **Search & Q&A** — Mode selector (vector/hybrid/agent), confidence bar, sources
-3. **Graph Explorer** — Phrase + passage node visualization (Graphviz)
-4. **Agent Trace** — Routing decision, self-correction steps, raw trace
-5. **Benchmark** — Run 6 modes, PASS/FAIL table, comparison metrics
-6. **Reasoning** — Mangle rule testing, query classification preview
-7. **Settings** — Config display, cache stats, monitor analytics, clear DB
 
 ## References
 

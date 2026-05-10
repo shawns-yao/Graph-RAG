@@ -56,7 +56,7 @@ RETRIEVAL PIPELINE:
 
 API LAYER:
   FastAPI REST (/api/v1/) + MCP (FastMCP SSE at /mcp)
-  Streamlit UI (7 tabs, httpx thin client → API, fallback to direct Python)
+  API-first runtime for demo, programmatic clients, and MCP agents
 ```
 
 ### Component Breakdown (LOC)
@@ -67,7 +67,6 @@ API LAYER:
 | `agentic_graph_rag/` | 12 | 3,147 | Graph RAG: indexing, retrieval, agent, reasoning, optimization |
 | `pymangle/` | 10 | 2,919 | Python Datalog engine (Lark parser, semi-naive evaluation) |
 | `tests/` | 22 | 3,871 | Unit tests (454 total) |
-| `ui/` | 1 | 715 | Streamlit 7-tab UI |
 | `benchmark/` | 3 | 445 | 6-mode benchmark runner + LLM-as-judge |
 | `scripts/` | — | 635 | Utility scripts |
 | `api/` | 4 | 237 | FastAPI + MCP server |
@@ -287,21 +286,7 @@ evidence(Entity, PassageId) :- mentioned_in(Entity, PassageId, Text).
 
 ---
 
-## 8. Streamlit UI (7 tabs)
-
-| Tab | Features |
-|-----|----------|
-| **Ingest** | Document upload, skeleton indexing with progress bar, GPU toggle |
-| **Search & Q&A** | Mode selector (6 modes), confidence bar, sources with scores |
-| **Graph Explorer** | PhraseNode + PassageNode visualization (Graphviz), node/edge counts |
-| **Agent Trace** | Router decision, self-correction steps, raw JSON trace |
-| **Benchmark** | Run all 6 modes, PASS/FAIL table, comparison metrics |
-| **Reasoning** | Mangle rule testing, query classification preview, RBAC check |
-| **Settings** | Config display, cache stats, monitor analytics, clear DB |
-
----
-
-## 9. Development Timeline
+## 8. Development Timeline
 
 | Day | Date | Phase | Key Deliverables |
 |-----|------|-------|-----------------|
@@ -322,7 +307,7 @@ evidence(Entity, PassageId) :- mentioned_in(Entity, PassageId, Text).
 
 ---
 
-## 10. Tech Stack
+## 9. Tech Stack
 
 | Category | Technology |
 |----------|-----------|
@@ -333,14 +318,13 @@ evidence(Entity, PassageId) :- mentioned_in(Entity, PassageId, Text).
 | **Doc Parsing** | Docling (PDF/DOCX/PPTX + GPU) |
 | **Graph Algorithms** | NetworkX (PageRank, KNN, PPR) |
 | **API** | FastAPI (REST) + FastMCP (SSE) |
-| **UI** | Streamlit (7 tabs, httpx thin client) |
 | **Testing** | pytest (454 tests) + ruff |
 | **CI/CD** | GitHub Actions (lint + test, Python 3.12) |
 | **Dependencies** | 26 packages |
 
 ---
 
-## 11. What Makes This Project Unique
+## 10. What Makes This Project Unique
 
 1. **Research-to-Production**: Implements techniques from 2 top-tier 2025 papers (KDD + ICML) — not just a demo, but a full benchmark-verified system
 
@@ -358,7 +342,7 @@ evidence(Entity, PassageId) :- mentioned_in(Entity, PassageId, Text).
 
 ---
 
-## 12. Potential Improvements
+## 11. Potential Improvements
 
 | Area | Improvement | Difficulty |
 |------|------------|------------|
@@ -366,6 +350,5 @@ evidence(Entity, PassageId) :- mentioned_in(Entity, PassageId, Text).
 | Evaluation | Add human evaluation alongside LLM-as-judge | Low |
 | Scalability | Batch ingestion pipeline with async processing | Medium |
 | Reasoning | More Mangle rules (temporal reasoning, conflict resolution) | Low |
-| UI | Real-time streaming answers in Streamlit | Medium |
-| Deployment | Docker Compose with Neo4j + API + UI | Low |
+| Deployment | Docker Compose with Neo4j + API | Low |
 | Monitoring | Prometheus metrics + Grafana dashboards | Medium |

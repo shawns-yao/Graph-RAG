@@ -1,5 +1,6 @@
 """Tests for rag_core.reflector."""
 
+import json
 from unittest.mock import MagicMock, patch
 
 from rag_core.models import Chunk, ReflectionStep, SearchResult, WorkflowMemoryEntry
@@ -23,6 +24,27 @@ def _make_result(text: str = "chunk content") -> SearchResult:
     return SearchResult(chunk=Chunk(content=text), score=0.8, rank=1)
 
 
+def _reflection_payload(**overrides) -> str:
+    payload = {
+        "evidence_status": "sufficient",
+        "gap_type": "none",
+        "action": "answer",
+        "required_tool": "none",
+        "missing_information": [],
+        "missing_entities": [],
+        "missing_relationships": [],
+        "coverage_gap_sources": [],
+        "candidate_fix_paths": [],
+        "preferred_tools": [],
+        "preferred_providers": [],
+        "reasoning": "ok",
+        "failure_type": "acceptable",
+        "comparison_to_previous": "n/a",
+    }
+    payload.update(overrides)
+    return json.dumps(payload)
+
+
 class TestEvaluateReflection:
     def test_empty_results_returns_no_results_reflection(self):
         client = MagicMock()
@@ -37,30 +59,22 @@ class TestEvaluateReflection:
     def test_parses_structured_json(self):
         client = MagicMock()
         client.chat.completions.create.return_value = _mock_openai_response(
-            """
-            {
-              "verdict": "retry",
-              "relevance": 4.5,
-              "entity_completeness": 4.0,
-              "logical_consistency": 5.0,
-              "context_sufficiency": 3.5,
-              "missing_information": ["timeline detail"],
-              "missing_entities": ["Samuel Pepys"],
-              "missing_relationships": ["visited_at"],
-              "coverage_gap_sources": ["graph"],
-              "candidate_fix_paths": ["graph -> rerank"],
-              "preferred_tools": ["hybrid_search", "full_document_read"],
-              "preferred_providers": ["graph", "bm25"],
-              "retry_scope": "provider_refresh",
-              "reasoning": "Most entities are present but one detail is missing.",
-              "failure_type": "insufficient_context",
-              "recommended_action": "expand_recall",
-              "should_retry": true,
-              "should_rewrite_query": false,
-              "should_rerank_again": true,
-              "comparison_to_previous": "better than previous"
-            }
-            """
+            _reflection_payload(
+                evidence_status="partial",
+                gap_type="missing_relation",
+                action="retry_hybrid",
+                required_tool="hybrid_search",
+                missing_information=["timeline detail"],
+                missing_entities=["Samuel Pepys"],
+                missing_relationships=["visited_at"],
+                coverage_gap_sources=["graph"],
+                candidate_fix_paths=["graph -> rerank"],
+                preferred_tools=["hybrid_search", "full_document_read"],
+                preferred_providers=["graph", "bm25"],
+                reasoning="Most entities are present but one detail is missing.",
+                failure_type="insufficient_context",
+                comparison_to_previous="better than previous",
+            )
         )
 
         step = evaluate_reflection(
@@ -73,13 +87,17 @@ class TestEvaluateReflection:
 
         assert step.tool_name == "hybrid_search"
         assert step.attempt == 1
+        assert step.evidence_status == "partial"
+        assert step.gap_type == "missing_relation"
+        assert step.action == "retry_hybrid"
+        assert step.required_tool == "hybrid_search"
         assert step.verdict == "retry"
-        assert step.relevance == 4.5
-        assert step.entity_completeness == 4.0
-        assert step.logical_consistency == 5.0
-        assert step.context_sufficiency == 3.5
+        assert step.relevance == 3.0
+        assert step.entity_completeness == 3.0
+        assert step.logical_consistency == 3.0
+        assert step.context_sufficiency == 3.0
         assert step.failure_type == "insufficient_context"
-        assert step.recommended_action == "expand_recall"
+        assert step.recommended_action == "use_graph_traversal"
         assert step.missing_information == ["timeline detail"]
         assert step.missing_entities == ["Samuel Pepys"]
         assert step.missing_relationships == ["visited_at"]
@@ -87,14 +105,19 @@ class TestEvaluateReflection:
         assert step.candidate_fix_paths == ["graph -> rerank"]
         assert step.preferred_tools == ["hybrid_search", "full_document_read"]
         assert step.preferred_providers == ["graph", "bm25"]
-        assert step.retry_scope == "provider_refresh"
+        assert step.retry_scope == "tool_escalation"
         assert step.should_retry is True
         assert step.should_rewrite_query is False
-        assert step.should_rerank_again is True
-        assert abs(step.overall_score - 4.225) < 1e-6
+        assert step.should_rerank_again is False
+        assert step.overall_score == 3.0
         call_kwargs = client.chat.completions.create.call_args.kwargs
         assert call_kwargs["response_format"]["type"] == "json_schema"
         assert call_kwargs["response_format"]["json_schema"]["strict"] is True
+        schema = call_kwargs["response_format"]["json_schema"]["schema"]
+        assert "evidence_status" in schema["properties"]
+        assert "action" in schema["properties"]
+        assert "relevance" not in schema["properties"]
+        assert "overall_score" not in schema["properties"]
 
     def test_reflection_to_confidence_maps_weighted_scores(self):
         step = ReflectionStep(
@@ -110,32 +133,7 @@ class TestEvaluateReflection:
         client = MagicMock()
         client.chat.completions.create.side_effect = [
             RuntimeError("response_format json_schema unsupported"),
-            _mock_openai_response(
-                """
-                {
-                  "verdict": "answer",
-                  "relevance": 4,
-                  "entity_completeness": 4,
-                  "logical_consistency": 4,
-                  "context_sufficiency": 4,
-                  "missing_information": [],
-                  "missing_entities": [],
-                  "missing_relationships": [],
-                  "coverage_gap_sources": [],
-                  "candidate_fix_paths": [],
-                  "preferred_tools": [],
-                  "preferred_providers": [],
-                  "retry_scope": "stop",
-                  "reasoning": "ok",
-                  "failure_type": "acceptable",
-                  "recommended_action": "answer_ready",
-                  "should_retry": false,
-                  "should_rewrite_query": false,
-                  "should_rerank_again": false,
-                  "comparison_to_previous": "n/a"
-                }
-                """
-            ),
+            _mock_openai_response(_reflection_payload()),
         ]
 
         step = evaluate_reflection("q", [_make_result()], openai_client=client)
@@ -150,37 +148,16 @@ class TestEvaluateReflection:
     def test_extracts_first_valid_json_object(self):
         client = MagicMock()
         client.chat.completions.create.return_value = _mock_openai_response(
-            """
+            f"""
             Here is the JSON:
-            {
-              "verdict": "answer",
-              "relevance": 4,
-              "entity_completeness": 3,
-              "logical_consistency": 5,
-              "context_sufficiency": 2,
-              "missing_information": [],
-              "missing_entities": [],
-              "missing_relationships": [],
-              "coverage_gap_sources": [],
-              "candidate_fix_paths": [],
-              "preferred_tools": [],
-              "preferred_providers": [],
-              "retry_scope": "stop",
-              "reasoning": "usable",
-              "failure_type": "acceptable",
-              "recommended_action": "answer_ready",
-              "should_retry": false,
-              "should_rewrite_query": false,
-              "should_rerank_again": false,
-              "comparison_to_previous": "n/a"
-            }
+            {_reflection_payload(reasoning="usable")}
             And here is another example:
-            {"wrong": "json"}
+            {{"wrong": "json"}}
             """
         )
 
         step = evaluate_reflection("q", [_make_result()], openai_client=client)
-        assert step.overall_score == 3.45
+        assert step.overall_score == 5.0
         assert step.verdict == "answer"
         assert step.recommended_action == "answer_ready"
 
@@ -270,36 +247,40 @@ class TestEvaluateReflection:
     def test_verdict_defaults_to_rerank_for_rerank_only_scope(self):
         client = MagicMock()
         client.chat.completions.create.return_value = _mock_openai_response(
-            """
-            {
-              "verdict": "rerank",
-              "relevance": 2,
-              "entity_completeness": 2,
-              "logical_consistency": 4,
-              "context_sufficiency": 2,
-              "missing_information": [],
-              "missing_entities": [],
-              "missing_relationships": [],
-              "coverage_gap_sources": [],
-              "candidate_fix_paths": [],
-              "preferred_tools": [],
-              "preferred_providers": [],
-              "retry_scope": "rerank_only",
-              "reasoning": "ranking issue",
-              "failure_type": "insufficient_context",
-              "recommended_action": "expand_recall",
-              "should_retry": true,
-              "should_rewrite_query": false,
-              "should_rerank_again": true,
-              "comparison_to_previous": "n/a"
-            }
-            """
+            _reflection_payload(
+                evidence_status="partial",
+                action="rerank",
+                gap_type="none",
+                reasoning="ranking issue",
+                failure_type="insufficient_context",
+            )
         )
 
         step = evaluate_reflection("q", [_make_result()], openai_client=client)
 
         assert step.verdict == "rerank"
         assert step.should_rerank_again is True
+
+    def test_retry_graph_choice_derives_graph_tool_and_relation_failure(self):
+        client = MagicMock()
+        client.chat.completions.create.return_value = _mock_openai_response(
+            _reflection_payload(
+                evidence_status="partial",
+                gap_type="missing_relation",
+                action="retry_graph",
+                required_tool="cypher_traverse",
+                failure_type="relation_missing",
+            )
+        )
+
+        step = evaluate_reflection("q", [_make_result()], openai_client=client)
+
+        assert step.verdict == "retry"
+        assert step.failure_type == "relation_missing"
+        assert step.recommended_action == "use_graph_traversal"
+        assert step.preferred_tools[0] == "cypher_traverse"
+        assert step.retry_scope == "tool_escalation"
+        assert step.should_retry is True
 
     def test_handles_api_error(self):
         client = MagicMock()
@@ -313,12 +294,7 @@ class TestEvaluateReflection:
     def test_includes_workflow_memory_in_reflection_prompt(self):
         client = MagicMock()
         client.chat.completions.create.return_value = _mock_openai_response(
-            '{"verdict":"answer","relevance":4,"entity_completeness":4,"logical_consistency":4,'
-            '"context_sufficiency":4,"missing_information":[],"missing_entities":[],'
-            '"missing_relationships":[],"coverage_gap_sources":[],"candidate_fix_paths":[],'
-            '"preferred_tools":[],"preferred_providers":[],"retry_scope":"stop","reasoning":"ok",'
-            '"failure_type":"acceptable","recommended_action":"answer_ready","should_retry":false,'
-            '"should_rewrite_query":false,"should_rerank_again":false,"comparison_to_previous":"n/a"}'
+            _reflection_payload()
         )
 
         _ = evaluate_reflection(
@@ -348,34 +324,24 @@ class TestEvaluateReflection:
 
         mock_client = MagicMock()
         mock_client.chat.completions.create.return_value = _mock_openai_response(
-            '{"verdict":"answer","relevance":4,"entity_completeness":4,"logical_consistency":4,'
-            '"context_sufficiency":4,"missing_information":[],"missing_entities":[],'
-            '"missing_relationships":[],"coverage_gap_sources":[],"candidate_fix_paths":[],'
-            '"preferred_tools":[],"preferred_providers":[],"retry_scope":"stop","reasoning":"ok",'
-            '"failure_type":"acceptable","recommended_action":"answer_ready","should_retry":false,'
-            '"should_rewrite_query":false,"should_rerank_again":false,"comparison_to_previous":"n/a"}'
+            _reflection_payload()
         )
         mock_make_client.return_value = mock_client
 
         step = evaluate_reflection("q", [_make_result()])
         mock_make_client.assert_called_once_with(cfg)
-        assert step.overall_score == 4.0
+        assert step.overall_score == 5.0
 
 
 class TestEvaluateRelevance:
     def test_wraps_structured_reflection_score(self):
         client = MagicMock()
         client.chat.completions.create.return_value = _mock_openai_response(
-            '{"verdict":"answer","relevance":5,"entity_completeness":3,"logical_consistency":4,'
-            '"context_sufficiency":2,"missing_information":[],"missing_entities":[],'
-            '"missing_relationships":[],"coverage_gap_sources":[],"candidate_fix_paths":[],'
-            '"preferred_tools":[],"preferred_providers":[],"retry_scope":"stop","reasoning":"ok",'
-            '"failure_type":"acceptable","recommended_action":"answer_ready","should_retry":false,'
-            '"should_rewrite_query":false,"should_rerank_again":false,"comparison_to_previous":"n/a"}'
+            _reflection_payload()
         )
 
         score = evaluate_relevance("q", [_make_result()], openai_client=client)
-        assert abs(score - 3.65) < 1e-6
+        assert score == 5.0
 
 
 class TestGenerateRetryQuery:

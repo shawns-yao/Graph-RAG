@@ -41,6 +41,8 @@ def is_retryable_llm_error(exc: Exception) -> bool:
         "timeout",
         "connection reset",
         "connection aborted",
+        "connection error",
+        "eof occurred",
         "retryable",
     )
     return any(marker in text for marker in retry_markers)

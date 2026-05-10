@@ -10,7 +10,6 @@ requires-python = ">=3.12"
 dependencies = [
     "rag-core",
     "networkx>=3.0",
-    "streamlit>=1.30.0",
     "lark>=1.1.0",
     "fastapi>=0.115.0",
     "uvicorn>=0.30.0",
@@ -33,7 +32,7 @@ dev = [
 
 [tool.setuptools.packages.find]
 where = ["."]
-include = ["agentic_graph_rag*", "ui*", "benchmark*"]
+include = ["agentic_graph_rag*", "benchmark*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests", "packages/rag-core/tests", "pymangle/tests"]
@@ -48,7 +47,6 @@ exclude = ["pymangle/"]
 select = ["E", "F", "I", "W"]
 
 [tool.ruff.lint.per-file-ignores]
-"ui/*" = ["E402"]
 "scripts/*" = ["E402"]
 "benchmark/*" = ["E402"]
 "run_api.py" = ["E402"]

@@ -179,6 +179,10 @@ class ReflectionStep(BaseModel):
     attempt: int = 0
     tool_name: str = ""
     query_used: str = ""
+    evidence_status: str = ""
+    gap_type: str = ""
+    action: str = ""
+    required_tool: str = ""
     verdict: str = ""
     overall_score: float = 0.0
     relevance: float = 0.0

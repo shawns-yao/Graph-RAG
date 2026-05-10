@@ -127,7 +127,7 @@ def main() -> None:
     questions = _load_questions(MEDICAL_QUESTIONS_JSON, limit=args.limit_questions)
     cfg = get_settings()
     driver = GraphDatabase.driver(cfg.neo4j.uri, auth=(cfg.neo4j.user, cfg.neo4j.password))
-    client = make_openai_client(cfg)
+    client = make_openai_client(cfg, profile="benchmark")
     try:
         payload = run_benchmark(
             driver,

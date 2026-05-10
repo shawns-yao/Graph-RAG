@@ -10,6 +10,7 @@ from rag_core.llm_resilience import (
     LLMCancelledError,
     LLMCircuitOpenError,
     LLMTimeBudgetExceeded,
+    is_retryable_llm_error,
     wrap_client_with_resilience,
 )
 
@@ -107,6 +108,11 @@ def test_controller_aborts_when_cancel_requested() -> None:
         controller.call("summary", lambda: "never")
 
 
+def test_connection_errors_are_retryable() -> None:
+    assert is_retryable_llm_error(RuntimeError("Connection error."))
+    assert is_retryable_llm_error(RuntimeError("EOF occurred in violation of protocol"))
+
+
 def test_wrap_client_routes_chat_calls_through_controller() -> None:
     client = MagicMock()
     client.chat.completions.create.return_value = "done"
@@ -117,4 +123,3 @@ def test_wrap_client_routes_chat_calls_through_controller() -> None:
     assert wrapped.chat.completions.create(model="m", messages=[]) == "done"
     controller.call.assert_called_once()
     assert wrapped.embeddings is client.embeddings
-
