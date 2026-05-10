@@ -158,6 +158,7 @@ def ingest_file(
             from agentic_graph_rag.indexing.dual_node import (
                 build_dual_graph,
                 embed_phrase_nodes,
+                init_passage_index,
                 init_phrase_index,
             )
             from agentic_graph_rag.indexing.skeleton import build_skeleton_index
@@ -209,6 +210,7 @@ def ingest_file(
                 updated = embed_phrase_nodes(phrase_nodes, driver, openai_client)
                 logger.info("Updated %d phrase node embeddings", updated)
                 init_phrase_index(driver)
+                init_passage_index(driver)
         else:
             logger.info("Skipping skeleton indexing (--skip-skeleton)")
 

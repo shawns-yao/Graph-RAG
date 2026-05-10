@@ -740,6 +740,7 @@ def _surface_form_similarity(left: str, right: str) -> float:
 # ---------------------------------------------------------------------------
 
 PHRASE_INDEX_NAME = "phrase_node_index"
+PASSAGE_INDEX_NAME = "passage_node_index"
 
 
 def embed_phrase_nodes(
@@ -813,5 +814,34 @@ def init_phrase_index(driver: Driver) -> None:
         logger.warning(
             "Failed to create phrase vector index '%s': %s — graph traversal will fall back to label scan",
             PHRASE_INDEX_NAME,
+            exc,
+        )
+
+
+def init_passage_index(driver: Driver) -> None:
+    """Create vector index on PassageNode embeddings if not exists."""
+    cfg = get_settings()
+    try:
+        with open_neo4j_session(driver) as session:
+            session.run(
+                f"""
+                CREATE VECTOR INDEX {PASSAGE_INDEX_NAME} IF NOT EXISTS
+                FOR (n:{PASSAGE_LABEL})
+                ON (n.embedding)
+                OPTIONS {{
+                    indexConfig: {{
+                        `vector.dimensions`: $dimensions,
+                        `vector.similarity_function`: 'cosine'
+                    }}
+                }}
+                """,
+                dimensions=cfg.openai.embedding_dimensions,
+            )
+        logger.info("Passage vector index '%s' initialized", PASSAGE_INDEX_NAME)
+    except Exception as exc:
+        logger.warning(
+            "Failed to create passage vector index '%s': %s — "
+            "temporal_query and full_document_read will fall back to label scan",
+            PASSAGE_INDEX_NAME,
             exc,
         )

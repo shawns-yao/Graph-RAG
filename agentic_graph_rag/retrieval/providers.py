@@ -16,6 +16,15 @@ from agentic_graph_rag.text_signals import build_tfidf_profile, rank_keywords
 from agentic_graph_rag.retrieval.vector_cypher import search as vector_cypher_search
 
 _PASSAGE_FULLTEXT_INDEX_READY = False
+_CJK_TOKEN_RE = re.compile(r"[\u4e00-\u9fff]{2,}|[A-Za-z0-9_.-]+")
+_VECTOR_DEDUP_PREFIX_CHARS = 520
+_VECTOR_OVERSAMPLE_FACTOR = 3
+_VECTOR_QUERY_STOPWORDS = {
+    "aliases",
+    "medical",
+    "什么",
+    "是什么",
+}
 
 _BM25_STOPWORDS = {
     "a", "an", "and", "are", "as", "at", "be", "by", "described", "did", "do",
@@ -157,10 +166,12 @@ def graph_context_to_search_results(
     source: str,
     include_graph_structure: bool = False,
     top_k: int | None = None,
+    query: str = "",
 ) -> list[SearchResult]:
     """Convert GraphContext into normalized SearchResult candidates."""
     results: list[SearchResult] = []
     graph_prefix = _graph_context_prefix(ctx) if include_graph_structure else ""
+    query_terms = _query_terms(query)
 
     if ctx.passages:
         passages = ctx.passages if top_k is None else ctx.passages[:top_k]
@@ -168,17 +179,37 @@ def graph_context_to_search_results(
         for index, passage in enumerate(passages):
             chunk_id = source_ids[index] if index < len(source_ids) else ""
             content = passage
-            if graph_prefix:
-                content = f"{graph_prefix}\n\nEvidence:\n{passage}"
+            passage_prefix = (
+                _graph_context_prefix_for_passage(ctx, passage)
+                if include_graph_structure
+                else ""
+            )
+            if passage_prefix:
+                content = f"{passage_prefix}\n\nEvidence:\n{passage}"
             results.append(
                 SearchResult(
                     chunk=Chunk(id=chunk_id, content=content),
                     score=1.0 / (index + 1),
+                    score_normalized=_graph_confidence_signal(
+                        content,
+                        query_terms,
+                        base_score=1.0 / (index + 1),
+                    ),
                     rank=index + 1,
                     source=source,
                 )
             )
-        return results
+        results.sort(key=lambda item: (item.score_normalized or 0.0, item.score), reverse=True)
+        return [
+            SearchResult(
+                chunk=item.chunk,
+                score=item.score,
+                score_normalized=item.score_normalized,
+                rank=index + 1,
+                source=item.source,
+            )
+            for index, item in enumerate(results)
+        ]
 
     if graph_prefix:
         virtual_id = hashlib.md5(graph_prefix.encode("utf-8")).hexdigest()[:12]
@@ -186,6 +217,11 @@ def graph_context_to_search_results(
             SearchResult(
                 chunk=Chunk(id=f"graph-{virtual_id}", content=graph_prefix),
                 score=1.0,
+                score_normalized=_graph_confidence_signal(
+                    graph_prefix,
+                    query_terms,
+                    base_score=1.0,
+                ),
                 rank=1,
                 source=source,
             )
@@ -214,6 +250,52 @@ def _graph_context_prefix(ctx: GraphContext) -> str:
     return "\n\n".join(section for section in sections if section).strip()
 
 
+def _graph_context_prefix_for_passage(ctx: GraphContext, passage: str) -> str:
+    """Bind graph paths/entities to the passage that actually mentions them."""
+    lowered = passage.casefold()
+    path_lines: list[str] = []
+    for triplet in ctx.triplets:
+        source = triplet.get("source", "")
+        target = triplet.get("target", "")
+        if not source or not target:
+            continue
+        if source.casefold() in lowered and target.casefold() in lowered:
+            path_lines.append(
+                f"{source} -[{triplet.get('relation', '')}]-> {target}"
+            )
+    sections: list[str] = []
+    if path_lines:
+        sections.append("Graph paths:\n" + "\n".join(path_lines[:8]))
+
+    entity_lines: list[str] = []
+    for entity in ctx.entities:
+        if not entity.name or entity.name.casefold() not in lowered:
+            continue
+        label = entity.entity_type or "Entity"
+        entity_lines.append(f"{entity.name} ({label})")
+    if entity_lines:
+        sections.append("Entities:\n" + "\n".join(entity_lines[:8]))
+
+    return "\n\n".join(section for section in sections if section).strip()
+
+
+def _graph_confidence_signal(
+    text: str,
+    query_terms: list[str],
+    *,
+    base_score: float,
+) -> float:
+    from agentic_graph_rag.retrieval.domain_signals import apply_domain_boost
+
+    signal = _lexical_confidence_signal(
+        text,
+        query_terms,
+        base_score=max(0.0, min(0.6, base_score)),
+    )
+    signal = apply_domain_boost(text, signal)
+    return min(1.0, signal)
+
+
 class VectorRetrievalProvider:
     """Dense semantic retrieval provider."""
 
@@ -223,13 +305,98 @@ class VectorRetrievalProvider:
         self._driver = driver
 
     def retrieve(self, request: RetrievalRequest) -> list[SearchResult]:
+        requested_top_k = max(1, int(request.top_k))
+        search_top_k = requested_top_k * _VECTOR_OVERSAMPLE_FACTOR
         results = VectorStore(driver=self._driver).search(
             request.query_embedding,
-            top_k=request.top_k,
+            top_k=search_top_k,
         )
-        for item in results:
-            item.source = self.name
-        return results
+        return _finalize_vector_results(
+            results,
+            query=request.query,
+            top_k=requested_top_k,
+            source=self.name,
+        )
+
+
+def _finalize_vector_results(
+    results: list[SearchResult],
+    *,
+    query: str,
+    top_k: int,
+    source: str,
+) -> list[SearchResult]:
+    finalized: list[SearchResult] = []
+    seen_fingerprints: set[str] = set()
+    query_terms = _query_terms(query)
+    for item in results:
+        fingerprint = _content_fingerprint(item.chunk.enriched_content)
+        if fingerprint and fingerprint in seen_fingerprints:
+            continue
+        if fingerprint:
+            seen_fingerprints.add(fingerprint)
+        finalized.append(
+            SearchResult(
+                chunk=item.chunk,
+                score=item.score,
+                score_normalized=_vector_confidence_signal(item, query_terms),
+                rank=len(finalized) + 1,
+                source=source,
+            )
+        )
+        if len(finalized) >= top_k:
+            break
+    return finalized
+
+
+def _content_fingerprint(text: str) -> str:
+    normalized = " ".join(text.casefold().split())
+    if not normalized:
+        return ""
+    return normalized[:_VECTOR_DEDUP_PREFIX_CHARS]
+
+
+def _query_terms(query: str) -> list[str]:
+    terms: list[str] = []
+    for match in _CJK_TOKEN_RE.findall(query.casefold()):
+        token = match.strip()
+        token = token.strip("，,。？?：:")
+        token = token.removeprefix("的").removesuffix("是什么")
+        token = token.removesuffix("是什么").removesuffix("什么")
+        if len(token) < 2 or token in _VECTOR_QUERY_STOPWORDS:
+            continue
+        candidates = [token]
+        if "诊断" in token and "标准" in token:
+            candidates = ["诊断标准"]
+        for candidate in candidates:
+            if candidate not in terms:
+                terms.append(candidate)
+    return terms
+
+
+def _vector_confidence_signal(result: SearchResult, query_terms: list[str]) -> float:
+    base_score = max(0.0, min(1.0, float(result.score)))
+    return _lexical_confidence_signal(
+        result.chunk.enriched_content,
+        query_terms,
+        base_score=base_score,
+    )
+
+
+def _lexical_confidence_signal(
+    text: str,
+    query_terms: list[str],
+    *,
+    base_score: float,
+) -> float:
+    if not query_terms:
+        return base_score
+    lowered = text.casefold()
+    hits = sum(1 for term in query_terms if term in lowered)
+    lexical_coverage = hits / len(query_terms)
+    if lexical_coverage >= 0.6:
+        return max(base_score, min(1.0, 0.75 + lexical_coverage * 0.25))
+    return max(base_score, lexical_coverage)
 
 
 class GraphRetrievalProvider:
@@ -255,6 +422,7 @@ class GraphRetrievalProvider:
             source=self.name,
             include_graph_structure=True,
             top_k=request.top_k,
+            query=request.query,
         )
 
 
@@ -317,11 +485,29 @@ class BM25RetrievalProvider:
             SearchResult(
                 chunk=item.chunk,
                 score=item.score,
+                score_normalized=_bm25_confidence_signal(
+                    item,
+                    required_anchors=required_anchors,
+                ),
                 rank=index + 1,
                 source=item.source,
             )
             for index, item in enumerate(results)
         ]
+
+
+def _bm25_confidence_signal(
+    result: SearchResult,
+    *,
+    required_anchors: list[str],
+) -> float:
+    base_score = float(result.score)
+    normalized_score = base_score / (base_score + 1.0) if base_score > 0 else 0.0
+    return _lexical_confidence_signal(
+        result.chunk.enriched_content,
+        required_anchors,
+        base_score=normalized_score,
+    )
 
 
 def _sample_passage_texts(driver, limit: int = 256) -> list[str]:
