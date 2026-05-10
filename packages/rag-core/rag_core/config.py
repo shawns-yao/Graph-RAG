@@ -155,6 +155,8 @@ class AgentSettings(BaseSettings):
     max_reranks: int = 1
     max_query_rewrites: int = 0
     request_time_budget_ms: int = 1500
+    # Deprecated: no longer drives decisions (verdict-based architecture).
+    # Kept for function signature compatibility in self_correction_loop.
     relevance_threshold: float = 2.0
     reflection_skip_score_threshold: float = 0.85
 
