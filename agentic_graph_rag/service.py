@@ -198,8 +198,6 @@ class PipelineService:
                 "sources": len(qa.sources),
                 "evidence_score": qa.evidence_score,
                 "confidence_level": qa.confidence_level,
-                # Deprecated: kept for backward compatibility with older stream consumers.
-                "confidence": qa.confidence,
             },
         }
 

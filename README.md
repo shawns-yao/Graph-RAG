@@ -72,7 +72,7 @@ Retrieval:
         -> Tool Selection (vector/cypher/hybrid/comprehensive/full_read/temporal)
         -> Self-Correction Loop (reflect -> rerank or retry with targeted tool/provider upgrades)
         -> Graph Verifier (contradiction detection)
-        -> Generator (GPT-4o synthesis + dynamic confidence + citations)
+        -> Generator (GPT-4o synthesis + evidence scoring + confidence level + citations)
 ```
 
 ## Project Structure
@@ -89,8 +89,8 @@ agentic-graph-rag/
 │       ├── embedder.py        # text-embedding-3-small batch processing
 │       ├── vector_store.py    # Neo4j Vector Index CRUD
 │       ├── kg_client.py       # Graphiti wrapper + Cypher
-│       ├── generator.py       # LLM answer synthesis + dynamic confidence
-│       ├── reflector.py       # Relevance evaluation (1-5 scale) + completeness check
+│       ├── generator.py       # LLM answer synthesis + evidence score + confidence level
+│       ├── reflector.py       # Verdict-based retrieval evaluation + completeness check
 │       └── i18n.py            # RU/EN localization (~50 keys)
 │
 ├── agentic_graph_rag/         # Graph RAG components

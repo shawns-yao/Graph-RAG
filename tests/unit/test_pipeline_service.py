@@ -219,7 +219,9 @@ def test_service_stream_query_yields_status_tokens_and_done(mock_agent_run):
     assert events[2]["data"]["stage"] == "generation_started"
     assert "".join(event["data"]["text"] for event in token_events) == "Hello world"
     assert events[-1]["data"]["answer"] == "Hello world"
-    assert events[-1]["data"]["confidence"] == qa.confidence
+    assert "confidence" not in events[-1]["data"]
+    assert events[-1]["data"]["confidence_level"] == qa.confidence_level
+    assert events[-1]["data"]["evidence_score"] == qa.evidence_score
     assert events[-1]["data"]["session_id"] == "sess-1"
     assert events[-1]["data"]["retries"] == 1
     assert "trace_id" in events[-1]["data"]

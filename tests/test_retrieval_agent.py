@@ -40,7 +40,7 @@ def _make_decision(
 ) -> RouterDecision:
     return RouterDecision(
         query_type=query_type,
-        confidence_level="high", evidence_score=0.8,
+        confidence=0.8,
         reasoning="test",
         suggested_tool=tool,
     )
@@ -253,7 +253,11 @@ class TestSelfCorrectionLoop:
     def test_no_retry_when_relevant(self, mock_eval):
         results = _make_results(3)
         mock_tool = _mock_tool(results)
-        mock_eval.return_value = ReflectionStep(overall_score=4.0, failure_type="acceptable")
+        mock_eval.return_value = ReflectionStep(
+            failure_type="acceptable",
+            verdict="answer",
+            evidence_status="sufficient",
+        )
 
         driver = MagicMock()
         client = MagicMock()
@@ -310,7 +314,11 @@ class TestSelfCorrectionLoop:
                 failure_type="insufficient_recall",
                 recommended_action="expand_recall",
             ),
-            ReflectionStep(overall_score=4.0, failure_type="acceptable"),
+            ReflectionStep(
+                failure_type="acceptable",
+                verdict="answer",
+                evidence_status="sufficient",
+            ),
         ]
 
         driver = MagicMock()
@@ -343,7 +351,11 @@ class TestSelfCorrectionLoop:
                 failure_type="relation_missing",
                 recommended_action="use_graph_traversal",
             ),
-            ReflectionStep(overall_score=4.0, failure_type="acceptable"),
+            ReflectionStep(
+                failure_type="acceptable",
+                verdict="answer",
+                evidence_status="sufficient",
+            ),
         ]
         trace = PipelineTrace(trace_id="tr_cache", timestamp="2026-05-07T00:00:00Z", query="test")
 
@@ -466,7 +478,11 @@ class TestSelfCorrectionLoop:
                 failure_type="relation_missing",
                 recommended_action="use_graph_traversal",
             ),
-            ReflectionStep(overall_score=4.0, failure_type="acceptable"),
+            ReflectionStep(
+                failure_type="acceptable",
+                verdict="answer",
+                evidence_status="sufficient",
+            ),
         ]
 
         driver = MagicMock()
@@ -526,7 +542,11 @@ class TestSelfCorrectionLoop:
                 failure_type="insufficient_context",
                 recommended_action="answer_ready",
             ),
-            ReflectionStep(overall_score=4.0, failure_type="acceptable"),
+            ReflectionStep(
+                failure_type="acceptable",
+                verdict="answer",
+                evidence_status="sufficient",
+            ),
         ]
 
         driver = MagicMock()
@@ -559,7 +579,11 @@ class TestSelfCorrectionLoop:
                 failure_type="no_results",
                 recommended_action="expand_recall",
             ),
-            ReflectionStep(overall_score=4.0, failure_type="acceptable"),
+            ReflectionStep(
+                failure_type="acceptable",
+                verdict="answer",
+                evidence_status="sufficient",
+            ),
         ]
 
         driver = MagicMock()
@@ -608,7 +632,11 @@ class TestSelfCorrectionLoop:
     @patch("agentic_graph_rag.agent.retrieval_agent.evaluate_reflection")
     def test_uses_settings_defaults(self, mock_eval):
         mock_tool = _mock_tool(_make_results(2))
-        mock_eval.return_value = ReflectionStep(overall_score=4.0, failure_type="acceptable")
+        mock_eval.return_value = ReflectionStep(
+            failure_type="acceptable",
+            verdict="answer",
+            evidence_status="sufficient",
+        )
 
         driver = MagicMock()
         client = MagicMock()
@@ -741,7 +769,11 @@ class TestRetryQuery:
                 recommended_action="use_comprehensive_search",
                 missing_information=["Need broader supporting evidence"],
             ),
-            ReflectionStep(overall_score=4.0, failure_type="acceptable"),
+            ReflectionStep(
+                failure_type="acceptable",
+                verdict="answer",
+                evidence_status="sufficient",
+            ),
         ]
         mock_retry.return_value = "rephrased query"
         mock_get_settings.return_value.agent.max_query_rewrites = 1

@@ -5,7 +5,7 @@ from __future__ import annotations
 from enum import Enum
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, computed_field
 
 # ---------------------------------------------------------------------------
 # Ingestion models (from RAG 2.0)
@@ -336,9 +336,6 @@ class QAResult(BaseModel):
     - `confidence_level`: end-to-end answer trust level ("high"/"medium"/"low"),
       derived from evidence_score + reflection verdict + answer guard status.
       This is the user-facing trust signal.
-    - `confidence`: deprecated, retained as a compatibility property that maps
-      confidence_level to a legacy 0-1 number. New code should read
-      `evidence_score` or `confidence_level` directly.
     """
 
     answer: str
@@ -354,6 +351,7 @@ class QAResult(BaseModel):
     completion_tokens: int = 0
     trace: PipelineTrace | None = None  # v6 provenance
 
+    @computed_field  # type: ignore[prop-decorator]
     @property
     def confidence(self) -> float:
         """Legacy compatibility: map confidence_level to a single number.

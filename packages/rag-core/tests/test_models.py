@@ -188,7 +188,8 @@ class TestQAResult:
         qa = QAResult(
             answer="a",
             query="q",
-            confidence=0.8,
+            evidence_score=0.8,
+            confidence_level="high",
             retries=1,
             sources=[SearchResult(chunk=Chunk(content="c"), score=0.9)],
             router_decision=RouterDecision(query_type=QueryType.GLOBAL),
@@ -198,3 +199,5 @@ class TestQAResult:
         assert qa2.answer == "a"
         assert qa2.sources[0].score == 0.9
         assert qa2.router_decision.query_type == QueryType.GLOBAL
+        assert qa2.evidence_score == 0.8
+        assert qa2.confidence_level == "high"

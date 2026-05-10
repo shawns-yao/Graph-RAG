@@ -154,7 +154,7 @@ def test_full_pipeline_trace():
     """Full trace with all sections populated."""
     decision = RouterDecision(
         query_type=QueryType.SIMPLE,
-        confidence_level="medium", evidence_score=0.5,
+        confidence=0.5,
         reasoning="Pattern matched",
         suggested_tool="vector_search",
     )
@@ -168,8 +168,18 @@ def test_full_pipeline_trace():
             ToolStep(tool_name="cypher_traverse", results_count=8, relevance_score=3.1, duration_ms=500),
         ],
         reflection_steps=[
-            ReflectionStep(tool_name="vector_search", overall_score=1.5, failure_type="insufficient_recall"),
-            ReflectionStep(tool_name="cypher_traverse", overall_score=3.1, failure_type="acceptable"),
+            ReflectionStep(
+                tool_name="vector_search",
+                failure_type="insufficient_recall",
+                verdict="retry",
+                evidence_status="insufficient",
+            ),
+            ReflectionStep(
+                tool_name="cypher_traverse",
+                failure_type="acceptable",
+                verdict="answer",
+                evidence_status="sufficient",
+            ),
         ],
         escalation_steps=[
             EscalationStep(

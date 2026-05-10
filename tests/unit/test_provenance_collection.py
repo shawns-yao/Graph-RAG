@@ -21,13 +21,13 @@ def _make_results(n=3):
 
 def _make_decision(tool="vector_search", qtype=QueryType.SIMPLE):
     return RouterDecision(
-        query_type=qtype, confidence_level="medium", evidence_score=0.5, reasoning="test", suggested_tool=tool,
+        query_type=qtype, confidence=0.5, reasoning="test", suggested_tool=tool,
     )
 
 
 @patch(
     "agentic_graph_rag.agent.retrieval_agent.evaluate_reflection",
-    return_value=ReflectionStep(overall_score=4.0, failure_type="acceptable"),
+    return_value=ReflectionStep(failure_type="acceptable", verdict="answer", evidence_status="sufficient"),
 )
 @patch("agentic_graph_rag.agent.retrieval_agent._TOOL_REGISTRY")
 def test_self_correction_loop_records_tool_step(mock_registry, mock_eval):
@@ -101,7 +101,7 @@ def test_run_returns_qa_with_trace(mock_gen, mock_loop, mock_classify):
 
 @patch(
     "agentic_graph_rag.agent.retrieval_agent.evaluate_reflection",
-    return_value=ReflectionStep(overall_score=4.0, failure_type="acceptable"),
+    return_value=ReflectionStep(failure_type="acceptable", verdict="answer", evidence_status="sufficient"),
 )
 @patch("agentic_graph_rag.agent.retrieval_agent._TOOL_REGISTRY")
 def test_hybrid_tool_step_records_provider_diagnostics(mock_registry, mock_eval):

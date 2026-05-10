@@ -36,7 +36,8 @@ def mock_service():
         answer="Test answer",
         query="test",
         sources=[SearchResult(chunk=Chunk(id="c1", content="text"), score=0.9, rank=1)],
-        confidence=0.8,
+        evidence_score=0.8,
+        confidence_level="high",
         trace=trace,
     )
     svc.query.return_value = qa

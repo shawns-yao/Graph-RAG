@@ -51,7 +51,6 @@ def _make_decision(
 def _make_settings() -> MagicMock:
     settings = MagicMock()
     settings.agent.reflection_skip_score_threshold = 0.85
-    settings.retrieval.reflection_score_scale = 5.0
     return settings
 
 

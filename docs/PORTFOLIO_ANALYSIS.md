@@ -51,7 +51,7 @@ RETRIEVAL PIPELINE:
                           temporal, comprehensive, full_document_read)
         → Self-Correction Loop (reflection verdict → answer / rerank / targeted retry)
         → Graph Verifier (contradiction detection)
-        → Generator (GPT-4o synthesis + dynamic confidence + citations)
+        → Generator (GPT-4o synthesis + evidence scoring + confidence level + citations)
         → PipelineTrace (full structured provenance)
 
 API LAYER:

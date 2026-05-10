@@ -146,9 +146,6 @@ class RetrievalSettings(BaseSettings):
     tfidf_query_min_idf: float = 1.2
     tfidf_query_max_keywords: int = 6
     confidence_min: float = 0.1
-    retrieval_confidence_weight: float = 0.5
-    reflection_confidence_weight: float = 0.5
-    reflection_score_scale: float = 5.0
 
     model_config = {**_ENV_FILE_CONFIG, "env_prefix": "RETRIEVAL_"}
 

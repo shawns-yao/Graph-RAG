@@ -16,8 +16,14 @@ def _make_qa():
         timestamp="2026-02-17T00:00:00Z",
         query="test",
     )
-    return QAResult(answer="answer", query="test", confidence=0.8, trace=trace,
-                    sources=[SearchResult(chunk=Chunk(id="c1", content="t"), score=0.9, rank=1)])
+    return QAResult(
+        answer="answer",
+        query="test",
+        evidence_score=0.8,
+        confidence_level="high",
+        trace=trace,
+        sources=[SearchResult(chunk=Chunk(id="c1", content="t"), score=0.9, rank=1)],
+    )
 
 
 def test_resolve_intent_tool():
