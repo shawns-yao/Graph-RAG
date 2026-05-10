@@ -55,7 +55,7 @@ def test_escalation_step():
 def test_router_step_with_rules():
     decision = RouterDecision(
         query_type=QueryType.GLOBAL,
-        confidence=0.7,
+        confidence_level="high", evidence_score=0.7,
         reasoning="Mangle rule matched",
         suggested_tool="comprehensive_search",
     )
@@ -75,7 +75,7 @@ def test_generator_step():
         model="gpt-4o-mini",
         prompt_tokens=2100,
         completion_tokens=350,
-        confidence=0.82,
+        confidence_level="high", evidence_score=0.82,
         completeness_check=True,
     )
     assert step.prompt_tokens == 2100
@@ -99,11 +99,6 @@ def test_pipeline_trace_serialization():
             ReflectionStep(
                 attempt=0,
                 tool_name="vector_search",
-                overall_score=3.2,
-                relevance=3.5,
-                entity_completeness=3.0,
-                logical_consistency=3.0,
-                context_sufficiency=3.0,
             ),
         ],
         workflow_memory=[
@@ -159,7 +154,7 @@ def test_full_pipeline_trace():
     """Full trace with all sections populated."""
     decision = RouterDecision(
         query_type=QueryType.SIMPLE,
-        confidence=0.5,
+        confidence_level="medium", evidence_score=0.5,
         reasoning="Pattern matched",
         suggested_tool="vector_search",
     )
@@ -183,7 +178,7 @@ def test_full_pipeline_trace():
                 reason="relevance 1.5 < threshold 2.0",
             ),
         ],
-        generator_step=GeneratorStep(model="gpt-4o-mini", confidence=0.75),
+        generator_step=GeneratorStep(model="gpt-4o-mini", confidence_level="high", evidence_score=0.75),
         total_duration_ms=1200,
     )
     data = trace.model_dump()

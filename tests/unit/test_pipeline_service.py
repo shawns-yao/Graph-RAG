@@ -7,7 +7,7 @@ from rag_core.models import Chunk, PipelineTrace, QAResult, ReflectionStep, Sear
 def _mock_qa():
     return QAResult(answer="test answer", query="q", sources=[
         SearchResult(chunk=Chunk(id="c1", content="text"), score=0.9, rank=1),
-    ], confidence=0.8)
+    ], confidence_level="high", evidence_score=0.8)
 
 
 @patch("agentic_graph_rag.service.agent_run")
@@ -51,7 +51,6 @@ def test_service_reuses_session_memory_and_history(mock_run):
         reflection_steps=[
             ReflectionStep(
                 tool_name="vector_search",
-                overall_score=1.0,
                 failure_type="insufficient_context",
             )
         ],

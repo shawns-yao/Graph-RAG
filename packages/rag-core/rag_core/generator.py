@@ -174,13 +174,21 @@ def _compress_results_for_generation(results: list[SearchResult]) -> list[Search
     return compressed
 
 
-def _clamp_confidence(value: float) -> float:
+def _clamp_evidence_score(value: float) -> float:
     cfg = get_settings()
-    confidence_min = _retrieval_number(cfg, "confidence_min", 0.1)
-    return round(min(1.0, max(confidence_min, value)), 3)
+    floor = _retrieval_number(cfg, "confidence_min", 0.1)
+    return round(min(1.0, max(floor, value)), 3)
 
 
-def _result_confidence_score(result: SearchResult) -> float:
+def _result_evidence_score(result: SearchResult) -> float:
+    """Extract a single evidence strength signal from one search result.
+
+    Prefers `score_normalized` (a per-provider heuristic bounded to 0-1).
+    Falls back to `score` only when it is already in the 0-1 range. Otherwise
+    returns 1.0 as a neutral default — reranker fusion scores can be raw RRF
+    values (0.01-0.05) which are not comparable to other signals and should
+    not be misinterpreted as evidence strength.
+    """
     if result.score_normalized is not None:
         return result.score_normalized
     if 0.0 <= result.score <= 1.0:
@@ -188,25 +196,52 @@ def _result_confidence_score(result: SearchResult) -> float:
     return 1.0
 
 
+def calculate_evidence_score(results: list[SearchResult]) -> float:
+    """Compute an evidence strength score from retrieval results.
+
+    This is a retrieval-layer heuristic measuring how well the retrieved
+    chunks lexically/semantically match the query. It does NOT measure
+    answer correctness — use `derive_confidence_level` for that.
+    """
+    if not results:
+        return _clamp_evidence_score(0.0)
+    avg = sum(_result_evidence_score(result) for result in results) / len(results)
+    return _clamp_evidence_score(avg)
+
+
+def derive_confidence_level(
+    *,
+    evidence_score: float,
+    reflection_verdict: str = "",
+    guard_triggered: bool = False,
+) -> str:
+    """Classify end-to-end answer trust into high/medium/low.
+
+    Rules:
+    - guard_triggered → low (retrieval policy blocked further expansion)
+    - reflection_verdict in {retry, stop} → low (agent thinks evidence insufficient)
+    - evidence_score >= 0.7 and verdict == "answer" → high
+    - otherwise → medium
+    """
+    if guard_triggered:
+        return "low"
+    verdict = (reflection_verdict or "").strip().lower()
+    if verdict in {"retry", "stop"}:
+        return "low"
+    if evidence_score >= 0.7 and verdict == "answer":
+        return "high"
+    return "medium"
+
+
+# --- Deprecated: kept for backward compatibility with test fixtures -----
 def _calculate_confidence(
     results: list[SearchResult],
     *,
     reflection_score: float | None = None,
 ) -> float:
-    """Compute answer confidence from retrieval quality.
-
-    Confidence is driven by the retrieval layer's score_normalized values,
-    which reflect lexical and semantic evidence quality. The reflection step
-    is a policy classifier (answer/retry/stop) and intentionally does not
-    contribute numeric signal here. The reflection_score parameter is kept
-    for backward compatibility but is only used as a soft cap when the
-    evidence is weak.
-    """
-    del reflection_score  # reflection is a policy decision, not a numeric signal
-    if not results:
-        return _clamp_confidence(0.0)
-    avg_retrieval_score = sum(_result_confidence_score(result) for result in results) / len(results)
-    return _clamp_confidence(avg_retrieval_score)
+    """DEPRECATED. Use `calculate_evidence_score` + `derive_confidence_level`."""
+    del reflection_score
+    return calculate_evidence_score(results)
 
 
 def calculate_answer_confidence(
@@ -214,8 +249,9 @@ def calculate_answer_confidence(
     *,
     reflection_score: float | None = None,
 ) -> float:
-    """Public confidence API shared by sync and streaming generation paths."""
-    return _calculate_confidence(results, reflection_score=reflection_score)
+    """DEPRECATED. Use `calculate_evidence_score` + `derive_confidence_level`."""
+    del reflection_score
+    return calculate_evidence_score(results)
 
 
 def _build_context(results: list[SearchResult]) -> str:
@@ -279,9 +315,13 @@ def generate_answer(
     results: list[SearchResult],
     openai_client: OpenAI | None = None,
     *,
-    reflection_score: float | None = None,
+    reflection_verdict: str = "",
 ) -> QAResult:
-    """Generate answer from query and retrieved chunks using LLM."""
+    """Generate answer from query and retrieved chunks using LLM.
+
+    The `reflection_verdict` parameter (one of "answer"/"retry"/"stop"/"rerank")
+    is used to derive `confidence_level`, not to fuse into a numeric confidence.
+    """
     cfg = get_settings()
     if openai_client is None:
         openai_client = make_openai_client(cfg)
@@ -291,7 +331,8 @@ def generate_answer(
         return QAResult(
             answer="I don't have enough context to answer this question.",
             sources=[],
-            confidence=0.0,
+            evidence_score=0.0,
+            confidence_level="low",
             query=query,
         )
 
@@ -330,15 +371,17 @@ def generate_answer(
             answer_text[:100],
         )
 
-        confidence = calculate_answer_confidence(
-            selected_results,
-            reflection_score=reflection_score,
+        evidence_score = calculate_evidence_score(selected_results)
+        confidence_level = derive_confidence_level(
+            evidence_score=evidence_score,
+            reflection_verdict=reflection_verdict,
         )
 
         return QAResult(
             answer=answer_text,
             sources=selected_results,
-            confidence=confidence,
+            evidence_score=evidence_score,
+            confidence_level=confidence_level,
             query=query,
             prompt_tokens=prompt_tokens,
             completion_tokens=completion_tokens,
@@ -349,7 +392,8 @@ def generate_answer(
         return QAResult(
             answer=f"Error generating answer: {e}",
             sources=selected_results,
-            confidence=0.0,
+            evidence_score=0.0,
+            confidence_level="low",
             query=query,
         )
 

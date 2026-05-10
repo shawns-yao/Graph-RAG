@@ -40,7 +40,7 @@ def _make_decision(
 ) -> RouterDecision:
     return RouterDecision(
         query_type=query_type,
-        confidence=0.8,
+        confidence_level="high", evidence_score=0.8,
         reasoning="test",
         suggested_tool=tool,
     )
@@ -275,7 +275,6 @@ class TestSelfCorrectionLoop:
         results = _make_results(2)
         mock_tool = _mock_tool(results)
         mock_eval.return_value = ReflectionStep(
-            overall_score=4.0,
             failure_type="acceptable",
             reasoning="enough evidence",
         )
@@ -308,7 +307,6 @@ class TestSelfCorrectionLoop:
         mock_bm25 = _mock_tool(_make_results(3))
         mock_eval.side_effect = [
             ReflectionStep(
-                overall_score=1.0,
                 failure_type="insufficient_recall",
                 recommended_action="expand_recall",
             ),
@@ -342,7 +340,6 @@ class TestSelfCorrectionLoop:
         mock_hs = _mock_tool(hybrid_results)
         mock_eval.side_effect = [
             ReflectionStep(
-                overall_score=1.0,
                 failure_type="relation_missing",
                 recommended_action="use_graph_traversal",
             ),
@@ -402,7 +399,6 @@ class TestSelfCorrectionLoop:
                 gap_type="missing_relation",
                 action="retry_graph",
                 required_tool="cypher_traverse",
-                overall_score=3.0,
                 failure_type="relation_missing",
                 recommended_action="use_graph_traversal",
                 preferred_tools=["cypher_traverse"],
@@ -413,7 +409,6 @@ class TestSelfCorrectionLoop:
                 evidence_status="sufficient",
                 gap_type="none",
                 action="answer",
-                overall_score=5.0,
                 failure_type="acceptable",
                 recommended_action="answer_ready",
                 should_retry=False,
@@ -468,7 +463,6 @@ class TestSelfCorrectionLoop:
         mock_hs = MagicMock(side_effect=_hybrid_side_effect)
         mock_eval.side_effect = [
             ReflectionStep(
-                overall_score=1.0,
                 failure_type="relation_missing",
                 recommended_action="use_graph_traversal",
             ),
@@ -529,7 +523,6 @@ class TestSelfCorrectionLoop:
         mock_hs = MagicMock(side_effect=_hybrid_side_effect)
         mock_eval.side_effect = [
             ReflectionStep(
-                overall_score=1.0,
                 failure_type="insufficient_context",
                 recommended_action="answer_ready",
             ),
@@ -563,7 +556,6 @@ class TestSelfCorrectionLoop:
         mock_bm25 = _mock_tool(_make_results(2))
         mock_eval.side_effect = [
             ReflectionStep(
-                overall_score=0.0,
                 failure_type="no_results",
                 recommended_action="expand_recall",
             ),
@@ -592,7 +584,6 @@ class TestSelfCorrectionLoop:
         mock_hs = _mock_tool(_make_results(1))
         mock_fdr = _mock_tool(_make_results(1))
         mock_eval.return_value = ReflectionStep(
-            overall_score=1.0,
             failure_type="insufficient_recall",
             recommended_action="expand_recall",
         )
@@ -650,7 +641,7 @@ class TestRun:
         results = _make_results(3)
         mock_loop.return_value = (results, 0)
         mock_gen.return_value = QAResult(
-            answer="Test answer", sources=results, confidence=0.8, query="test",
+            answer="Test answer", sources=results, confidence_level="high", evidence_score=0.8, query="test",
         )
 
         driver = MagicMock()
@@ -703,7 +694,7 @@ class TestRun:
 
     @patch("agentic_graph_rag.agent.retrieval_agent.run_agent_workflow")
     def test_does_not_override_workflow_confidence(self, mock_run_workflow):
-        qa_result = QAResult(answer="A", query="q", confidence=0.73)
+        qa_result = QAResult(answer="A", query="q", confidence_level="high", evidence_score=0.73)
         mock_run_workflow.return_value = qa_result
 
         driver = MagicMock()
@@ -711,7 +702,8 @@ class TestRun:
 
         result = run("q", driver, openai_client=client)
 
-        assert result.confidence == 0.73
+        assert result.evidence_score == 0.73
+        assert result.confidence_level == "high"
 
 
 # ---------------------------------------------------------------------------
@@ -745,7 +737,6 @@ class TestRetryQuery:
         mock_hybrid = _mock_tool(_make_results(1))
         mock_eval.side_effect = [
             ReflectionStep(
-                overall_score=1.0,
                 failure_type="insufficient_context",
                 recommended_action="use_comprehensive_search",
                 missing_information=["Need broader supporting evidence"],
@@ -798,8 +789,8 @@ class TestCompletenessCheck:
         mock_loop.return_value = (results, 0)
 
         # First generate returns incomplete, second (after comprehensive) returns complete
-        qa_incomplete = QAResult(answer="Partial answer", sources=results, confidence=0.4, query="list all")
-        qa_complete = QAResult(answer="Full answer: A, B, C, D", sources=results, confidence=0.9, query="list all")
+        qa_incomplete = QAResult(answer="Partial answer", sources=results, confidence_level="medium", evidence_score=0.4, query="list all")
+        qa_complete = QAResult(answer="Full answer: A, B, C, D", sources=results, confidence_level="high", evidence_score=0.9, query="list all")
         mock_gen.side_effect = [qa_incomplete, qa_complete]
 
         # First completeness check fails, second succeeds

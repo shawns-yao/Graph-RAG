@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from enum import Enum
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
@@ -174,7 +174,12 @@ class ToolStep(BaseModel):
 
 
 class ReflectionStep(BaseModel):
-    """Structured reflection result for one retrieval attempt."""
+    """Structured reflection result for one retrieval attempt.
+
+    Note: Reflection is a policy classifier (answer/retry/stop), not a numeric
+    scorer. Decisions are driven by `verdict`, `evidence_status`, `action`, and
+    `failure_type` enums — not by continuous scores.
+    """
 
     attempt: int = 0
     tool_name: str = ""
@@ -184,11 +189,6 @@ class ReflectionStep(BaseModel):
     action: str = ""
     required_tool: str = ""
     verdict: str = ""
-    overall_score: float = 0.0
-    relevance: float = 0.0
-    entity_completeness: float = 0.0
-    logical_consistency: float = 0.0
-    context_sufficiency: float = 0.0
     missing_information: list[str] = Field(default_factory=list)
     missing_entities: list[str] = Field(default_factory=list)
     missing_relationships: list[str] = Field(default_factory=list)
@@ -234,13 +234,24 @@ class RouterStep(BaseModel):
     rules_fired: list[str] = Field(default_factory=list)
 
 
+ConfidenceLevel = Literal["high", "medium", "low"]
+
+
 class GeneratorStep(BaseModel):
-    """Answer generation metadata."""
+    """Answer generation metadata.
+
+    `evidence_score` is the retrieval-layer heuristic (avg score_normalized).
+    `confidence_level` is the end-to-end confidence classification derived from
+    evidence_score + reflection verdict + answer guard status. These two
+    signals are intentionally separate: evidence_score measures retrieval
+    quality, confidence_level measures whether the answer can be trusted.
+    """
 
     model: str = ""
     prompt_tokens: int = 0
     completion_tokens: int = 0
-    confidence: float = 0.0
+    evidence_score: float = 0.0
+    confidence_level: ConfidenceLevel = "medium"
     completeness_check: bool | None = None
     duration_ms: int = 0
 
@@ -264,11 +275,24 @@ class PipelineTrace(BaseModel):
 
 
 class QAResult(BaseModel):
-    """Final Q&A result with answer, sources, and confidence."""
+    """Final Q&A result with answer, sources, and dual confidence signals.
+
+    - `evidence_score`: retrieval evidence strength (0-1), derived from the
+      retrieval layer's score_normalized heuristics. This only measures
+      whether the retrieved chunks match the query well — it does NOT
+      measure whether the final answer is correct.
+    - `confidence_level`: end-to-end answer trust level ("high"/"medium"/"low"),
+      derived from evidence_score + reflection verdict + answer guard status.
+      This is the user-facing trust signal.
+    - `confidence`: deprecated, retained as a compatibility property that maps
+      confidence_level to a legacy 0-1 number. New code should read
+      `evidence_score` or `confidence_level` directly.
+    """
 
     answer: str
     sources: list[SearchResult] = Field(default_factory=list)
-    confidence: float = 0.0
+    evidence_score: float = 0.0
+    confidence_level: ConfidenceLevel = "medium"
     query: str = ""
     expanded_query: str = ""
     retries: int = 0
@@ -277,3 +301,11 @@ class QAResult(BaseModel):
     prompt_tokens: int = 0
     completion_tokens: int = 0
     trace: PipelineTrace | None = None  # v6 provenance
+
+    @property
+    def confidence(self) -> float:
+        """Legacy compatibility: map confidence_level to a single number.
+
+        Deprecated: prefer `evidence_score` and `confidence_level` directly.
+        """
+        return {"high": 0.85, "medium": 0.55, "low": 0.25}[self.confidence_level]

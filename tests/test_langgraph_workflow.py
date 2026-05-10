@@ -42,7 +42,7 @@ def _make_decision(
 ) -> RouterDecision:
     return RouterDecision(
         query_type=query_type,
-        confidence=0.8,
+        confidence_level="high", evidence_score=0.8,
         reasoning="test",
         suggested_tool=tool,
     )
@@ -177,7 +177,6 @@ class TestLangGraphSelfCorrectionWorkflow:
     def test_reflection_evaluation_and_verdict_interpretation_are_separate_nodes(self):
         vector_results = _make_results("vector", 2)
         reflection = ReflectionStep(
-            overall_score=1.0,
             verdict="retry",
             failure_type="insufficient_recall",
             recommended_action="expand_recall",
@@ -226,7 +225,6 @@ class TestLangGraphSelfCorrectionWorkflow:
             tool_results={"vector_search": vector_results},
             reflections=[
                 ReflectionStep(
-                    overall_score=4.0,
                     failure_type="acceptable",
                     recommended_action="answer_ready",
                 )
@@ -263,7 +261,6 @@ class TestLangGraphSelfCorrectionWorkflow:
                     action="stop",
                     required_tool="none",
                     verdict="stop",
-                    overall_score=0.0,
                     failure_type="insufficient_context",
                     recommended_action="stop_due_to_invalid_reflection",
                     should_retry=False,
@@ -276,7 +273,6 @@ class TestLangGraphSelfCorrectionWorkflow:
                     action="answer",
                     required_tool="none",
                     verdict="answer",
-                    overall_score=5.0,
                     failure_type="acceptable",
                     recommended_action="answer_ready",
                     should_retry=False,
@@ -319,12 +315,10 @@ class TestLangGraphSelfCorrectionWorkflow:
             },
             reflections=[
                 ReflectionStep(
-                    overall_score=1.0,
                     failure_type="insufficient_recall",
                     recommended_action="expand_recall",
                 ),
                 ReflectionStep(
-                    overall_score=4.5,
                     failure_type="acceptable",
                     recommended_action="answer_ready",
                 ),
@@ -371,7 +365,6 @@ class TestLangGraphSelfCorrectionWorkflow:
             tool_results={"vector_search": vector_results},
             reflections=[
                 ReflectionStep(
-                    overall_score=1.5,
                     verdict="rerank",
                     failure_type="insufficient_context",
                     recommended_action="expand_recall",
@@ -379,7 +372,6 @@ class TestLangGraphSelfCorrectionWorkflow:
                     retry_scope="rerank_only",
                 ),
                 ReflectionStep(
-                    overall_score=4.2,
                     failure_type="acceptable",
                     recommended_action="answer_ready",
                     should_retry=False,
@@ -410,15 +402,21 @@ class TestLangGraphSelfCorrectionWorkflow:
         assert any(entry.stage == "rerank" for entry in trace.workflow_memory)
 
     @patch("agentic_graph_rag.agent.langgraph_workflow.get_settings")
-    def test_skips_llm_reflection_for_high_normalized_score(self, mock_settings):
+    def test_skips_llm_reflection_for_high_vector_normalized_score(self, mock_settings):
+        """Skip reflection only when the signal comes from vector source.
+
+        Heterogeneous `score_normalized` from BM25 / graph should not trigger
+        the skip — they use different scales and would be the "same name,
+        different semantics" anti-pattern.
+        """
         mock_settings.return_value = _make_settings()
         high_score_results = [
             SearchResult(
                 chunk=Chunk(id="hit-1", content="strong evidence"),
-                score=8.0,
+                score=0.92,
                 score_normalized=0.92,
                 rank=1,
-                source="bm25",
+                source="vector",
             )
         ]
         trace = PipelineTrace(
@@ -447,7 +445,7 @@ class TestLangGraphSelfCorrectionWorkflow:
         assert runtime.reflections == []
         assert len(trace.reflection_steps) == 1
         assert trace.reflection_steps[0].reasoning.startswith("Skipped LLM reflection")
-        assert trace.workflow_memory[-1].metadata["top_score"] == 0.92
+        assert trace.workflow_memory[-1].metadata["top_vector_signal"] == 0.92
         assert trace.workflow_memory[-1].metadata["skip_threshold"] == 0.85
 
     def test_does_not_rerank_more_than_once_globally(self):
@@ -460,7 +458,6 @@ class TestLangGraphSelfCorrectionWorkflow:
             },
             reflections=[
                 ReflectionStep(
-                    overall_score=1.5,
                     verdict="rerank",
                     failure_type="insufficient_context",
                     recommended_action="expand_recall",
@@ -468,7 +465,6 @@ class TestLangGraphSelfCorrectionWorkflow:
                     retry_scope="rerank_only",
                 ),
                 ReflectionStep(
-                    overall_score=1.0,
                     verdict="retry",
                     failure_type="insufficient_recall",
                     recommended_action="expand_recall",
@@ -476,7 +472,6 @@ class TestLangGraphSelfCorrectionWorkflow:
                     should_retry=True,
                 ),
                 ReflectionStep(
-                    overall_score=1.2,
                     verdict="rerank",
                     failure_type="insufficient_context",
                     recommended_action="expand_recall",
@@ -516,7 +511,6 @@ class TestLangGraphSelfCorrectionWorkflow:
             },
             reflections=[
                 ReflectionStep(
-                    overall_score=1.0,
                     verdict="retry",
                     failure_type="missing_entity",
                     recommended_action="target_missing_entity",
@@ -525,7 +519,6 @@ class TestLangGraphSelfCorrectionWorkflow:
                     retry_scope="tool_escalation",
                 ),
                 ReflectionStep(
-                    overall_score=1.1,
                     verdict="retry",
                     failure_type="insufficient_recall",
                     recommended_action="expand_recall",
@@ -534,7 +527,6 @@ class TestLangGraphSelfCorrectionWorkflow:
                     retry_scope="tool_escalation",
                 ),
                 ReflectionStep(
-                    overall_score=4.0,
                     verdict="answer",
                     failure_type="acceptable",
                     recommended_action="answer_ready",
@@ -580,7 +572,6 @@ class TestLangGraphSelfCorrectionWorkflow:
             },
             reflections=[
                 ReflectionStep(
-                    overall_score=1.0,
                     verdict="retry",
                     failure_type="insufficient_recall",
                     recommended_action="expand_recall",
@@ -623,7 +614,6 @@ class TestLangGraphSelfCorrectionWorkflow:
             },
             reflections=[
                 ReflectionStep(
-                    overall_score=1.0,
                     verdict="retry",
                     failure_type="insufficient_context",
                     recommended_action="expand_recall",
@@ -676,7 +666,6 @@ class TestLangGraphSelfCorrectionWorkflow:
             },
             reflections=[
                 ReflectionStep(
-                    overall_score=1.0,
                     verdict="retry",
                     failure_type="insufficient_context",
                     recommended_action="expand_recall",
@@ -684,7 +673,6 @@ class TestLangGraphSelfCorrectionWorkflow:
                     retry_scope="tool_escalation",
                 ),
                 ReflectionStep(
-                    overall_score=4.8,
                     verdict="retry",
                     failure_type="insufficient_context",
                     recommended_action="expand_recall",
@@ -711,25 +699,31 @@ class TestLangGraphSelfCorrectionWorkflow:
 
 
 class TestTopLevelAgentWorkflow:
-    def test_passes_last_reflection_score_into_answer_generation(self):
+    def test_passes_last_reflection_verdict_into_answer_generation(self):
         decision = _make_decision()
         results = _make_results("vector", 2)
-        captured: dict[str, float | None] = {}
+        captured: dict[str, str] = {}
 
         def _run_self_correction(*args, **kwargs):
             kwargs["reflection_history_sink"].append(
                 ReflectionStep(
-                    overall_score=2.8,
                     verdict="answer",
+                    evidence_status="sufficient",
                     should_retry=False,
                 )
             )
             return results, 0
 
-        def _generate(query, retrieved, *, openai_client, reflection_score=None):
+        def _generate(query, retrieved, *, openai_client, reflection_verdict=""):
             del query, retrieved, openai_client
-            captured["reflection_score"] = reflection_score
-            return QAResult(answer="final answer", sources=results, confidence=0.8, query="q")
+            captured["reflection_verdict"] = reflection_verdict
+            return QAResult(
+                answer="final answer",
+                sources=results,
+                evidence_score=0.8,
+                confidence_level="high",
+                query="q",
+            )
 
         ops = AgentWorkflowOps(
             classify_query=lambda query, *, use_llm, openai_client, reasoning: decision,
@@ -750,18 +744,18 @@ class TestTopLevelAgentWorkflow:
             ops=ops,
         )
 
-        assert captured["reflection_score"] == 2.8
+        assert captured["reflection_verdict"] == "answer"
 
     def test_routes_retrieves_generates_and_finishes_for_simple_query(self):
         decision = _make_decision()
         results = _make_results("vector", 2)
-        qa_result = QAResult(answer="final answer", sources=results, confidence=0.8, query="q")
+        qa_result = QAResult(answer="final answer", sources=results, confidence_level="high", evidence_score=0.8, query="q")
 
         ops = AgentWorkflowOps(
             classify_query=lambda query, *, use_llm, openai_client, reasoning: decision,
             is_cross_language_global=lambda query: False,
             run_self_correction=lambda *args, **kwargs: (results, 0),
-            generate_answer=lambda query, retrieved, *, openai_client, reflection_score=None: qa_result,
+            generate_answer=lambda query, retrieved, *, openai_client, reflection_verdict="": qa_result,
             evaluate_completeness=lambda query, answer, *, openai_client: True,
             comprehensive_search=lambda query, driver, openai_client: [],
         )
@@ -783,7 +777,7 @@ class TestTopLevelAgentWorkflow:
     def test_guard_blocked_retrieval_lowers_answer_confidence(self):
         decision = _make_decision()
         results = _make_results("vector", 2)
-        qa_result = QAResult(answer="direct answer", sources=results, confidence=0.82, query="q")
+        qa_result = QAResult(answer="direct answer", sources=results, confidence_level="high", evidence_score=0.82, query="q")
 
         def _run_self_correction(*args, **kwargs):
             kwargs["memory_sink"].append(
@@ -807,7 +801,7 @@ class TestTopLevelAgentWorkflow:
             classify_query=lambda query, *, use_llm, openai_client, reasoning: decision,
             is_cross_language_global=lambda query: False,
             run_self_correction=_run_self_correction,
-            generate_answer=lambda query, retrieved, *, openai_client, reflection_score=None: qa_result,
+            generate_answer=lambda query, retrieved, *, openai_client, reflection_verdict="": qa_result,
             evaluate_completeness=lambda query, answer, *, openai_client: True,
             comprehensive_search=lambda query, driver, openai_client: [],
         )
@@ -822,8 +816,8 @@ class TestTopLevelAgentWorkflow:
             ops=ops,
         )
 
-        assert final_result.confidence < 0.82  # Guard applies a scale-down
-        assert final_result.confidence == pytest.approx(0.82 * 0.6, abs=0.01)
+        assert final_result.confidence_level == "low"
+        assert final_result.confidence == 0.25  # legacy property maps "low" -> 0.25
         assert "not decisive enough" in final_result.answer
 
     def test_global_query_runs_completeness_retry_nodes(self):
@@ -836,20 +830,20 @@ class TestTopLevelAgentWorkflow:
             QAResult(
                 answer="first answer",
                 sources=initial_results,
-                confidence=0.4,
+                confidence_level="medium", evidence_score=0.4,
                 query="q",
             ),
             QAResult(
                 answer="second answer",
                 sources=initial_results + comprehensive_results,
-                confidence=0.6,
+                confidence_level="medium", evidence_score=0.6,
                 query="q",
             ),
         ]
 
-        def _generate(_query, _results, *, openai_client, reflection_score=None):
+        def _generate(_query, _results, *, openai_client, reflection_verdict=""):
             del openai_client
-            del reflection_score
+            del reflection_verdict
             return generated_answers.pop(0)
 
         completeness_checks = iter([False, False])
@@ -880,7 +874,7 @@ class TestTopLevelAgentWorkflow:
     def test_retrieve_node_captures_nested_reflection_history_and_memory(self):
         decision = _make_decision()
         results = _make_results("vector", 2)
-        qa_result = QAResult(answer="final answer", sources=results, confidence=0.8, query="q")
+        qa_result = QAResult(answer="final answer", sources=results, confidence_level="high", evidence_score=0.8, query="q")
 
         def _run_self_correction(*args, **kwargs):
             memory_sink = kwargs["memory_sink"]
@@ -896,7 +890,6 @@ class TestTopLevelAgentWorkflow:
                 ReflectionStep(
                     attempt=0,
                     tool_name="vector_search",
-                    overall_score=2.8,
                     failure_type="insufficient_context",
                     recommended_action="expand_recall",
                 )
@@ -907,7 +900,7 @@ class TestTopLevelAgentWorkflow:
             classify_query=lambda query, *, use_llm, openai_client, reasoning: decision,
             is_cross_language_global=lambda query: False,
             run_self_correction=_run_self_correction,
-            generate_answer=lambda query, retrieved, *, openai_client, reflection_score=None: qa_result,
+            generate_answer=lambda query, retrieved, *, openai_client, reflection_verdict="": qa_result,
             evaluate_completeness=lambda query, answer, *, openai_client: True,
             comprehensive_search=lambda query, driver, openai_client: [],
         )
@@ -936,7 +929,6 @@ class TestTopLevelAgentWorkflow:
             tool_results={"vector_search": vector_results},
             reflections=[
                 ReflectionStep(
-                    overall_score=1.0,
                     failure_type="acceptable",
                     recommended_action="answer_ready",
                     should_retry=False,
@@ -960,7 +952,7 @@ class TestTopLevelAgentWorkflow:
         assert retries == 0
         assert runtime.run_calls == [("vector_search", "test query")]
 
-    def test_low_score_answer_verdict_retries_when_budget_remains(self):
+    def test_partial_evidence_answer_verdict_retries_when_budget_remains(self):
         vector_results = _make_results("vector", 2)
         retry_results = _make_results("bm25", 2)
         runtime = _FakeWorkflowRuntime(
@@ -970,15 +962,20 @@ class TestTopLevelAgentWorkflow:
             },
             next_tools={"vector_search": "bm25_search"},
             reflections=[
+                # Partial evidence + answer verdict should still trigger one
+                # additional retry when budget remains (see
+                # _should_retry_after_answer_verdict).
                 ReflectionStep(
-                    overall_score=1.0,
+                    verdict="answer",
+                    evidence_status="partial",
                     failure_type="acceptable",
                     recommended_action="answer_ready",
                     should_retry=True,
                     retry_scope="tool_escalation",
                 ),
                 ReflectionStep(
-                    overall_score=4.0,
+                    verdict="answer",
+                    evidence_status="sufficient",
                     failure_type="acceptable",
                     recommended_action="answer_ready",
                     should_retry=False,

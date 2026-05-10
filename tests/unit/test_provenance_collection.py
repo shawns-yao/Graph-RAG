@@ -21,7 +21,7 @@ def _make_results(n=3):
 
 def _make_decision(tool="vector_search", qtype=QueryType.SIMPLE):
     return RouterDecision(
-        query_type=qtype, confidence=0.5, reasoning="test", suggested_tool=tool,
+        query_type=qtype, confidence_level="medium", evidence_score=0.5, reasoning="test", suggested_tool=tool,
     )
 
 
@@ -46,7 +46,9 @@ def test_self_correction_loop_records_tool_step(mock_registry, mock_eval):
     assert len(trace.tool_steps) >= 1
     assert trace.tool_steps[0].tool_name == "vector_search"
     assert trace.tool_steps[0].results_count == 3
-    assert trace.tool_steps[0].relevance_score == 4.0
+    # relevance_score now reflects the top per-provider normalized evidence
+    # signal (not a reflection score). Fixture SearchResults have score=0.9.
+    assert trace.tool_steps[0].relevance_score == 0.9
     assert trace.tool_steps[0].provider_diagnostics[0].source == "vector"
     assert trace.tool_steps[0].provider_diagnostics[0].results_count == 3
     assert trace.tool_steps[0].provider_diagnostics[0].top_chunk_ids == ["c0", "c1", "c2"]
@@ -56,7 +58,6 @@ def test_self_correction_loop_records_tool_step(mock_registry, mock_eval):
 @patch(
     "agentic_graph_rag.agent.retrieval_agent.evaluate_reflection",
     return_value=ReflectionStep(
-        overall_score=1.0,
         failure_type="insufficient_recall",
         recommended_action="expand_recall",
     ),

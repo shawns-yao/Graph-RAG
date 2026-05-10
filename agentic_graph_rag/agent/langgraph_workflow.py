@@ -27,9 +27,10 @@ from rag_core.models import (
 from rag_core.reflector import resolve_reflection_verdict
 
 _ANCHOR_PATTERN = re.compile(r"[A-Za-z0-9_.-]+|[\u4e00-\u9fff]{2,}")
-_ANSWER_GUARD_CONFIDENCE_SCALE = 0.6
-_GLOBAL_COMPLETENESS_CONFIDENCE_THRESHOLD = 0.45
-_REFLECTION_RETRY_SCORE_THRESHOLD = 3.0
+# When the Answer Guard triggers, the evidence_score is preserved (it still
+# reflects retrieval quality) but confidence_level is forced to "low" so
+# downstream consumers know the answer should not be fully trusted.
+_GLOBAL_COMPLETENESS_EVIDENCE_THRESHOLD = 0.45
 _REFLECTION_MIN_REMAINING_BUDGET_MS = 1000
 _REFLECTION_TRANSPORT_FAILURE_MARKERS = (
     "connection error",
@@ -167,6 +168,11 @@ def _select_best_results(
     state: SelfCorrectionState,
     reflection: ReflectionStep,
 ) -> tuple[list[SearchResult], float, int, tuple[int, int, int, int]]:
+    """Track the strongest evidence seen so far by lexical anchor ranking.
+
+    `best_score` is retained for trace compatibility but no longer carries
+    decision power — the verdict/evidence_status enums drive control flow.
+    """
     best_results = state.get("best_results", [])
     best_score = state.get("best_score", 0.0)
     best_attempt = state.get("best_attempt", 0)
@@ -181,11 +187,24 @@ def _select_best_results(
     if candidate_rank > best_rank:
         return (
             state["results"],
-            reflection.overall_score,
+            _top_evidence_signal(state["results"]),
             state["attempt"],
             candidate_rank,
         )
     return best_results, best_score, best_attempt, best_rank
+
+
+def _top_evidence_signal(results: list[SearchResult]) -> float:
+    """Return the strongest per-provider normalized signal, or 0 if none."""
+    if not results:
+        return 0.0
+    signals = [r.score_normalized for r in results if r.score_normalized is not None]
+    if signals:
+        return max(signals)
+    fallback_scores = [r.score for r in results if 0.0 <= r.score <= 1.0]
+    if fallback_scores:
+        return max(fallback_scores)
+    return 0.0
 
 
 def _record_reflection_trace(
@@ -205,7 +224,7 @@ def _record_reflection_trace(
             ToolStep(
                 tool_name=state["current_tool"],
                 results_count=len(state["results"]),
-                relevance_score=reflection.overall_score,
+                relevance_score=_top_evidence_signal(state["results"]),
                 duration_ms=state.get("last_elapsed_ms", 0),
                 query_used=state["current_query"],
                 cache_hit=bool(state.get("reused_sources")),
@@ -227,8 +246,12 @@ def _build_skip_reflection(
     top_signal: float,
     threshold: float,
 ) -> ReflectionStep:
-    cfg = get_settings()
-    max_score = cfg.retrieval.reflection_score_scale
+    """Build a synthetic reflection step when retrieval signals are strong
+    enough to skip the LLM judge call.
+
+    No numeric score is filled — the `verdict == "answer"` enum alone carries
+    the decision. `top_signal` is only stored for observability.
+    """
     return ReflectionStep(
         attempt=state["attempt"],
         tool_name=state["current_tool"],
@@ -238,11 +261,6 @@ def _build_skip_reflection(
         action="answer",
         required_tool="none",
         verdict="answer",
-        overall_score=max_score,
-        relevance=max_score,
-        entity_completeness=max_score,
-        logical_consistency=max_score,
-        context_sufficiency=max_score,
         missing_information=[],
         missing_entities=[],
         missing_relationships=[],
@@ -252,7 +270,7 @@ def _build_skip_reflection(
         preferred_providers=[],
         retry_scope="",
         reasoning=(
-            f"Skipped LLM reflection because top normalized score "
+            f"Skipped LLM reflection because top normalized vector score "
             f"{top_signal:.3f} >= {threshold:.3f}."
         ),
         failure_type="",
@@ -275,11 +293,6 @@ def _build_budget_exhausted_reflection(state: SelfCorrectionState) -> Reflection
         action="stop",
         required_tool="none",
         verdict="retry",
-        overall_score=0.0,
-        relevance=0.0,
-        entity_completeness=0.0,
-        logical_consistency=0.0,
-        context_sufficiency=0.0,
         missing_information=["Request time budget is too low for reflection."],
         missing_entities=[],
         missing_relationships=[],
@@ -334,20 +347,24 @@ def _should_retry_after_answer_verdict(
     state: SelfCorrectionState,
     reflection: ReflectionStep,
 ) -> bool:
-    return (
-        reflection.overall_score < max(1.0, state["relevance_threshold"] * 0.5)
-        and state["attempt"] < state["max_retries"]
-    )
+    """Allow an additional retry when the answer verdict looks thin.
+
+    With the verdict-based architecture we no longer have a numeric score to
+    compare. We retry when the reflection reports partial/insufficient
+    evidence despite emitting an `answer` verdict — this catches the case
+    where the judge defaults to `answer` on weak evidence.
+    """
+    evidence_status = (reflection.evidence_status or "").strip().lower()
+    if evidence_status not in {"partial", "insufficient", "empty"}:
+        return False
+    return state["attempt"] < state["max_retries"]
 
 
 def _next_step_after_reflection(
     state: SelfCorrectionState,
     reflection: ReflectionStep,
 ) -> str:
-    verdict = resolve_reflection_verdict(
-        reflection,
-        relevance_threshold=state["relevance_threshold"],
-    )
+    verdict = resolve_reflection_verdict(reflection)
     if verdict in {"answer", "stop"}:
         if verdict == "answer" and _should_retry_after_answer_verdict(state, reflection):
             return "prepare_retry"
@@ -483,7 +500,6 @@ def _build_graph_retry_after_reflection_failure(
             "action": "retry_graph",
             "required_tool": "cypher_traverse",
             "verdict": "retry",
-            "overall_score": max(reflection.overall_score, _REFLECTION_RETRY_SCORE_THRESHOLD),
             "failure_type": "relation_missing",
             "recommended_action": "use_graph_traversal",
             "preferred_tools": ["cypher_traverse"],
@@ -687,22 +703,27 @@ def _execute_attempt(state: SelfCorrectionState) -> dict[str, Any]:
 
 
 def _evaluate_reflection_node(state: SelfCorrectionState) -> dict[str, Any]:
-    """Evaluate the current retrieval attempt without mutating workflow history."""
+    """Evaluate the current retrieval attempt without mutating workflow history.
+
+    Skip-reflection optimization: if the top vector result has a strong
+    normalized similarity, we trust it enough to skip the LLM judge. We
+    intentionally restrict this to vector-source results because
+    `score_normalized` from BM25 (score saturation) and graph (heuristic
+    floors) is not directly comparable — mixing them would be the "same name,
+    different semantics" anti-pattern.
+    """
     ops = state["ops"]
     results = state.get("results", [])
 
     cfg = get_settings()
     threshold = cfg.agent.reflection_skip_score_threshold
-    has_normalized_scores = any(result.score_normalized is not None for result in results)
-    if results and has_normalized_scores:
-        top_signal = max(
-            (
-                result.score_normalized
-                if result.score_normalized is not None
-                else result.score
-            )
-            for result in results
-        )
+    vector_signals = [
+        result.score_normalized
+        for result in results
+        if result.source == "vector" and result.score_normalized is not None
+    ]
+    if vector_signals:
+        top_signal = max(vector_signals)
         if top_signal >= threshold:
             reflection = _build_skip_reflection(
                 state,
@@ -743,17 +764,20 @@ def _interpret_verdict_node(state: SelfCorrectionState) -> dict[str, Any]:
 
     reflection.verdict = resolve_reflection_verdict(reflection)
 
+    pending_signal = state.get("pending_reflection_signal")
     if "skip_reflection" in reflection.candidate_fix_paths:
         memory_message = (
             f"{state['current_tool']} skipped LLM reflection with "
-            f"top score {reflection.overall_score:.2f}"
+            f"top vector signal {pending_signal:.2f}"
+            if pending_signal is not None
+            else f"{state['current_tool']} skipped LLM reflection"
         )
         memory_metadata = {
             "skip_threshold": state.get(
                 "pending_reflection_threshold",
                 get_settings().agent.reflection_skip_score_threshold,
             ),
-            "top_score": state.get("pending_reflection_signal", reflection.overall_score),
+            "top_vector_signal": pending_signal,
             "retry_scope": reflection.retry_scope,
         }
     else:
@@ -807,7 +831,7 @@ def _rerank_results(state: SelfCorrectionState) -> dict[str, Any]:
             ToolStep(
                 tool_name="rerank_results",
                 results_count=len(reranked),
-                relevance_score=state.get("last_reflection", ReflectionStep()).overall_score,
+                relevance_score=_top_evidence_signal(reranked),
                 duration_ms=elapsed_ms,
                 query_used=state["current_query"],
             )
@@ -904,8 +928,8 @@ def _prepare_retry(state: SelfCorrectionState) -> dict[str, Any]:
     trace = state.get("trace")
     if trace is not None:
         fallback_reason = (
-            f"reflection {reflection.overall_score:.1f} < "
-            f"threshold {state['relevance_threshold']}"
+            f"reflection verdict={reflection.verdict or 'unknown'}, "
+            f"evidence={reflection.evidence_status or 'unknown'}"
         )
         trace.escalation_steps.append(
             EscalationStep(
@@ -1059,7 +1083,6 @@ def run_self_correction_workflow(
     reflection = final_state.get("last_reflection")
     if reflection is not None and resolve_reflection_verdict(
         reflection,
-        relevance_threshold=relevance_threshold,
     ) in {"answer", "stop"}:
         return final_state.get("results", []), final_state.get("attempt", 0)
 
@@ -1203,15 +1226,25 @@ def _retrieve_evidence(state: AgentWorkflowState) -> dict[str, Any]:
 
 
 def _generate_answer_node(state: AgentWorkflowState) -> dict[str, Any]:
-    """Generate the answer from the current evidence set."""
+    """Generate the answer from the current evidence set.
+
+    Wires the latest reflection verdict into `generate_answer` so the
+    resulting `confidence_level` reflects the agent's end-to-end judgment.
+    The answer guard (if triggered) forces `confidence_level` to "low"
+    without touching `evidence_score` — guard signals answer trust, not
+    retrieval quality.
+    """
     started = time.perf_counter()
     reflection_history = list(state.get("reflection_history", []))
-    reflection_score = reflection_history[-1].overall_score if reflection_history else None
+    last_reflection = reflection_history[-1] if reflection_history else None
+    reflection_verdict = (
+        resolve_reflection_verdict(last_reflection) if last_reflection is not None else ""
+    )
     qa_result = state["ops"].generate_answer(
         state["query"],
         state["results"],
         openai_client=state["openai_client"],
-        reflection_score=reflection_score,
+        reflection_verdict=reflection_verdict,
     )
     if state.get("answer_guard_triggered"):
         guard_reason = state.get("answer_guard_reason", "").strip()
@@ -1228,7 +1261,7 @@ def _generate_answer_node(state: AgentWorkflowState) -> dict[str, Any]:
         qa_result = qa_result.model_copy(
             update={
                 "answer": answer_text,
-                "confidence": round(qa_result.confidence * _ANSWER_GUARD_CONFIDENCE_SCALE, 3),
+                "confidence_level": "low",
             }
         )
     settings = state.get("settings")
@@ -1239,7 +1272,8 @@ def _generate_answer_node(state: AgentWorkflowState) -> dict[str, Any]:
         model=model_name,
         prompt_tokens=qa_result.prompt_tokens,
         completion_tokens=qa_result.completion_tokens,
-        confidence=qa_result.confidence,
+        evidence_score=qa_result.evidence_score,
+        confidence_level=qa_result.confidence_level,
         duration_ms=int((time.perf_counter() - started) * 1000),
     )
     memory = _append_memory_entry(
@@ -1248,7 +1282,8 @@ def _generate_answer_node(state: AgentWorkflowState) -> dict[str, Any]:
         message="generated answer from current evidence",
         metadata={
             "sources": len(state["results"]),
-            "confidence": qa_result.confidence,
+            "evidence_score": qa_result.evidence_score,
+            "confidence_level": qa_result.confidence_level,
             "answer_guard_triggered": state.get("answer_guard_triggered", False),
         },
     )
@@ -1256,7 +1291,7 @@ def _generate_answer_node(state: AgentWorkflowState) -> dict[str, Any]:
 
 
 def _after_generate(state: AgentWorkflowState) -> str:
-    """Skip completeness for non-global queries."""
+    """Trigger completeness check only for weak global queries."""
     qa_result = state.get("qa_result")
     if state.get("answer_guard_triggered"):
         return "finish"
@@ -1264,7 +1299,7 @@ def _after_generate(state: AgentWorkflowState) -> str:
         state["decision"].query_type == QueryType.GLOBAL
         and qa_result is not None
         and bool((qa_result.answer or "").strip())
-        and qa_result.confidence < _GLOBAL_COMPLETENESS_CONFIDENCE_THRESHOLD
+        and qa_result.evidence_score < _GLOBAL_COMPLETENESS_EVIDENCE_THRESHOLD
         and len(state.get("results", [])) < 8
     ):
         return "check_completeness"
@@ -1272,19 +1307,27 @@ def _after_generate(state: AgentWorkflowState) -> str:
 
 
 def _check_completeness_node(state: AgentWorkflowState) -> dict[str, Any]:
-    """Evaluate whether the current answer is complete for global queries."""
+    """Evaluate whether the current answer is complete for global queries.
+
+    Forced incomplete when evidence is weak OR when the last reflection
+    emitted a non-answer verdict. This no longer relies on any numeric
+    reflection score.
+    """
     qa_result = state["qa_result"]
     reflection_history = list(state.get("reflection_history", []))
     last_reflection = reflection_history[-1] if reflection_history else None
     forced_incomplete = False
-    if qa_result.confidence < _GLOBAL_COMPLETENESS_CONFIDENCE_THRESHOLD:
+    if qa_result.evidence_score < _GLOBAL_COMPLETENESS_EVIDENCE_THRESHOLD:
         forced_incomplete = True
-    if last_reflection is not None and (
-        (last_reflection.verdict or "") in {"retry", "rerank"}
-        or last_reflection.should_retry
-        or last_reflection.overall_score < _REFLECTION_RETRY_SCORE_THRESHOLD
-    ):
-        forced_incomplete = True
+    if last_reflection is not None:
+        verdict = (last_reflection.verdict or "").strip().lower()
+        evidence_status = (last_reflection.evidence_status or "").strip().lower()
+        if (
+            verdict in {"retry", "rerank"}
+            or last_reflection.should_retry
+            or evidence_status in {"partial", "insufficient", "empty"}
+        ):
+            forced_incomplete = True
     is_complete = False
     if not forced_incomplete:
         is_complete = state["ops"].evaluate_completeness(

@@ -9,7 +9,6 @@ from rag_core.reflector import (
     evaluate_reflection,
     evaluate_relevance,
     generate_retry_query,
-    reflection_to_confidence,
 )
 
 
@@ -49,7 +48,6 @@ class TestEvaluateReflection:
     def test_empty_results_returns_no_results_reflection(self):
         client = MagicMock()
         step = evaluate_reflection("q", [], openai_client=client, tool_name="vector_search")
-        assert step.overall_score == 0.0
         assert step.failure_type == "no_results"
         assert "No evidence retrieved." in step.missing_information
         assert step.should_retry is True
@@ -92,10 +90,6 @@ class TestEvaluateReflection:
         assert step.action == "retry_hybrid"
         assert step.required_tool == "hybrid_search"
         assert step.verdict == "retry"
-        assert step.relevance == 3.0
-        assert step.entity_completeness == 3.0
-        assert step.logical_consistency == 3.0
-        assert step.context_sufficiency == 3.0
         assert step.failure_type == "insufficient_context"
         assert step.recommended_action == "use_graph_traversal"
         assert step.missing_information == ["timeline detail"]
@@ -109,7 +103,6 @@ class TestEvaluateReflection:
         assert step.should_retry is True
         assert step.should_rewrite_query is False
         assert step.should_rerank_again is False
-        assert step.overall_score == 3.0
         call_kwargs = client.chat.completions.create.call_args.kwargs
         assert call_kwargs["response_format"]["type"] == "json_schema"
         assert call_kwargs["response_format"]["json_schema"]["strict"] is True
@@ -119,15 +112,6 @@ class TestEvaluateReflection:
         assert "relevance" not in schema["properties"]
         assert "overall_score" not in schema["properties"]
 
-    def test_reflection_to_confidence_maps_weighted_scores(self):
-        step = ReflectionStep(
-            overall_score=4.175,
-            relevance=4.5,
-            entity_completeness=4.0,
-            logical_consistency=5.0,
-            context_sufficiency=3.5,
-        )
-        assert reflection_to_confidence(step) == 0.845
 
     def test_falls_back_when_response_format_is_unsupported(self):
         client = MagicMock()
@@ -157,7 +141,6 @@ class TestEvaluateReflection:
         )
 
         step = evaluate_reflection("q", [_make_result()], openai_client=client)
-        assert step.overall_score == 5.0
         assert step.verdict == "answer"
         assert step.recommended_action == "answer_ready"
 
@@ -166,8 +149,6 @@ class TestEvaluateReflection:
         client.chat.completions.create.return_value = _mock_openai_response("not valid json")
 
         step = evaluate_reflection("q", [_make_result()], openai_client=client)
-
-        assert step.overall_score == 0.0
         assert step.verdict == "stop"
         assert step.failure_type == "insufficient_context"
         assert step.recommended_action == "stop_due_to_invalid_reflection"
@@ -287,7 +268,6 @@ class TestEvaluateReflection:
         client.chat.completions.create.side_effect = RuntimeError("API error")
 
         step = evaluate_reflection("q", [_make_result()], openai_client=client)
-        assert step.overall_score == 0.0
         assert step.verdict == "stop"
         assert step.failure_type == "insufficient_context"
 
@@ -330,18 +310,18 @@ class TestEvaluateReflection:
 
         step = evaluate_reflection("q", [_make_result()])
         mock_make_client.assert_called_once_with(cfg)
-        assert step.overall_score == 5.0
+        assert step.verdict == "answer"
 
 
 class TestEvaluateRelevance:
-    def test_wraps_structured_reflection_score(self):
+    def test_wraps_structured_reflection_verdict(self):
         client = MagicMock()
         client.chat.completions.create.return_value = _mock_openai_response(
             _reflection_payload()
         )
 
-        score = evaluate_relevance("q", [_make_result()], openai_client=client)
-        assert score == 5.0
+        verdict = evaluate_relevance("q", [_make_result()], openai_client=client)
+        assert verdict == "answer"
 
 
 class TestGenerateRetryQuery:
@@ -351,7 +331,6 @@ class TestGenerateRetryQuery:
             "Bob projects and overlap with Alice projects"
         )
         reflection = ReflectionStep(
-            overall_score=1.5,
             failure_type="missing_entity",
             recommended_action="target_missing_entity",
             missing_information=["Bob's project membership"],
@@ -369,7 +348,6 @@ class TestGenerateRetryQuery:
         client = MagicMock()
         client.chat.completions.create.return_value = _mock_openai_response("retry q")
         reflection = ReflectionStep(
-            overall_score=0.0,
             failure_type="no_results",
             recommended_action="expand_recall",
             missing_information=["No evidence retrieved."],
@@ -392,7 +370,6 @@ class TestGenerateRetryQuery:
         client = MagicMock()
         client.chat.completions.create.return_value = _mock_openai_response("retry q")
         reflection = ReflectionStep(
-            overall_score=1.0,
             failure_type="insufficient_recall",
             recommended_action="expand_recall",
         )
@@ -419,7 +396,6 @@ class TestGenerateRetryQuery:
         client = MagicMock()
         client.chat.completions.create.side_effect = RuntimeError("fail")
         reflection = ReflectionStep(
-            overall_score=1.0,
             failure_type="insufficient_recall",
             recommended_action="expand_recall",
         )
@@ -436,7 +412,6 @@ class TestGenerateRetryQuery:
         client = MagicMock()
         client.chat.completions.create.return_value = _mock_openai_response(None)
         reflection = ReflectionStep(
-            overall_score=1.0,
             failure_type="insufficient_recall",
             recommended_action="expand_recall",
         )
@@ -464,7 +439,6 @@ class TestGenerateRetryQuery:
             "q",
             [],
             reflection=ReflectionStep(
-                overall_score=1.0,
                 failure_type="insufficient_recall",
                 recommended_action="expand_recall",
             ),

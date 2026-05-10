@@ -44,7 +44,8 @@ class TestGenerateAnswer:
     def test_no_results_returns_fallback(self):
         client = MagicMock()
         result = generate_answer("question?", [], openai_client=client)
-        assert result.confidence == 0.0
+        assert result.confidence_level == "low"
+        assert result.evidence_score == 0.0
         assert "don't have enough context" in result.answer
         assert result.query == "question?"
         assert result.sources == []
@@ -65,31 +66,32 @@ class TestGenerateAnswer:
         assert len(qa.sources) == 1
         client.chat.completions.create.assert_called_once()
 
-    def test_reflection_score_does_not_affect_confidence(self):
+    def test_reflection_verdict_does_not_affect_evidence_score(self):
         """Reflection is a policy decision (answer/retry/stop), not a numeric signal.
 
-        Confidence should reflect retrieval quality only.
+        Evidence score should reflect retrieval quality only. Verdict only
+        affects the derived confidence_level, not the numeric evidence_score.
         """
         client = MagicMock()
         client.chat.completions.create.return_value = _mock_openai_response("answer")
 
         results = [_make_scored_result("relevant content", 0.8)]
-        qa_with_reflection = generate_answer(
+        qa_with_verdict = generate_answer(
             "What is X?",
             results,
             openai_client=client,
-            reflection_score=2.0,
+            reflection_verdict="answer",
         )
-        qa_without_reflection = generate_answer(
+        qa_without_verdict = generate_answer(
             "What is X?",
             results,
             openai_client=client,
-            reflection_score=None,
+            reflection_verdict="",
         )
 
-        # Confidence is driven by retrieval evidence, not reflection score
-        assert qa_with_reflection.confidence == qa_without_reflection.confidence
-        assert qa_with_reflection.confidence == 0.8
+        # Evidence score is driven by retrieval, not reflection
+        assert qa_with_verdict.evidence_score == qa_without_verdict.evidence_score
+        assert qa_with_verdict.evidence_score == 0.8
 
     def test_public_confidence_helper_matches_generate_answer(self):
         client = MagicMock()
@@ -100,10 +102,12 @@ class TestGenerateAnswer:
             "What is X?",
             results,
             openai_client=client,
-            reflection_score=2.0,
+            reflection_verdict="answer",
         )
 
-        assert calculate_answer_confidence(results, reflection_score=2.0) == qa.confidence
+        # Both helpers should return the same evidence score (reflection is
+        # intentionally ignored at the numeric layer).
+        assert calculate_answer_confidence(results) == qa.evidence_score
 
     def test_confidence_prefers_normalized_scores(self):
         results = [
@@ -269,7 +273,8 @@ class TestGenerateAnswer:
         results = [_make_result()]
         qa = generate_answer("q", results, openai_client=client)
 
-        assert qa.confidence == 0.0
+        assert qa.confidence_level == "low"
+        assert qa.evidence_score == 0.0
         assert "Error" in qa.answer
         assert len(qa.sources) == 1
 

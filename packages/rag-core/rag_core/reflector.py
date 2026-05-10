@@ -81,12 +81,6 @@ _VALID_TOOL_NAMES = {
     "vector_search",
 }
 
-_REFLECTION_SCORE_WEIGHTS = {
-    "relevance": 0.35,
-    "entity_completeness": 0.30,
-    "logical_consistency": 0.15,
-    "context_sufficiency": 0.20,
-}
 _REFLECTION_SCHEMA_FIELDS = {
     "evidence_status",
     "gap_type",
@@ -250,10 +244,12 @@ def _normalize_verdict(value: object) -> str:
 
 def resolve_reflection_verdict(
     reflection: ReflectionStep,
-    *,
-    relevance_threshold: float | None = None,
 ) -> str:
-    """Resolve one stable control verdict from a structured reflection step."""
+    """Resolve one stable control verdict from a structured reflection step.
+
+    Decisions are driven by enum fields (verdict, action, evidence_status,
+    failure_type, retry_scope). There is intentionally no numeric threshold.
+    """
     verdict = _normalize_verdict(getattr(reflection, "verdict", ""))
     if verdict:
         return verdict
@@ -282,12 +278,6 @@ def resolve_reflection_verdict(
         return "retry"
     if reflection.should_rerank_again and retry_scope in {"", "rerank_only"}:
         return "rerank"
-    if (
-        relevance_threshold is not None
-        and relevance_threshold > 0
-        and reflection.overall_score >= relevance_threshold
-    ):
-        return "answer"
     return "retry"
 
 
@@ -384,11 +374,6 @@ def _policy_stop_reflection(
         action="stop",
         required_tool="none",
         verdict="stop",
-        overall_score=0.0,
-        relevance=0.0,
-        entity_completeness=0.0,
-        logical_consistency=0.0,
-        context_sufficiency=0.0,
         missing_information=["Reflection policy guard rejected the model output."],
         missing_entities=[],
         missing_relationships=[],
@@ -468,15 +453,6 @@ def _recommended_action_for_choice(action: str, gap_type: str) -> str:
     if action == "retry_vector":
         return "expand_recall"
     return action
-
-
-def _legacy_score_for_status(evidence_status: str) -> float:
-    return {
-        "sufficient": 5.0,
-        "partial": 3.0,
-        "insufficient": 1.5,
-        "empty": 0.0,
-    }.get(evidence_status, 0.0)
 
 
 def _validate_reflection_payload(data: dict[str, object]) -> str:
@@ -605,7 +581,9 @@ def _history_summary(reflection_history: list[ReflectionStep] | None) -> str:
         missing = ", ".join(step.missing_information) if step.missing_information else "none"
         lines.append(
             f"- attempt={step.attempt + 1}, tool={step.tool_name}, "
-            f"score={step.overall_score:.2f}, failure={step.failure_type or 'unknown'}, "
+            f"evidence={step.evidence_status or 'unknown'}, "
+            f"verdict={step.verdict or 'unknown'}, "
+            f"failure={step.failure_type or 'unknown'}, "
             f"action={step.recommended_action or 'unknown'}, missing={missing}"
         )
     return "\n".join(lines)
@@ -640,7 +618,6 @@ def _build_reflection_step(
     action = str(data.get("action", "")).strip().lower()
     required_tool = str(data.get("required_tool", "")).strip().lower()
     verdict = _verdict_for_action(action, evidence_status)
-    score = _legacy_score_for_status(evidence_status)
     failure_type = str(data.get("failure_type", "")).strip().lower() or _failure_type_for_gap(
         gap_type,
         evidence_status,
@@ -663,11 +640,6 @@ def _build_reflection_step(
         action=action,
         required_tool=required_tool,
         verdict=verdict,
-        overall_score=score,
-        relevance=score,
-        entity_completeness=score,
-        logical_consistency=score,
-        context_sufficiency=score,
         missing_information=_coerce_str_list(data.get("missing_information")),
         missing_entities=_coerce_str_list(data.get("missing_entities")),
         missing_relationships=_coerce_str_list(data.get("missing_relationships")),
@@ -694,20 +666,6 @@ def _build_reflection_step(
     )
 
 
-def reflection_to_confidence(reflection: ReflectionStep) -> float:
-    """Map reflection scores from the 0-5 space into 0-1 confidence."""
-    if reflection.overall_score <= 0:
-        return 0.0
-    raw_score = (
-        _REFLECTION_SCORE_WEIGHTS["relevance"] * reflection.relevance
-        + _REFLECTION_SCORE_WEIGHTS["entity_completeness"] * reflection.entity_completeness
-        + _REFLECTION_SCORE_WEIGHTS["logical_consistency"] * reflection.logical_consistency
-        + _REFLECTION_SCORE_WEIGHTS["context_sufficiency"] * reflection.context_sufficiency
-    )
-    confidence = min(1.0, max(0.1, raw_score / 5.0))
-    return round(confidence, 3)
-
-
 def _fallback_reflection(
     query: str,
     results: list[SearchResult],
@@ -726,11 +684,6 @@ def _fallback_reflection(
             action="retry_hybrid",
             required_tool="hybrid_search",
             verdict="retry",
-            overall_score=0.0,
-            relevance=0.0,
-            entity_completeness=0.0,
-            logical_consistency=0.0,
-            context_sufficiency=0.0,
             missing_information=["No evidence retrieved."],
             missing_entities=[],
             missing_relationships=[],
@@ -761,11 +714,6 @@ def _fallback_reflection(
         action="retry_hybrid",
         required_tool="hybrid_search",
         verdict="retry",
-        overall_score=2.5,
-        relevance=2.5,
-        entity_completeness=2.5,
-        logical_consistency=2.5,
-        context_sufficiency=2.5,
         missing_information=["Unable to determine exact evidence gaps."],
         missing_entities=[],
         missing_relationships=[],
@@ -851,12 +799,10 @@ def evaluate_reflection(
             )
         step = _build_reflection_step(payload, query=query, tool_name=tool_name, attempt=attempt)
         logger.info(
-            "Reflection score %.2f (rel=%.2f, ent=%.2f, logic=%.2f, ctx=%.2f)",
-            step.overall_score,
-            step.relevance,
-            step.entity_completeness,
-            step.logical_consistency,
-            step.context_sufficiency,
+            "Reflection verdict=%s, evidence_status=%s, action=%s",
+            step.verdict,
+            step.evidence_status,
+            step.action,
         )
         return step
 
@@ -870,14 +816,27 @@ def evaluate_reflection(
         )
 
 
+def reflection_verdict(
+    query: str,
+    results: list[SearchResult],
+    openai_client: OpenAI | None = None,
+) -> str:
+    """Backwards-compatible wrapper returning the reflection verdict enum."""
+    step = evaluate_reflection(query, results, openai_client=openai_client)
+    return resolve_reflection_verdict(step)
+
+
 def evaluate_relevance(
     query: str,
     results: list[SearchResult],
     openai_client: OpenAI | None = None,
-) -> float:
-    """Backwards-compatible wrapper returning the overall reflection score."""
-    step = evaluate_reflection(query, results, openai_client=openai_client)
-    return step.overall_score
+) -> str:
+    """DEPRECATED: returns the reflection verdict string, not a numeric score.
+
+    Kept for backward compatibility. New code should call `evaluate_reflection`
+    directly and inspect `verdict`/`evidence_status`/`action` enums.
+    """
+    return reflection_verdict(query, results, openai_client=openai_client)
 
 
 def generate_retry_query(
@@ -901,7 +860,8 @@ def generate_retry_query(
     prompt = (
         f"{RETRY_QUERY_PROMPT}\n\n"
         f"Original query: {query}\n"
-        f"Current reflection score: {reflection.overall_score:.2f}\n"
+        f"Evidence status: {reflection.evidence_status or 'unknown'}\n"
+        f"Verdict: {reflection.verdict or 'unknown'}\n"
         f"Failure type: {reflection.failure_type or 'unknown'}\n"
         f"Recommended action: {reflection.recommended_action or 'unknown'}\n"
         f"Missing information: {missing}\n\n"
