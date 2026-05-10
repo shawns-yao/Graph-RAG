@@ -11,6 +11,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import threading
 from abc import ABC, abstractmethod
 from collections import OrderedDict
 
@@ -44,30 +45,37 @@ class TraceStore(ABC):
 
 
 class InMemoryTraceStore(TraceStore):
-    """Bounded in-memory LRU trace cache (default)."""
+    """Bounded in-memory LRU trace cache (default).
+
+    Thread-safe via a reentrant lock for concurrent FastAPI requests.
+    """
 
     def __init__(self, max_size: int = _DEFAULT_MAX):
+        self._lock = threading.RLock()
         self._cache: OrderedDict[str, PipelineTrace] = OrderedDict()
         self._max = max_size
         self._session_traces: dict[str, list[PipelineTrace]] = {}
 
     def put(self, trace: PipelineTrace) -> None:
-        self._cache[trace.trace_id] = trace
-        while len(self._cache) > self._max:
-            self._cache.popitem(last=False)
-        if trace.session_id:
-            session_traces = self._session_traces.setdefault(trace.session_id, [])
-            session_traces.append(trace)
-            if len(session_traces) > _SESSION_TRACE_MAX:
-                del session_traces[:-_SESSION_TRACE_MAX]
+        with self._lock:
+            self._cache[trace.trace_id] = trace
+            while len(self._cache) > self._max:
+                self._cache.popitem(last=False)
+            if trace.session_id:
+                session_traces = self._session_traces.setdefault(trace.session_id, [])
+                session_traces.append(trace)
+                if len(session_traces) > _SESSION_TRACE_MAX:
+                    del session_traces[:-_SESSION_TRACE_MAX]
 
     def get(self, trace_id: str) -> PipelineTrace | None:
-        return self._cache.get(trace_id)
+        with self._lock:
+            return self._cache.get(trace_id)
 
     def get_session_traces(self, session_id: str, limit: int = _SESSION_TRACE_MAX) -> list[PipelineTrace]:
         if not session_id:
             return []
-        return list(self._session_traces.get(session_id, [])[-limit:])
+        with self._lock:
+            return list(self._session_traces.get(session_id, [])[-limit:])
 
     def get_session_memory(
         self,

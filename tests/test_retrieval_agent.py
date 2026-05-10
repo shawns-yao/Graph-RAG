@@ -12,8 +12,7 @@ from rag_core.models import (
 )
 
 from agentic_graph_rag.agent.retrieval_agent import (
-    _REFLECTION_ACTION_TOOL_MAP,
-    _REFLECTION_FAILURE_TOOL_MAP,
+    _REFLECTION_RULES,
     _RETRY_TOOL_MATRIX,
     _TOOL_REGISTRY,
     _get_next_tool,
@@ -232,13 +231,13 @@ class TestGetNextTool:
         assert nxt == "full_document_read"
 
     def test_reflection_tool_maps_are_explicit(self):
-        assert _REFLECTION_ACTION_TOOL_MAP["target_missing_entity"] == [
+        assert _REFLECTION_RULES["target_missing_entity"]["tools"] == [
             "bm25_search",
             "vector_search",
             "cypher_traverse",
             "hybrid_search",
         ]
-        assert _REFLECTION_FAILURE_TOOL_MAP["insufficient_context"] == [
+        assert _REFLECTION_RULES["insufficient_context"]["tools"] == [
             "hybrid_search",
             "comprehensive_search",
         ]
@@ -388,6 +387,58 @@ class TestSelfCorrectionLoop:
         assert trace.tool_steps[-1].reused_sources == ["vector"]
         assert trace.tool_steps[-1].executed_sources == ["graph"]
         assert trace.escalation_steps[-1].cached_sources_reused == ["vector"]
+
+    @patch("agentic_graph_rag.agent.retrieval_agent.evaluate_reflection")
+    def test_enum_reflection_missing_relation_falls_back_to_graph(self, mock_eval):
+        vector_results = _make_results(2)
+        graph_results = _make_results(3)
+        for result in graph_results:
+            result.source = "graph"
+        mock_vs = _mock_tool(vector_results)
+        mock_graph = _mock_tool(graph_results)
+        mock_eval.side_effect = [
+            ReflectionStep(
+                evidence_status="partial",
+                gap_type="missing_relation",
+                action="retry_graph",
+                required_tool="cypher_traverse",
+                overall_score=3.0,
+                failure_type="relation_missing",
+                recommended_action="use_graph_traversal",
+                preferred_tools=["cypher_traverse"],
+                should_retry=True,
+                retry_scope="tool_escalation",
+            ),
+            ReflectionStep(
+                evidence_status="sufficient",
+                gap_type="none",
+                action="answer",
+                overall_score=5.0,
+                failure_type="acceptable",
+                recommended_action="answer_ready",
+                should_retry=False,
+                retry_scope="stop",
+            ),
+        ]
+
+        decision = _make_decision(query_type=QueryType.RELATION)
+        with patch.dict(_TOOL_REGISTRY, {
+            "vector_search": mock_vs,
+            "cypher_traverse": mock_graph,
+        }):
+            out, retries = self_correction_loop(
+                "FEV1和肺功能检查有什么关系？",
+                MagicMock(),
+                MagicMock(),
+                decision,
+                max_retries=2,
+                relevance_threshold=3.0,
+            )
+
+        assert out == graph_results
+        assert retries == 1
+        assert mock_vs.call_count == 1
+        assert mock_graph.call_count == 1
 
     @patch("agentic_graph_rag.agent.retrieval_agent.generate_retry_query")
     @patch("agentic_graph_rag.agent.retrieval_agent.evaluate_reflection")

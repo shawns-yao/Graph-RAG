@@ -108,18 +108,6 @@ _REFLECTION_RULES: dict[str, dict[str, list[str]]] = {
     "insufficient_context": {"tools": _HYBRID_RECALL_TOOLS, "providers": []},
 }
 
-_REFLECTION_ACTION_TOOL_MAP: dict[str, list[str]] = {
-    key: value["tools"]
-    for key, value in _REFLECTION_RULES.items()
-    if key in {"use_graph_traversal", "target_missing_entity", "use_comprehensive_search"}
-}
-
-_REFLECTION_FAILURE_TOOL_MAP: dict[str, list[str]] = {
-    key: value["tools"]
-    for key, value in _REFLECTION_RULES.items()
-    if key in {"relation_missing", "missing_entity", "insufficient_context"}
-}
-
 _QUERY_TYPE_TOOL_HINTS: dict[tuple[QueryType, str], list[str]] = {
     (QueryType.SIMPLE, "missing_entity"): _LIGHTWEIGHT_RECALL_TOOLS + ["cypher_traverse"],
     (QueryType.SIMPLE, "no_results"): _LIGHTWEIGHT_RECALL_TOOLS + ["cypher_traverse", "hybrid_search"],
@@ -395,6 +383,11 @@ def _plan_incremental_retry(
     if verdict != "retry" or reflection.retry_scope == "stop" or not reflection.should_retry:
         return None
     if current_tool in {"comprehensive_search", "full_document_read", "community_search"}:
+        return None
+    if (
+        (reflection.action or "").strip().lower() == "retry_graph"
+        or (reflection.required_tool or "").strip().lower() == "cypher_traverse"
+    ):
         return None
 
     refresh_sources = _preferred_providers_for_reflection(reflection)

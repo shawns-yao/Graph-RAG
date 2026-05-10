@@ -15,15 +15,13 @@ from rag_core.reranker import rerank
 from rag_core.models import Chunk, GraphContext, QueryType, SearchResult
 from rag_core.neo4j_utils import open_neo4j_session
 
-from agentic_graph_rag.retrieval.fusion import FusionEngine, resolve_channel_weights
+from agentic_graph_rag.retrieval.fusion import FusionEngine
 from agentic_graph_rag.retrieval.orchestrator import RetrievalOrchestrator
 from agentic_graph_rag.retrieval.providers import (
     BM25RetrievalProvider,
     GraphRetrievalProvider,
     RetrievalRequest,
     VectorRetrievalProvider,
-    attach_passage_embeddings,
-    fetch_passage_embeddings,
     graph_context_to_search_results,
 )
 
@@ -41,16 +39,14 @@ logger = logging.getLogger(__name__)
 def _embed_query(query: str, openai_client: OpenAI) -> list[float]:
     """Embed query text using OpenAI embeddings."""
     cfg = get_settings()
+    max_retries = cfg.agent.max_retries
     controller = LLMCallController(
-        max_retries=cfg.benchmark.llm_max_retries,
-        initial_backoff_seconds=cfg.benchmark.llm_initial_backoff_seconds,
-        max_backoff_seconds=cfg.benchmark.llm_max_backoff_seconds,
-        jitter_seconds=cfg.benchmark.llm_jitter_seconds,
-        max_consecutive_failures=max(2, cfg.benchmark.llm_max_retries + 1),
-        total_budget_seconds=max(
-            5.0,
-            cfg.benchmark.llm_read_timeout_seconds * max(1, cfg.benchmark.llm_max_retries + 1),
-        ),
+        max_retries=max_retries,
+        initial_backoff_seconds=1.0,
+        max_backoff_seconds=8.0,
+        jitter_seconds=0.25,
+        max_consecutive_failures=max(2, max_retries + 1),
+        total_budget_seconds=max(5.0, float(cfg.agent.request_time_budget_ms) / 1000),
     )
     response = controller.call(
         "query_embedding",
@@ -160,29 +156,6 @@ def bm25_search(
     )
 
 
-def _get_channel_weights(
-    query_type: QueryType | str | None = None,
-    overrides: dict[str, float] | None = None,
-) -> dict[str, float]:
-    """Resolve per-channel fusion weights from query type and optional overrides."""
-    return resolve_channel_weights(query_type, overrides)
-
-def _fetch_passage_embeddings(
-    chunk_ids: list[str],
-    driver: Driver,
-) -> dict[str, list[float]]:
-    """Fetch PassageNode embeddings from Neo4j for given chunk IDs."""
-    return fetch_passage_embeddings(chunk_ids, driver)
-
-
-def _attach_passage_embeddings(
-    results: list[SearchResult],
-    driver: Driver,
-) -> list[SearchResult]:
-    """Attach stored PassageNode embeddings onto SearchResult chunks in-place."""
-    return attach_passage_embeddings(results, driver)
-
-
 def hybrid_search(
     query: str,
     driver: Driver,
@@ -265,53 +238,109 @@ def _get_temporal_re():
     return _TEMPORAL_RE
 
 
+def _passage_vector_search(
+    query_emb: list[float],
+    driver: Driver,
+    top_k: int,
+) -> list[dict]:
+    """Search PassageNode via Neo4j vector index, falling back to label scan."""
+    from agentic_graph_rag.indexing.dual_node import PASSAGE_INDEX_NAME, PASSAGE_LABEL
+
+    with open_neo4j_session(driver) as session:
+        try:
+            result = session.run(
+                f"""
+                CALL db.index.vector.queryNodes(
+                    '{PASSAGE_INDEX_NAME}', $top_k, $embedding
+                )
+                YIELD node, score
+                RETURN node.id AS id,
+                       node.text AS text,
+                       node.chunk_id AS chunk_id,
+                       score
+                ORDER BY score DESC
+                """,
+                top_k=top_k,
+                embedding=query_emb,
+            )
+            return [
+                {
+                    "id": record["id"],
+                    "text": record["text"],
+                    "chunk_id": record["chunk_id"],
+                    "score": float(record["score"]),
+                }
+                for record in result
+                if record["text"]
+            ]
+        except Exception as exc:
+            logger.warning(
+                "Passage vector index query failed (%s), falling back to label scan",
+                exc,
+            )
+            return _passage_label_scan(query_emb, driver, top_k, PASSAGE_LABEL)
+
+
+def _passage_label_scan(
+    query_emb: list[float],
+    driver: Driver,
+    top_k: int,
+    passage_label: str,
+) -> list[dict]:
+    """Fallback: full label scan with Python-side cosine ranking."""
+    with open_neo4j_session(driver) as session:
+        result = session.run(
+            f"""
+            MATCH (pa:{passage_label})
+            WHERE pa.text IS NOT NULL AND pa.text <> '' AND pa.embedding IS NOT NULL
+            RETURN pa.id AS id, pa.text AS text, pa.chunk_id AS chunk_id,
+                   pa.embedding AS embedding
+            """,
+        )
+        scored: list[tuple[float, dict]] = []
+        for record in result:
+            emb = record["embedding"]
+            sim = _cosine_similarity(query_emb, list(emb)) if emb else 0.0
+            scored.append((sim, {
+                "id": record["id"],
+                "text": record["text"],
+                "chunk_id": record["chunk_id"],
+                "score": sim,
+            }))
+
+    scored.sort(key=lambda x: x[0], reverse=True)
+    return [item for _, item in scored[:top_k]]
+
+
 def temporal_query(
     query: str,
     driver: Driver,
     openai_client: OpenAI,
 ) -> list[SearchResult]:
-    """Temporal-aware query: filters passages by temporal keywords, ranks by similarity."""
-    from agentic_graph_rag.indexing.dual_node import PASSAGE_LABEL
-
+    """Temporal-aware query: vector index search + temporal keyword boost."""
     cfg = get_settings()
     top_k = cfg.retrieval.top_k_final
     query_emb = _embed_query(query, openai_client)
     temporal_re = _get_temporal_re()
 
-    with open_neo4j_session(driver) as session:
-        result = session.run(
-            f"""
-            MATCH (pa:{PASSAGE_LABEL})
-            WHERE pa.text IS NOT NULL AND pa.text <> ''
-            RETURN pa.id AS id, pa.text AS text, pa.chunk_id AS chunk_id,
-                   pa.embedding AS embedding
-            """,
-        )
+    # Oversample to allow temporal boost to re-rank
+    candidates = _passage_vector_search(query_emb, driver, top_k=top_k * 3)
 
-        scored: list[tuple[float, dict]] = []
-        for record in result:
-            text = record["text"] or ""
-            emb = record["embedding"]
-            if emb:
-                sim = _cosine_similarity(query_emb, list(emb))
-            else:
-                sim = 0.0
-            # Temporal boost: +0.15 for passages containing temporal markers
-            if temporal_re.search(text):
-                sim += 0.15
-            scored.append((sim, {
-                "id": record["id"],
-                "text": text,
-                "chunk_id": record["chunk_id"],
-            }))
-
-    scored.sort(key=lambda x: x[0], reverse=True)
-
-    if not scored:
+    if not candidates:
         logger.info("Temporal query — no passages, falling back to vector search")
         return vector_search(query, driver, openai_client)
 
+    # Apply temporal boost: +0.15 for passages containing temporal markers
+    scored: list[tuple[float, dict]] = []
+    for candidate in candidates:
+        sim = candidate["score"]
+        if temporal_re.search(candidate["text"] or ""):
+            sim += 0.15
+        scored.append((sim, candidate))
+
+    scored.sort(key=lambda x: x[0], reverse=True)
     top = scored[:top_k]
+
     results = []
     for rank, (sim, rec) in enumerate(top, start=1):
         results.append(SearchResult(
@@ -348,49 +377,22 @@ def full_document_read(
     openai_client: OpenAI,
     top_k: int | None = None,
 ) -> list[SearchResult]:
-    """Read passage nodes ranked by cosine similarity to query."""
-    from agentic_graph_rag.indexing.dual_node import PASSAGE_LABEL
-
+    """Read passage nodes ranked by cosine similarity via vector index."""
     cfg = get_settings()
     if top_k is None:
         top_k = cfg.retrieval.top_k_final
 
     query_emb = _embed_query(query, openai_client)
-
-    with open_neo4j_session(driver) as session:
-        result = session.run(
-            f"""
-            MATCH (pa:{PASSAGE_LABEL})
-            WHERE pa.text IS NOT NULL AND pa.text <> ''
-            RETURN pa.id AS id, pa.text AS text, pa.chunk_id AS chunk_id,
-                   pa.embedding AS embedding
-            """,
-        )
-
-        scored: list[tuple[float, dict]] = []
-        for record in result:
-            emb = record["embedding"]
-            if emb:
-                sim = _cosine_similarity(query_emb, list(emb))
-            else:
-                sim = 0.0
-            scored.append((sim, {
-                "id": record["id"],
-                "text": record["text"],
-                "chunk_id": record["chunk_id"],
-            }))
-
-    scored.sort(key=lambda x: x[0], reverse=True)
-    top = scored[:top_k]
+    candidates = _passage_vector_search(query_emb, driver, top_k=top_k)
 
     results = []
-    for rank, (sim, rec) in enumerate(top, start=1):
+    for rank, rec in enumerate(candidates, start=1):
         results.append(SearchResult(
             chunk=Chunk(
                 id=rec["chunk_id"] or rec["id"] or "",
                 content=rec["text"] or "",
             ),
-            score=sim,
+            score=rec["score"],
             rank=rank,
             source="vector",
         ))
@@ -420,7 +422,7 @@ def comprehensive_search(
         top_k = max(cfg.retrieval.top_k_final, 8)
 
     # Detect enumeration count for dynamic sub-query generation
-    n_sub = min(3, _detect_enumeration_count(query))
+    n_sub = max(3, min(_detect_enumeration_count(query), 6))
     sub_queries = _generate_sub_queries(query, openai_client, cfg.openai.llm_model_mini, n=n_sub)
 
     # Fan-out: run vector search for each sub-query

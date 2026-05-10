@@ -255,13 +255,16 @@ class PipelineService:
         """Node and edge counts."""
         try:
             with open_neo4j_session(self._driver) as session:
-                result = session.run(
-                    "MATCH (n) RETURN count(n) AS nodes "
-                    "UNION ALL "
-                    "MATCH ()-[r]->() RETURN count(r) AS nodes"
-                )
-                counts = [r["nodes"] for r in result]
-            return {"nodes": counts[0] if counts else 0, "edges": counts[1] if len(counts) > 1 else 0}
+                node_count = session.run(
+                    "MATCH (n) RETURN count(n) AS cnt"
+                ).single()
+                edge_count = session.run(
+                    "MATCH ()-[r]->() RETURN count(r) AS cnt"
+                ).single()
+            return {
+                "nodes": node_count["cnt"] if node_count else 0,
+                "edges": edge_count["cnt"] if edge_count else 0,
+            }
         except Exception as e:
             return {"error": str(e)}
 

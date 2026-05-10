@@ -5,10 +5,8 @@ from unittest.mock import ANY, MagicMock, patch
 from rag_core.models import Chunk, GraphContext, SearchResult
 
 from agentic_graph_rag.agent.tools import (
-    _get_channel_weights,
     _cosine_similarity,
     _embed_query,
-    _fetch_passage_embeddings,
     _generate_sub_queries,
     _graph_context_to_results,
     _rrf_merge,
@@ -20,6 +18,8 @@ from agentic_graph_rag.agent.tools import (
     temporal_query,
     vector_search,
 )
+from agentic_graph_rag.retrieval.fusion import resolve_channel_weights as _get_channel_weights
+from agentic_graph_rag.retrieval.providers import fetch_passage_embeddings as _fetch_passage_embeddings
 
 
 def _mock_driver():
@@ -286,26 +286,16 @@ class TestCosineSimilarity:
 
 
 class TestFullDocumentRead:
-    def test_reads_and_ranks_passages(self):
+    @patch("agentic_graph_rag.agent.tools._passage_vector_search")
+    def test_reads_and_ranks_passages(self, mock_pvs):
         driver = _mock_driver()
-        session = driver.session().__enter__()
         # query embedding = [1.0, 0.0]
         client = _mock_openai_client([1.0, 0.0])
 
-        rec1 = MagicMock()
-        rec1.__getitem__ = lambda self, key: {
-            "id": "p1", "text": "Text one", "chunk_id": "c1",
-            "embedding": [0.5, 0.5],
-        }[key]
-        rec2 = MagicMock()
-        rec2.__getitem__ = lambda self, key: {
-            "id": "p2", "text": "Text two", "chunk_id": "c2",
-            "embedding": [1.0, 0.0],  # identical to query → highest similarity
-        }[key]
-
-        result_mock = MagicMock()
-        result_mock.__iter__ = MagicMock(return_value=iter([rec1, rec2]))
-        session.run.return_value = result_mock
+        mock_pvs.return_value = [
+            {"id": "p2", "text": "Text two", "chunk_id": "c2", "score": 0.99},
+            {"id": "p1", "text": "Text one", "chunk_id": "c1", "score": 0.71},
+        ]
 
         results = full_document_read("overview", driver, client, top_k=5)
         assert len(results) == 2
@@ -315,33 +305,25 @@ class TestFullDocumentRead:
         assert results[0].score > results[1].score
         assert results[1].chunk.content == "Text one"
 
-    def test_passages_without_embedding(self):
+    @patch("agentic_graph_rag.agent.tools._passage_vector_search")
+    def test_passages_without_embedding(self, mock_pvs):
         driver = _mock_driver()
-        session = driver.session().__enter__()
         client = _mock_openai_client([1.0, 0.0])
 
-        rec1 = MagicMock()
-        rec1.__getitem__ = lambda self, key: {
-            "id": "p1", "text": "No emb", "chunk_id": "c1",
-            "embedding": None,
-        }[key]
-
-        result_mock = MagicMock()
-        result_mock.__iter__ = MagicMock(return_value=iter([rec1]))
-        session.run.return_value = result_mock
+        mock_pvs.return_value = [
+            {"id": "p1", "text": "No emb", "chunk_id": "c1", "score": 0.0},
+        ]
 
         results = full_document_read("overview", driver, client, top_k=5)
         assert len(results) == 1
         assert results[0].score == 0.0
 
-    def test_empty_passages(self):
+    @patch("agentic_graph_rag.agent.tools._passage_vector_search")
+    def test_empty_passages(self, mock_pvs):
         driver = _mock_driver()
-        session = driver.session().__enter__()
         client = _mock_openai_client()
 
-        result_mock = MagicMock()
-        result_mock.__iter__ = MagicMock(return_value=iter([]))
-        session.run.return_value = result_mock
+        mock_pvs.return_value = []
 
         results = full_document_read("overview", driver, client, top_k=5)
         assert results == []
@@ -362,25 +344,15 @@ class TestWrapperTools:
         mock_vs.assert_called_once_with("test", driver, client)
         assert len(results) == 2
 
-    def test_temporal_query_boosts_temporal_passages(self):
+    @patch("agentic_graph_rag.agent.tools._passage_vector_search")
+    def test_temporal_query_boosts_temporal_passages(self, mock_pvs):
         driver = _mock_driver()
-        session = driver.session().__enter__()
         client = _mock_openai_client([1.0, 0.0])
 
-        rec_temporal = MagicMock()
-        rec_temporal.__getitem__ = lambda self, key: {
-            "id": "p1", "text": "Компания основана в 2015 году",
-            "chunk_id": "c1", "embedding": [0.5, 0.5],
-        }[key]
-        rec_regular = MagicMock()
-        rec_regular.__getitem__ = lambda self, key: {
-            "id": "p2", "text": "Описание продукта и характеристики",
-            "chunk_id": "c2", "embedding": [0.6, 0.4],
-        }[key]
-
-        result_mock = MagicMock()
-        result_mock.__iter__ = MagicMock(return_value=iter([rec_temporal, rec_regular]))
-        session.run.return_value = result_mock
+        mock_pvs.return_value = [
+            {"id": "p1", "text": "Компания основана в 2015 году", "chunk_id": "c1", "score": 0.71},
+            {"id": "p2", "text": "Описание продукта и характеристики", "chunk_id": "c2", "score": 0.74},
+        ]
 
         results = temporal_query("когда основана компания", driver, client)
         assert len(results) == 2
@@ -388,14 +360,12 @@ class TestWrapperTools:
         # Temporal passage should be boosted above regular
         assert results[0].chunk.content == "Компания основана в 2015 году"
 
-    def test_temporal_query_empty_falls_back(self):
+    @patch("agentic_graph_rag.agent.tools._passage_vector_search")
+    def test_temporal_query_empty_falls_back(self, mock_pvs):
         driver = _mock_driver()
-        session = driver.session().__enter__()
         client = _mock_openai_client()
 
-        result_mock = MagicMock()
-        result_mock.__iter__ = MagicMock(return_value=iter([]))
-        session.run.return_value = result_mock
+        mock_pvs.return_value = []
 
         with patch("agentic_graph_rag.agent.tools.vector_search") as mock_vs:
             mock_vs.return_value = _make_results(2)
@@ -474,7 +444,7 @@ class TestComprehensiveSearchFanout:
         mock_settings.return_value = cfg
 
         mock_detect_count.return_value = 9
-        mock_generate_sub_queries.return_value = ["q1", "q2", "q3"]
+        mock_generate_sub_queries.return_value = ["q1", "q2", "q3", "q4", "q5", "q6"]
         mock_vector_search.return_value = _make_results(2, source="vector")
         mock_full_document_read.return_value = _make_results(2, source="vector")
         mock_rrf_merge.side_effect = lambda *lists, top_k=5, **_kwargs: lists[0][:top_k]
@@ -488,9 +458,9 @@ class TestComprehensiveSearchFanout:
             "list all COPD indicators",
             ANY,
             "test-mini",
-            n=3,
+            n=6,
         )
-        assert mock_vector_search.call_count == 3
+        assert mock_vector_search.call_count == 6
         for call in mock_vector_search.call_args_list:
             assert call.kwargs["top_k"] == 4
         mock_full_document_read.assert_called_once()

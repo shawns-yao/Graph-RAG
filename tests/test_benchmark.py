@@ -141,12 +141,9 @@ def test_query_embedding_retry_controller_opens_on_repeated_timeout(monkeypatch)
 
     fake_cfg = SimpleNamespace(
         openai=SimpleNamespace(embedding_model="demo", embedding_dimensions=3),
-        benchmark=SimpleNamespace(
-            llm_max_retries=1,
-            llm_initial_backoff_seconds=0.0,
-            llm_max_backoff_seconds=0.0,
-            llm_jitter_seconds=0.0,
-            llm_read_timeout_seconds=1.0,
+        agent=SimpleNamespace(
+            max_retries=1,
+            request_time_budget_ms=5000,
         ),
     )
     monkeypatch.setattr("agentic_graph_rag.agent.tools.get_settings", lambda: fake_cfg)
