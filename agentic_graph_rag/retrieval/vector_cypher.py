@@ -29,8 +29,6 @@ PHRASE_INDEX_NAME = "phrase_node_index"
 
 # Entry-point oversampling factor: fetch N× candidates then rerank by anchor hits.
 _ENTRY_OVERSAMPLE_FACTOR = 3
-# Bonus added per query-anchor hit on PhraseNode name/aliases.
-_ANCHOR_HIT_BONUS = 0.25
 
 # Regex for extracting query anchor terms (CJK runs + Latin tokens).
 _ANCHOR_TOKEN_RE = re.compile(r"[\u4e00-\u9fff]{2,}|[A-Za-z0-9][A-Za-z0-9_.-]*")
@@ -138,15 +136,15 @@ def find_entry_points(
                 "score": record["score"],
             })
 
-    # Rerank by query-anchor hits: boost entries whose name/aliases contain
-    # exact query terms. This prevents generic high-embedding nodes from
-    # dominating when the query mentions specific entities.
+    # Rerank by query-anchor hits using lexicographic priority:
+    # 1st key: anchor hit count (more hits = more relevant entry point)
+    # 2nd key: cosine score (tiebreaker among same hit count)
+    # No magic numbers — just priority ordering.
     anchors = _extract_query_anchors(query)
     if anchors:
-        for entry in candidates:
-            hits = _anchor_hits(entry, anchors)
-            entry["score"] = entry["score"] + hits * _ANCHOR_HIT_BONUS
-        candidates.sort(key=lambda e: e["score"], reverse=True)
+        candidates.sort(
+            key=lambda e: (-_anchor_hits(e, anchors), -e["score"])
+        )
 
     entries = candidates[:top_k]
 
