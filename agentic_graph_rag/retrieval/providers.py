@@ -174,10 +174,28 @@ def graph_context_to_search_results(
     query_terms = _query_terms(query)
 
     if ctx.passages:
-        passages = ctx.passages if top_k is None else ctx.passages[:top_k]
-        source_ids = ctx.source_ids if top_k is None else ctx.source_ids[:top_k]
-        for index, passage in enumerate(passages):
-            chunk_id = source_ids[index] if index < len(source_ids) else ""
+        passage_rows = [
+            {
+                "chunk_id": ctx.source_ids[index] if index < len(ctx.source_ids) else "",
+                "passage": passage,
+                "base_rank": index + 1,
+            }
+            for index, passage in enumerate(ctx.passages)
+        ]
+        passage_rows.sort(
+            key=lambda row: _graph_passage_sort_key(
+                row["passage"],
+                ctx,
+                query_terms=query_terms,
+                base_rank=int(row["base_rank"]),
+            ),
+            reverse=True,
+        )
+        if top_k is not None:
+            passage_rows = passage_rows[:top_k]
+        for index, row in enumerate(passage_rows):
+            passage = str(row["passage"])
+            chunk_id = str(row["chunk_id"])
             content = passage
             passage_prefix = (
                 _graph_context_prefix_for_passage(ctx, passage)
@@ -228,6 +246,40 @@ def graph_context_to_search_results(
         ]
 
     return []
+
+
+def _graph_passage_sort_key(
+    passage: str,
+    ctx: GraphContext,
+    *,
+    query_terms: list[str],
+    base_rank: int,
+) -> tuple[float, float, float, float]:
+    """Prioritize graph passages that actually ground the query terms and edges."""
+    lowered = passage.casefold()
+    coverage = (
+        sum(1 for term in query_terms if term in lowered) / len(query_terms)
+        if query_terms
+        else 0.0
+    )
+    matched_entities = sum(
+        1 for entity in ctx.entities
+        if entity.name and entity.name.casefold() in lowered
+    )
+    matched_paths = sum(
+        1
+        for triplet in ctx.triplets
+        if triplet.get("source")
+        and triplet.get("target")
+        and triplet["source"].casefold() in lowered
+        and triplet["target"].casefold() in lowered
+    )
+    signal = _graph_confidence_signal(
+        passage,
+        query_terms,
+        base_score=1.0 / max(base_rank, 1),
+    )
+    return (coverage, matched_paths, matched_entities, signal)
 
 
 def _graph_context_prefix(ctx: GraphContext) -> str:
@@ -416,6 +468,7 @@ class GraphRetrievalProvider:
             self._driver,
             top_k=entry_top_k,
             max_hops=max_hops,
+            query=request.query,
         )
         return graph_context_to_search_results(
             ctx,

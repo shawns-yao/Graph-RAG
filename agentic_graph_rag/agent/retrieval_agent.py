@@ -612,6 +612,7 @@ def run(
     session_id: str = "",
     workflow_memory_seed: list[WorkflowMemoryEntry] | None = None,
     reflection_history_seed: list[ReflectionStep] | None = None,
+    forced_tool: str = "",
 ) -> QAResult:
     """Run the agentic retrieval pipeline.
 
@@ -659,6 +660,31 @@ def run(
         extract_claims=extract_claims,
         verify_claims=_verify_claims_wrapper,
     )
+    if forced_tool:
+        routed_type = QueryType.SIMPLE
+        if forced_tool == "cypher_traverse":
+            routed_type = QueryType.RELATION
+        elif forced_tool == "full_document_read":
+            routed_type = QueryType.GLOBAL
+        elif forced_tool == "temporal_query":
+            routed_type = QueryType.TEMPORAL
+
+        forced_decision = RouterDecision(
+            query_type=routed_type,
+            confidence=1.0,
+            reasoning=f"Benchmark forced initial tool: {forced_tool}.",
+            suggested_tool=forced_tool,
+        )
+        ops = AgentWorkflowOps(
+            classify_query=lambda query, *, use_llm, openai_client, reasoning: forced_decision,
+            is_cross_language_global=_matches_internal_alias_global,
+            run_self_correction=self_correction_loop,
+            generate_answer=generate_answer,
+            evaluate_completeness=evaluate_completeness,
+            comprehensive_search=comprehensive_search,
+            extract_claims=extract_claims,
+            verify_claims=_verify_claims_wrapper,
+        )
     qa_result = run_agent_workflow(
         query=query,
         driver=driver,

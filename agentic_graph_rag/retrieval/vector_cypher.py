@@ -4,12 +4,13 @@ Uses Neo4j vector index to find entry-point PhraseNodes, then traverses
 the graph via Cypher to collect related PhraseNodes and PassageNodes,
 assembling a rich GraphContext for answer generation.
 
-Pipeline: query_embedding → vector entry → graph traversal → context assembly.
+Pipeline: query_embedding → vector entry (+ query-anchor rerank) → graph traversal → context assembly.
 """
 
 from __future__ import annotations
 
 import logging
+import re
 from typing import TYPE_CHECKING
 
 from rag_core.config import get_settings
@@ -26,9 +27,53 @@ logger = logging.getLogger(__name__)
 # Vector index on PhraseNode embeddings (created during indexing)
 PHRASE_INDEX_NAME = "phrase_node_index"
 
+# Entry-point oversampling factor: fetch N× candidates then rerank by anchor hits.
+_ENTRY_OVERSAMPLE_FACTOR = 3
+# Bonus added per query-anchor hit on PhraseNode name/aliases.
+_ANCHOR_HIT_BONUS = 0.25
+
+# Regex for extracting query anchor terms (CJK runs + Latin tokens).
+_ANCHOR_TOKEN_RE = re.compile(r"[\u4e00-\u9fff]{2,}|[A-Za-z0-9][A-Za-z0-9_.-]*")
+_ANCHOR_STOPWORDS = {
+    "什么", "如何", "怎么", "是否", "哪些", "多少", "为什么",
+    "what", "how", "which", "when", "where", "does", "should",
+    "the", "and", "for", "with", "from",
+}
+
+
+def _extract_query_anchors(query: str) -> list[str]:
+    """Extract high-signal anchor terms from a query for entry-point reranking.
+
+    Keeps entity-like tokens (drug names, lab values, abbreviations) and
+    drops generic question words. These anchors are used to boost
+    PhraseNodes whose name/aliases contain them.
+    """
+    tokens: list[str] = []
+    for match in _ANCHOR_TOKEN_RE.findall(query):
+        token = match.strip()
+        if not token or token.lower() in _ANCHOR_STOPWORDS:
+            continue
+        if len(token) < 2:
+            continue
+        if token.lower() not in tokens:
+            tokens.append(token.lower())
+    return tokens
+
+
+def _anchor_hits(entry: dict, anchors: list[str]) -> int:
+    """Count how many query anchors appear in a PhraseNode's name or aliases."""
+    if not anchors:
+        return 0
+    # Build a searchable surface from name + aliases
+    name = (entry.get("name") or "").lower()
+    aliases_raw = entry.get("aliases") or []
+    aliases_text = " ".join(str(a).lower() for a in aliases_raw) if aliases_raw else ""
+    surface = f"{name} {aliases_text}"
+    return sum(1 for anchor in anchors if anchor in surface)
+
 
 # ---------------------------------------------------------------------------
-# 1. Find entry points via vector search
+# 1. Find entry points via vector search + query-anchor rerank
 # ---------------------------------------------------------------------------
 
 def find_entry_points(
@@ -36,16 +81,26 @@ def find_entry_points(
     driver: Driver,
     top_k: int | None = None,
     threshold: float | None = None,
+    query: str = "",
 ) -> list[dict]:
-    """Find nearest PhraseNodes via Neo4j vector index.
+    """Find nearest PhraseNodes via Neo4j vector index, then rerank by
+    query-anchor hits on name/aliases.
+
+    The oversample-then-rerank strategy ensures that PhraseNodes whose name
+    exactly matches a query entity (e.g. "二甲双胍") are promoted above
+    generic high-frequency nodes (e.g. "2型糖尿病") that happen to have
+    similar embeddings.
 
     Returns list of dicts with keys: id, name, entity_type, score.
     """
     cfg = get_settings()
     if top_k is None:
-        top_k = cfg.retrieval.top_k_vector
+        top_k = cfg.retrieval.graph_entry_top_k
     if threshold is None:
         threshold = cfg.retrieval.vector_threshold
+
+    # Oversample: fetch more candidates than needed so reranking has room.
+    fetch_k = top_k * _ENTRY_OVERSAMPLE_FACTOR
 
     with open_neo4j_session(driver) as session:
         result = session.run(
@@ -59,27 +114,45 @@ def find_entry_points(
                    node.name AS name,
                    node.entity_type AS entity_type,
                    node.pagerank_score AS pagerank_score,
+                   coalesce(node.aliases, []) AS aliases,
                    score
             ORDER BY score DESC
             """,
-            top_k=top_k,
+            top_k=fetch_k,
             embedding=query_embedding,
             threshold=threshold,
         )
 
-        entries = []
+        candidates = []
         for record in result:
-            entries.append({
+            try:
+                aliases = record["aliases"] or []
+            except (KeyError, TypeError):
+                aliases = []
+            candidates.append({
                 "id": record["id"],
                 "name": record["name"] or "",
                 "entity_type": record["entity_type"] or "",
                 "pagerank_score": record["pagerank_score"] or 0.0,
+                "aliases": aliases,
                 "score": record["score"],
             })
 
+    # Rerank by query-anchor hits: boost entries whose name/aliases contain
+    # exact query terms. This prevents generic high-embedding nodes from
+    # dominating when the query mentions specific entities.
+    anchors = _extract_query_anchors(query)
+    if anchors:
+        for entry in candidates:
+            hits = _anchor_hits(entry, anchors)
+            entry["score"] = entry["score"] + hits * _ANCHOR_HIT_BONUS
+        candidates.sort(key=lambda e: e["score"], reverse=True)
+
+    entries = candidates[:top_k]
+
     logger.info(
-        "Found %d entry points (top_k=%d, threshold=%.2f)",
-        len(entries), top_k, threshold,
+        "Found %d entry points (fetched=%d, top_k=%d, threshold=%.2f, anchors=%s)",
+        len(entries), len(candidates), top_k, threshold, anchors[:5],
     )
     return entries
 
@@ -303,17 +376,20 @@ def search(
     threshold: float | None = None,
     cooccurrence_limit: int | None = None,
     passage_limit: int | None = None,
+    query: str = "",
 ) -> GraphContext:
     """Full VectorCypher retrieval pipeline.
 
-    1. Find entry PhraseNodes via vector similarity
+    1. Find entry PhraseNodes via vector similarity + query-anchor rerank
     2. Traverse graph from entries
     3. Collect and assemble context
 
     Returns GraphContext with triplets, passages, entities, source_ids.
     """
-    # Step 1: Vector entry
-    entries = find_entry_points(query_embedding, driver, top_k=top_k, threshold=threshold)
+    # Step 1: Vector entry with query-anchor reranking
+    entries = find_entry_points(
+        query_embedding, driver, top_k=top_k, threshold=threshold, query=query,
+    )
 
     if not entries:
         logger.warning("No entry points found for query")

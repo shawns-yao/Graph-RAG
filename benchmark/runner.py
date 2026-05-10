@@ -120,6 +120,30 @@ def _run_mode(mode: str, question: str, driver: Any, client: Any) -> Any:
         results = hybrid_search(question, driver, client, rerank_enabled=False)
     elif mode == "hybrid_rerank":
         results = hybrid_search(question, driver, client, rerank_enabled=True)
+    elif mode == "vector_chain":
+        return agent_run(
+            question,
+            driver,
+            openai_client=client,
+            use_llm_router=False,
+            forced_tool="vector_search",
+        )
+    elif mode == "graph_chain":
+        return agent_run(
+            question,
+            driver,
+            openai_client=client,
+            use_llm_router=False,
+            forced_tool="cypher_traverse",
+        )
+    elif mode == "bm25_chain":
+        return agent_run(
+            question,
+            driver,
+            openai_client=client,
+            use_llm_router=False,
+            forced_tool="bm25_search",
+        )
     else:
         raise ValueError(f"Unsupported mode: {mode}")
     return generate_answer(question, results, client)
@@ -343,7 +367,7 @@ def main() -> None:
     parser.add_argument("--questions", required=True, help="Path to GraphRAG-Benchmark question JSON")
     parser.add_argument(
         "--modes",
-        default="graph_only,graph_h2,graph_h3,vector_only,bm25_only,hybrid,hybrid_rerank",
+        default="graph_only,graph_h2,graph_h3,vector_only,bm25_only,hybrid,hybrid_rerank,vector_chain,graph_chain,bm25_chain",
         help="Comma-separated retrieval modes",
     )
     parser.add_argument("--limit", type=int, default=None, help="Optional max questions to run")

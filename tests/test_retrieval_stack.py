@@ -193,6 +193,7 @@ class TestProviders:
             provider._driver,
             top_k=5,
             max_hops=4,
+            query="q",
         )
 
     @patch("agentic_graph_rag.retrieval.providers._ensure_passage_fulltext_index")
@@ -364,6 +365,7 @@ class TestProviders:
             provider._driver,
             top_k=3,
             max_hops=2,
+            query="q",
         )
 
 
