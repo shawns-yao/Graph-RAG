@@ -1102,6 +1102,9 @@ class AgentWorkflowOps:
     generate_answer: Callable[..., QAResult]
     evaluate_completeness: Callable[..., bool]
     comprehensive_search: Callable[..., list[SearchResult]]
+    # CoVe-inspired claim verification (optional; skip when None).
+    extract_claims: Callable[..., Any] | None = None
+    verify_claims: Callable[..., Any] | None = None
 
 
 class AgentWorkflowState(TypedDict, total=False):
@@ -1290,11 +1293,82 @@ def _generate_answer_node(state: AgentWorkflowState) -> dict[str, Any]:
     return {"qa_result": qa_result, "memory": memory}
 
 
+_MIN_VERIFIABLE_ANSWER_CHARS = 80
+_FACTUAL_SEPARATORS = ("，", "、", "；", ";", ",", " and ", " or ")
+_NUMERIC_FACT_PATTERN = re.compile(r"\d+(?:\.\d+)?\s*(?:%|mg|ml|mmol|μg|ug|pg|g/L|IU|次|个月|天|年)")
+
+
+def _answer_has_verifiable_claims(answer: str) -> bool:
+    """Decide whether an answer is rich enough to warrant CoVe verification.
+
+    CoVe is most valuable when the answer contains multiple composite facts
+    (numeric thresholds, drug-dose pairs, entity relations). Short one-word
+    or very terse answers rarely benefit from claim verification.
+    """
+    if not answer:
+        return False
+    text = answer.strip()
+    if len(text) < _MIN_VERIFIABLE_ANSWER_CHARS:
+        return False
+    separator_count = sum(text.count(sep) for sep in _FACTUAL_SEPARATORS)
+    has_multiple_clauses = separator_count >= 2
+    has_numeric_fact = bool(_NUMERIC_FACT_PATTERN.search(text))
+    return has_multiple_clauses or has_numeric_fact
+
+
 def _after_generate(state: AgentWorkflowState) -> str:
-    """Trigger completeness check only for weak global queries."""
+    """Decide whether to run CoVe-style claim verification before finalizing.
+
+    Triggering is decoupled from router classification (which is often wrong
+    on domain-specific queries). We verify whenever the answer contains
+    multiple facts or numeric thresholds — the conditions where claim-level
+    support-check actually adds value. The Answer Guard (if triggered) only
+    forces confidence_level=low — it does NOT skip verification.
+    """
     qa_result = state.get("qa_result")
-    if state.get("answer_guard_triggered"):
+    if qa_result is None or not (qa_result.answer or "").strip():
         return "finish"
+    # Skip verification when the generator returned its hard error fallback.
+    if qa_result.answer.startswith("Error generating answer:"):
+        return "finish"
+    ops = state.get("ops")
+    if ops is None or ops.extract_claims is None or ops.verify_claims is None:
+        return _legacy_after_generate_branch(state)
+
+    # Primary trigger: router thinks this needs cross-fact consistency.
+    query_type = state["decision"].query_type
+    if query_type in {QueryType.RELATION, QueryType.MULTI_HOP, QueryType.GLOBAL}:
+        return "verify_answer"
+
+    # Secondary trigger: the answer itself contains multiple verifiable facts,
+    # regardless of how the router classified the query. This covers cases
+    # where the router misclassified a compound / relation query as simple.
+    if _answer_has_verifiable_claims(qa_result.answer):
+        return "verify_answer"
+
+    # Tertiary trigger: the agent actually invoked a graph/hybrid retrieval
+    # tool, meaning the system itself judged cross-fact evidence relevant.
+    trace = state.get("trace")
+    graph_tools_used = {
+        "cypher_traverse",
+        "hybrid_search",
+        "comprehensive_search",
+        "full_document_read",
+    }
+    if trace is not None and any(
+        step.tool_name in graph_tools_used for step in trace.tool_steps
+    ):
+        return "verify_answer"
+
+    return _legacy_after_generate_branch(state)
+
+
+def _legacy_after_generate_branch(state: AgentWorkflowState) -> str:
+    """Legacy branching used when verification is not applicable.
+
+    Triggers completeness check only for weak global queries.
+    """
+    qa_result = state.get("qa_result")
     if (
         state["decision"].query_type == QueryType.GLOBAL
         and qa_result is not None
@@ -1304,6 +1378,91 @@ def _after_generate(state: AgentWorkflowState) -> str:
     ):
         return "check_completeness"
     return "finish"
+
+
+def _verify_answer_node(state: AgentWorkflowState) -> dict[str, Any]:
+    """Run Chain-of-Verification claim checking against the knowledge graph.
+
+    This node extracts atomic factual claims from the generated answer (one
+    LLM call) and verifies each claim via `cypher_traverse` (no LLM calls).
+    Unsupported claims trigger a caveat and a confidence downgrade, but do
+    NOT trigger retrieval retry — we explicitly avoid amplifying LLM
+    instability here.
+    """
+    started = time.perf_counter()
+    ops = state["ops"]
+    qa_result = state["qa_result"]
+
+    # Defensive: verification is only wired when both callbacks are provided.
+    if ops.extract_claims is None or ops.verify_claims is None:
+        return {}
+
+    extraction = ops.extract_claims(qa_result.answer, openai_client=state["openai_client"])
+    claims = getattr(extraction, "claims", [])
+
+    if not claims:
+        from rag_core.models import ClaimVerificationStep
+        verification = ClaimVerificationStep(
+            claims_total=0,
+            claims_supported=0,
+            skipped_reason="no_claims_extracted",
+            duration_ms=int((time.perf_counter() - started) * 1000),
+        )
+        state["trace"].verification_step = verification
+        memory = _append_memory_entry(
+            state,
+            stage="verify",
+            message="claim extraction returned zero claims; verification skipped",
+            metadata={"claims_total": 0},
+        )
+        return {"memory": memory}
+
+    verification = ops.verify_claims(
+        claims,
+        driver=state["driver"],
+        openai_client=state["openai_client"],
+    )
+    verification.duration_ms = int((time.perf_counter() - started) * 1000)
+    state["trace"].verification_step = verification
+
+    updated_qa = qa_result
+    if verification.unsupported_claims:
+        from agentic_graph_rag.generation.claim_verifier import build_caveat
+        caveat = build_caveat(verification)
+        new_answer = f"{caveat}\n\n{qa_result.answer}".strip() if caveat else qa_result.answer
+        # Downgrade one level when verification is incomplete. Keep
+        # evidence_score untouched — it still reflects retrieval quality.
+        new_level = "medium"
+        if verification.support_rate < 0.5 or qa_result.confidence_level == "medium":
+            new_level = "low"
+        updated_qa = qa_result.model_copy(update={
+            "answer": new_answer,
+            "confidence_level": new_level,
+        })
+
+    if state["trace"].generator_step is not None:
+        state["trace"].generator_step.confidence_level = updated_qa.confidence_level
+
+    memory = _append_memory_entry(
+        state,
+        stage="verify",
+        message=(
+            f"claim verification: {verification.claims_supported}/{verification.claims_total} "
+            f"supported (support_rate={verification.support_rate:.2f})"
+        ),
+        metadata={
+            "claims_total": verification.claims_total,
+            "claims_supported": verification.claims_supported,
+            "support_rate": round(verification.support_rate, 2),
+            "confidence_level_after": updated_qa.confidence_level,
+        },
+    )
+    return {"qa_result": updated_qa, "memory": memory}
+
+
+def _after_verify(state: AgentWorkflowState) -> str:
+    """Routes from verify_answer to legacy completeness branch or finish."""
+    return _legacy_after_generate_branch(state)
 
 
 def _check_completeness_node(state: AgentWorkflowState) -> dict[str, Any]:
@@ -1413,6 +1572,7 @@ def _compile_agent_workflow_graph():
     graph.add_node("route_query", _route_query)
     graph.add_node("retrieve_evidence", _retrieve_evidence)
     graph.add_node("generate_answer", _generate_answer_node)
+    graph.add_node("verify_answer", _verify_answer_node)
     graph.add_node("check_completeness", _check_completeness_node)
     graph.add_node("augment_with_comprehensive", _augment_with_comprehensive_node)
 
@@ -1422,6 +1582,15 @@ def _compile_agent_workflow_graph():
     graph.add_conditional_edges(
         "generate_answer",
         _after_generate,
+        {
+            "verify_answer": "verify_answer",
+            "check_completeness": "check_completeness",
+            "finish": END,
+        },
+    )
+    graph.add_conditional_edges(
+        "verify_answer",
+        _after_verify,
         {
             "check_completeness": "check_completeness",
             "finish": END,

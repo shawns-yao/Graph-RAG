@@ -23,7 +23,14 @@ RELATION_PATTERNS = [
 MULTI_HOP_PATTERNS = [
     r"\bchain\b", r"\bpath\b", r"\bcompar\w*\b", r"\bthrough\b",
     r"\bhow .+ affect\b",
-    r"为什么.+不用", r"判断过程", r"说明判断过程", r"说明原因", r"变化趋势",
+    # Chinese multi-hop cues: causal chain / decision justification
+    r"为什么.+不用",
+    r"为什么.+要停",
+    r"为什么.+选择",
+    r"判断过程", r"说明判断过程", r"说明原因", r"变化趋势",
+    # Medical composite queries: two sub-questions chained with "?"
+    # e.g. "目标剂量是多少？滴定周期是多久？" / "A 如何？B 怎样？"
+    r"[是为][^？]{0,20}？[^？]{1,30}[是为何][^？]{0,20}？",
 ]
 
 GLOBAL_PATTERNS = [
@@ -39,6 +46,7 @@ TEMPORAL_PATTERNS = [
 ]
 
 RELATION_QUERY_KEYWORDS = (
+    # Generic relation cues
     "关系",
     "区别",
     "差异",
@@ -50,6 +58,28 @@ RELATION_QUERY_KEYWORDS = (
     "impact",
     "relation",
     "relationship",
+    # Medical-domain relation cues (causal / interaction / selection / alternative)
+    "导致",
+    "引起",
+    "引发",
+    "产生",
+    "相互作用",
+    "禁忌",
+    "禁用",
+    "适应症",
+    "副作用",
+    "不良反应",
+    "替代",
+    "改用",
+    "换用",
+    "如何调整",
+    "如何处理",
+    "如何选择",
+    "首选",
+    "过敏",
+    "耐药",
+    "联用",
+    "合用",
 )
 
 GLOBAL_QUERY_KEYWORDS = (

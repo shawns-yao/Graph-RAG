@@ -256,6 +256,39 @@ class GeneratorStep(BaseModel):
     duration_ms: int = 0
 
 
+class VerifiedClaim(BaseModel):
+    """One factual claim checked against the knowledge graph."""
+
+    text: str
+    key_terms: list[str] = Field(default_factory=list)
+    supported: bool
+    top_chunk_id: str = ""
+
+
+class ClaimVerificationStep(BaseModel):
+    """Chain-of-Verification style post-generation verification.
+
+    Records the outcome of extracting factual claims from the answer and
+    checking each one against graph retrieval evidence. Failed verification
+    does not trigger retry — it only attaches a caveat and may downgrade
+    the confidence level.
+    """
+
+    claims_total: int = 0
+    claims_supported: int = 0
+    verified_claims: list[VerifiedClaim] = Field(default_factory=list)
+    unsupported_claims: list[VerifiedClaim] = Field(default_factory=list)
+    skipped_reason: str = ""
+    duration_ms: int = 0
+
+    @property
+    def support_rate(self) -> float:
+        """Fraction of claims that found supporting graph evidence."""
+        if self.claims_total == 0:
+            return 0.0
+        return self.claims_supported / self.claims_total
+
+
 class PipelineTrace(BaseModel):
     """Full pipeline provenance artifact."""
 
@@ -271,6 +304,7 @@ class PipelineTrace(BaseModel):
     workflow_memory: list[WorkflowMemoryEntry] = Field(default_factory=list)
     escalation_steps: list[EscalationStep] = Field(default_factory=list)
     generator_step: GeneratorStep | None = None
+    verification_step: ClaimVerificationStep | None = None
     total_duration_ms: int = 0
 
 

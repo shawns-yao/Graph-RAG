@@ -633,6 +633,22 @@ def run(
         session_id=session_id,
     )
     t_start = time.perf_counter()
+    # CoVe-inspired claim verification: extract atomic claims from the answer,
+    # then check each against cypher_traverse. Wired into AgentWorkflowOps as
+    # optional callbacks; the workflow node skips itself when they are absent.
+    from agentic_graph_rag.generation.claim_verifier import (
+        extract_claims,
+        verify_claims,
+    )
+
+    def _verify_claims_wrapper(claims, *, driver, openai_client):
+        return verify_claims(
+            claims,
+            cypher_traverse=cypher_traverse,
+            driver=driver,
+            openai_client=openai_client,
+        )
+
     ops = AgentWorkflowOps(
         classify_query=classify_query,
         is_cross_language_global=_matches_internal_alias_global,
@@ -640,6 +656,8 @@ def run(
         generate_answer=generate_answer,
         evaluate_completeness=evaluate_completeness,
         comprehensive_search=comprehensive_search,
+        extract_claims=extract_claims,
+        verify_claims=_verify_claims_wrapper,
     )
     qa_result = run_agent_workflow(
         query=query,
