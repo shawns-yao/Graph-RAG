@@ -608,6 +608,11 @@ Claim Role Extraction + Fallback:
   status: completed
   completed_at: 2026-05-11
   commit: bca1b70 Add claim role extraction fallback
+
+P6 Regenerate Gate - Core Claims Only:
+  status: completed
+  completed_at: 2026-05-11
+  commit: eb1d988 Gate verification correction on core claims
 ```
 
 ## 落地顺序
