@@ -72,43 +72,9 @@ _TOOL_REGISTRY = {
     "full_document_read": full_document_read,
 }
 
-_LIGHTWEIGHT_RECALL_TOOLS = ["bm25_search", "vector_search"]
 _GRAPH_FIRST_TOOLS = ["cypher_traverse", "hybrid_search"]
 _HYBRID_RECALL_TOOLS = ["hybrid_search", "comprehensive_search"]
 _HYBRID_MISSING_ENTITY_TOOLS = ["bm25_search", "vector_search", "cypher_traverse", "hybrid_search"]
-_GLOBAL_DEEP_RECALL_TOOLS = ["full_document_read", "hybrid_search", "bm25_search"]
-_HYBRID_MISSING_RECALL_FALLBACK = ["bm25_search", "vector_search", "cypher_traverse"]
-_HYBRID_RELATION_FALLBACK = ["cypher_traverse", "bm25_search", "vector_search"]
-
-_RETRY_TOOL_MATRIX: dict[str, list[str]] = {
-    "vector_search": ["bm25_search", "cypher_traverse", "hybrid_search", "comprehensive_search"],
-    "bm25_search": ["vector_search", "cypher_traverse", "hybrid_search", "comprehensive_search"],
-    "cypher_traverse": ["bm25_search", "vector_search", "hybrid_search", "comprehensive_search"],
-    "hybrid_search": ["bm25_search", "cypher_traverse", "vector_search", "comprehensive_search"],
-    "comprehensive_search": _GLOBAL_DEEP_RECALL_TOOLS + ["vector_search"],
-    "full_document_read": [],
-    "temporal_query": ["bm25_search", "vector_search", "hybrid_search", "comprehensive_search"],
-}
-
-_REFLECTION_RULES: dict[str, dict[str, list[str]]] = {
-    "use_graph_traversal": {"tools": _GRAPH_FIRST_TOOLS, "providers": ["graph"]},
-    "target_missing_entity": {"tools": _HYBRID_MISSING_ENTITY_TOOLS, "providers": ["graph", "bm25"]},
-    "use_comprehensive_search": {"tools": _HYBRID_RECALL_TOOLS, "providers": []},
-    "relation_missing": {"tools": _GRAPH_FIRST_TOOLS, "providers": ["graph"]},
-    "missing_entity": {"tools": _HYBRID_MISSING_ENTITY_TOOLS, "providers": ["graph", "bm25"]},
-    "insufficient_context": {"tools": _HYBRID_RECALL_TOOLS, "providers": []},
-}
-
-_QUERY_TYPE_TOOL_HINTS: dict[tuple[QueryType, str], list[str]] = {
-    (QueryType.SIMPLE, "missing_entity"): _LIGHTWEIGHT_RECALL_TOOLS + ["cypher_traverse"],
-    (QueryType.SIMPLE, "no_results"): _LIGHTWEIGHT_RECALL_TOOLS + ["cypher_traverse", "hybrid_search"],
-    (QueryType.RELATION, "missing_entity"): ["bm25_search"] + _GRAPH_FIRST_TOOLS,
-    (QueryType.RELATION, "relation_missing"): _GRAPH_FIRST_TOOLS,
-    (QueryType.MULTI_HOP, "relation_missing"): _GRAPH_FIRST_TOOLS,
-    (QueryType.MULTI_HOP, "insufficient_recall"): ["vector_search", "hybrid_search"],
-    (QueryType.GLOBAL, "insufficient_context"): ["comprehensive_search", "full_document_read", "hybrid_search"],
-    (QueryType.GLOBAL, "no_results"): ["full_document_read", "comprehensive_search"],
-}
 
 
 @dataclass(frozen=True, slots=True)
@@ -339,19 +305,11 @@ def _run_tool(
 
 
 def _preferred_providers_for_reflection(reflection: ReflectionStep) -> list[str]:
-    """Map reflection outcomes to provider-level incremental fixes."""
+    """Return provider names explicitly provided by reflection."""
     ordered: list[str] = []
     for provider in reflection.preferred_providers:
         provider_name = provider.strip().lower()
         _extend_unique(ordered, [provider_name], valid=_VALID_PROVIDER_NAMES)
-    for key in (
-        (reflection.recommended_action or "").strip().lower(),
-        (reflection.failure_type or "").strip().lower(),
-    ):
-        rule = _REFLECTION_RULES.get(key)
-        if rule is None:
-            continue
-        _extend_unique(ordered, rule["providers"], valid=_VALID_PROVIDER_NAMES)
     return ordered
 
 
@@ -470,33 +428,12 @@ def self_correction_loop(
 
 
 def _preferred_tools_for_reflection(reflection: ReflectionStep) -> list[str]:
-    """Map reflection outcomes to targeted next-step tools."""
+    """Return tool names explicitly provided by reflection."""
     ordered: list[str] = []
     for tool in reflection.preferred_tools:
         tool_name = tool.strip().lower()
         _extend_unique(ordered, [tool_name], valid=_VALID_TOOL_NAMES)
-    for key in (
-        (reflection.recommended_action or "").strip().lower(),
-        (reflection.failure_type or "").strip().lower(),
-    ):
-        rule = _REFLECTION_RULES.get(key)
-        if rule is None:
-            continue
-        _extend_unique(ordered, rule["tools"], valid=_VALID_TOOL_NAMES)
     return ordered
-
-
-def _query_type_tool_preferences(
-    decision: RouterDecision | None,
-    reflection: ReflectionStep | None,
-) -> list[str]:
-    """Return tool hints tuned to query type and diagnosed failure mode."""
-    if decision is None or reflection is None:
-        return []
-    failure_type = (reflection.failure_type or "").strip().lower()
-    if not failure_type:
-        return []
-    return list(_QUERY_TYPE_TOOL_HINTS.get((decision.query_type, failure_type), []))
 
 
 def _retry_plan_for_reflection(
@@ -509,13 +446,12 @@ def _retry_plan_for_reflection(
     gap_type = (reflection.gap_type or "").strip().lower()
     failure_type = (reflection.failure_type or "").strip().lower()
     required_tool = (reflection.required_tool or "").strip().lower()
-    query_type = decision.query_type if decision is not None else None
     tools: list[str] = []
 
     if required_tool and required_tool != "none":
         _extend_unique(tools, [required_tool], valid=_VALID_TOOL_NAMES)
     if gap_type in {"missing_numeric_threshold", "missing_diagnostic_criterion"}:
-        _extend_unique(tools, _LIGHTWEIGHT_RECALL_TOOLS, valid=_VALID_TOOL_NAMES)
+        _extend_unique(tools, ["bm25_search", "vector_search"], valid=_VALID_TOOL_NAMES)
     elif gap_type in {"missing_relation", "missing_treatment_option"}:
         _extend_unique(tools, _GRAPH_FIRST_TOOLS, valid=_VALID_TOOL_NAMES)
     elif gap_type == "missing_entity":
@@ -523,45 +459,7 @@ def _retry_plan_for_reflection(
     elif gap_type in {"missing_comparison_target", "conflicting_evidence"}:
         _extend_unique(tools, _HYBRID_RECALL_TOOLS, valid=_VALID_TOOL_NAMES)
 
-    if not tools and failure_type:
-        _extend_unique(
-            tools,
-            _QUERY_TYPE_TOOL_HINTS.get((query_type, failure_type), []),
-            valid=_VALID_TOOL_NAMES,
-        )
-    if query_type == QueryType.GLOBAL and gap_type in {"missing_entity", "missing_treatment_option"}:
-        _extend_unique(tools, ["full_document_read"], valid=_VALID_TOOL_NAMES)
-
     return RetryPlan(tools, f"gap={gap_type or 'none'} failure={failure_type or 'none'}")
-
-
-def _matrix_tool_preferences(
-    current: str,
-    decision: RouterDecision | None,
-    reflection: ReflectionStep | None,
-) -> list[str]:
-    """Return controlled fallback tools without relying on a linear escalation chain."""
-    ordered: list[str] = []
-    failure_type = ((reflection.failure_type if reflection is not None else "") or "").strip().lower()
-    query_type = decision.query_type if decision is not None else None
-
-    if current == "comprehensive_search" and query_type == QueryType.GLOBAL:
-        ordered.extend(_GLOBAL_DEEP_RECALL_TOOLS)
-    elif current == "full_document_read":
-        ordered.extend([])
-    elif current == "hybrid_search" and failure_type in {"missing_entity", "no_results", "insufficient_recall"}:
-        ordered.extend(_HYBRID_MISSING_RECALL_FALLBACK)
-    elif current == "hybrid_search" and failure_type == "relation_missing":
-        ordered.extend(_HYBRID_RELATION_FALLBACK)
-    else:
-        ordered.extend(_RETRY_TOOL_MATRIX.get(current, []))
-
-    if query_type == QueryType.GLOBAL and "full_document_read" not in ordered and current == "comprehensive_search":
-        ordered.append("full_document_read")
-
-    deduped: list[str] = []
-    _extend_unique(deduped, ordered, valid=_VALID_TOOL_NAMES)
-    return deduped
 
 
 def _get_next_tool(
@@ -570,13 +468,11 @@ def _get_next_tool(
     reflection: ReflectionStep | None = None,
     decision: RouterDecision | None = None,
 ) -> str | None:
-    """Get next tool using deterministic rules, targeted hints, then a fallback matrix."""
+    """Get next retry tool from gap-based planning and explicit reflection hints."""
     candidate_tools: list[str] = []
     if reflection is not None:
         candidate_tools.extend(_retry_plan_for_reflection(reflection, decision).tools)
-        candidate_tools.extend(_query_type_tool_preferences(decision, reflection))
         candidate_tools.extend(_preferred_tools_for_reflection(reflection))
-    candidate_tools.extend(_matrix_tool_preferences(current, decision, reflection))
 
     for tool in candidate_tools:
         if tool not in tried:
