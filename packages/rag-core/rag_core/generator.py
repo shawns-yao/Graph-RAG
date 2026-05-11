@@ -286,16 +286,46 @@ def _fact_text_candidates(result: SearchResult) -> list[tuple[str, str]]:
     return candidates
 
 
-def build_evidence_contract(results: list[SearchResult]) -> EvidenceContract:
+def _contract_query_terms(query: str) -> set[str]:
+    terms = set(_strong_anchor_texts(query) + _phrase_anchor_texts(query)) if query else set()
+    expanded: set[str] = set()
+    for term in terms:
+        folded = term.casefold()
+        if folded:
+            expanded.add(folded)
+        for token in _ACRONYM_ANCHOR_RE.findall(term):
+            expanded.add(token.casefold())
+        for token in re.findall(r"[\u4e00-\u9fff]{2,}|[A-Za-z][A-Za-z0-9/_.-]*", term):
+            if token:
+                expanded.add(token.casefold())
+    return expanded
+
+
+def _compact_fact_text(text: str) -> str:
+    return re.sub(r"[^\w\u4e00-\u9fff]+", "", text.casefold())
+
+
+def _fact_matches_query_terms(normalized_fact: str, query_terms: set[str]) -> bool:
+    if not query_terms:
+        return True
+    compact_fact = _compact_fact_text(normalized_fact)
+    return any(term in normalized_fact or _compact_fact_text(term) in compact_fact for term in query_terms)
+
+
+def build_evidence_contract(results: list[SearchResult], query: str = "") -> EvidenceContract:
     """Build lightweight pre-generation facts without LLM extraction."""
     facts: list[EvidenceFact] = []
     seen: set[str] = set()
+    query_terms = _contract_query_terms(query)
     for result_index, result in enumerate(results, start=1):
         for fact_index, (text, confidence) in enumerate(_fact_text_candidates(result), start=1):
             normalized = " ".join(text.split())
-            if not normalized or normalized.casefold() in seen:
+            normalized_folded = normalized.casefold()
+            if not _fact_matches_query_terms(normalized_folded, query_terms):
                 continue
-            seen.add(normalized.casefold())
+            if not normalized or normalized_folded in seen:
+                continue
+            seen.add(normalized_folded)
             facts.append(
                 EvidenceFact(
                     fact_id=_fact_id(result, result_index, fact_index),
@@ -307,7 +337,7 @@ def build_evidence_contract(results: list[SearchResult]) -> EvidenceContract:
             )
     status = "complete" if facts else "unknown"
     reason = "contract built from graph/numeric evidence" if facts else "no structured fact candidates"
-    return EvidenceContract(facts=facts, completeness_status=status, completeness_reason=reason)
+    return EvidenceContract(facts=facts[:20], completeness_status=status, completeness_reason=reason)
 
 
 def check_contract_citations(answer: str, contract: EvidenceContract) -> EvidenceContract:
@@ -448,7 +478,7 @@ def generate_answer(
         )
 
     selected_results = _compress_results_for_generation(_limit_results_for_generation(query, results))
-    evidence_contract = build_evidence_contract(selected_results)
+    evidence_contract = build_evidence_contract(selected_results, query)
     messages = _build_messages(query, selected_results, evidence_contract)
     prompt_chars = len(messages[1]["content"])
     evidence_chars = sum(len(result.chunk.enriched_content) for result in selected_results)
@@ -526,7 +556,7 @@ def stream_answer(
         return iter(())
 
     selected_results = _limit_results_for_generation(query, results)
-    evidence_contract = build_evidence_contract(selected_results)
+    evidence_contract = build_evidence_contract(selected_results, query)
     messages = _build_messages(query, selected_results, evidence_contract)
     logger.info("Streaming answer for query: %s", query)
 
