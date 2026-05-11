@@ -120,8 +120,33 @@ class TestGenerateAnswer:
         assert "[Chunk 1]" in user_msg
         assert "[Chunk 2]" in user_msg
         assert "[Chunk 3]" in user_msg
-        assert "[Chunk 4]" not in user_msg
-        assert len(qa.sources) == 3
+        assert "[Chunk 4]" in user_msg
+        assert len(qa.sources) == 4
+
+    @patch("rag_core.generator.get_settings")
+    def test_short_query_does_not_drop_strong_anchor_evidence(self, mock_settings):
+        cfg = MagicMock()
+        cfg.retrieval.prompt_max_chunks = 4
+        cfg.retrieval.prompt_max_chars = 10_000
+        cfg.openai.llm_model = "test-model"
+        cfg.openai.llm_temperature = 0.0
+        mock_settings.return_value = cfg
+
+        client = MagicMock()
+        client.chat.completions.create.return_value = _mock_openai_response("answer")
+        results = [
+            _make_scored_result("generic high score", 0.99),
+            _make_scored_result("another generic chunk", 0.98),
+            _make_scored_result("more generic content", 0.97),
+            _make_scored_result("FEV1/FVC < 0.70 is diagnostic evidence", 0.2),
+            _make_scored_result("tail generic content", 0.1),
+        ]
+
+        qa = generate_answer("FEV1/FVC < 0.70?", results, openai_client=client)
+
+        user_msg = client.chat.completions.create.call_args[1]["messages"][1]["content"]
+        assert "FEV1/FVC < 0.70 is diagnostic evidence" in user_msg
+        assert len(qa.sources) == 4
 
     @patch("rag_core.generator.get_settings")
     def test_caps_enumeration_queries_more_aggressively(self, mock_settings):
@@ -165,7 +190,15 @@ class TestGenerateAnswer:
         assert "klmnopqrst" not in user_msg
         assert len(qa.sources) == 1
 
-    def test_reorders_context_to_bias_edges_for_high_scores(self):
+    @patch("rag_core.generator.get_settings")
+    def test_reorders_context_to_bias_edges_for_high_scores(self, mock_settings):
+        cfg = MagicMock()
+        cfg.retrieval.prompt_max_chunks = 3
+        cfg.retrieval.prompt_max_chars = 10_000
+        cfg.openai.llm_model = "test-model"
+        cfg.openai.llm_temperature = 0.0
+        mock_settings.return_value = cfg
+
         client = MagicMock()
         client.chat.completions.create.return_value = _mock_openai_response("answer")
 

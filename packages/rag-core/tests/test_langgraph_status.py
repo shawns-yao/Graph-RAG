@@ -6,7 +6,9 @@ from rag_core.models import (
     QueryType,
     RouterDecision,
     SearchResult,
+    ToolStep,
     VerifiedClaim,
+    WorkflowMemoryEntry,
 )
 
 from agentic_graph_rag.agent.correction_planner import CorrectionGap, CorrectionPlan
@@ -17,6 +19,8 @@ from agentic_graph_rag.agent.langgraph_workflow import (
     _answer_has_verifiable_claims,
     _claim_focus_query,
     _execute_correction_tool_node,
+    _initial_tool_plan,
+    _retrieve_evidence,
 )
 
 
@@ -233,6 +237,85 @@ def test_execute_correction_tool_uses_planned_tool_and_appends_unique_results():
     assert update["verification_retry_attempt"] == 1
     assert update["total_retries"] == 1
     assert trace.tool_steps[-1].tool_name == "bm25_search"
+
+
+def test_initial_tool_plan_adds_bm25_for_strong_anchor():
+    decision = RouterDecision(query_type=QueryType.SIMPLE, suggested_tool="vector_search")
+
+    assert _initial_tool_plan("FEV1/FVC < 0.70 说明什么？", decision) == [
+        "vector_search",
+        "bm25_search",
+    ]
+
+
+def test_initial_tool_plan_does_not_add_bm25_for_phrase_only_query():
+    decision = RouterDecision(query_type=QueryType.SIMPLE, suggested_tool="vector_search")
+
+    assert _initial_tool_plan("噻托溴铵剂量是多少？", decision) == ["vector_search"]
+
+
+def test_initial_tool_plan_preserves_router_tool_when_threshold_present():
+    decision = RouterDecision(query_type=QueryType.RELATION, suggested_tool="cypher_traverse")
+
+    assert _initial_tool_plan("eGFR < 30 怎么办？", decision) == [
+        "cypher_traverse",
+        "bm25_search",
+    ]
+
+
+def test_retrieve_evidence_runs_companion_tool_and_merges_results():
+    calls = []
+
+    def run_self_correction(*, decision, trace, memory_sink, reflection_history_sink, **_kwargs):
+        calls.append(decision.suggested_tool)
+        memory_sink.append(
+            WorkflowMemoryEntry(
+                stage="retrieval",
+                message=f"{decision.suggested_tool} done",
+            )
+        )
+        result = SearchResult(
+            chunk=Chunk(id=decision.suggested_tool, content=decision.suggested_tool),
+            score=1.0,
+            source=decision.suggested_tool,
+        )
+        trace.tool_steps.append(
+            ToolStep(
+                tool_name=decision.suggested_tool,
+                results_count=1,
+            )
+        )
+        return [result], 0
+
+    ops = AgentWorkflowOps(
+        classify_query=lambda *_args, **_kwargs: None,
+        is_cross_language_global=lambda *_args, **_kwargs: False,
+        run_self_correction=run_self_correction,
+        generate_answer=lambda *_args, **_kwargs: None,
+        evaluate_completeness=lambda *_args, **_kwargs: True,
+        comprehensive_search=lambda *_args, **_kwargs: [],
+    )
+    trace = PipelineTrace(trace_id="tr_test", timestamp="2026-05-11T00:00:00Z", query="q")
+
+    update = _retrieve_evidence(
+        {
+            "query": "FEV1/FVC < 0.70 说明什么？",
+            "driver": object(),
+            "openai_client": object(),
+            "decision": RouterDecision(query_type=QueryType.SIMPLE, suggested_tool="vector_search"),
+            "trace": trace,
+            "ops": ops,
+            "memory": [],
+            "reflection_history": [],
+        }
+    )
+
+    assert calls == ["vector_search", "bm25_search"]
+    assert [result.chunk.id for result in update["results"]] == [
+        "vector_search",
+        "bm25_search",
+    ]
+    assert [step.tool_name for step in trace.tool_steps] == ["vector_search", "bm25_search"]
 
 
 def test_claim_focus_query_deduplicates_structured_terms():

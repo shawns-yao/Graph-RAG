@@ -12,6 +12,7 @@ import time
 from collections.abc import Iterator
 from typing import TYPE_CHECKING
 
+from agentic_graph_rag.agent.query_signals import extract_query_signals
 from rag_core.config import get_settings, make_openai_client
 from rag_core.models import QAResult, SearchResult
 
@@ -56,23 +57,43 @@ def _order_results_for_prompt(results: list[SearchResult]) -> list[SearchResult]
     return head + tail
 
 
+def _strong_anchor_texts(query: str) -> list[str]:
+    signals = extract_query_signals(query)
+    anchors: list[str] = []
+    for anchor in signals.anchors:
+        if anchor.kind not in {"numeric", "threshold", "symbolic", "quoted"}:
+            continue
+        text = anchor.text.casefold()
+        if text and text not in anchors:
+            anchors.append(text)
+    return anchors
+
+
+def _contains_strong_anchor(result: SearchResult, anchors: list[str]) -> bool:
+    if not anchors:
+        return False
+    content = (result.chunk.enriched_content or result.chunk.content or "").casefold()
+    return any(anchor in content for anchor in anchors)
+
+
 def _limit_results_for_generation(query: str, results: list[SearchResult]) -> list[SearchResult]:
-    """Apply hard prompt bounds before context assembly."""
+    """Build an evidence pack without query-length prompt shortcuts."""
     cfg = get_settings()
     max_chunks = max(1, cfg.retrieval.prompt_max_chunks)
     max_chars = max(1, cfg.retrieval.prompt_max_chars)
-    normalized_query = " ".join(query.strip().lower().split())
 
     if _is_enumeration_query(query):
         max_chunks = min(max_chunks, 5)
         max_chars = min(max_chars, 8_000)
-    elif len(normalized_query) <= 64:
-        max_chunks = min(max_chunks, 3)
-        max_chars = min(max_chars, 4_000)
 
+    anchors = _strong_anchor_texts(query)
     ranked = sorted(
         results,
-        key=lambda item: (-item.score, item.rank if item.rank > 0 else 10**9),
+        key=lambda item: (
+            not _contains_strong_anchor(item, anchors),
+            -item.score,
+            item.rank if item.rank > 0 else 10**9,
+        ),
     )
     selected: list[SearchResult] = []
     total_chars = 0

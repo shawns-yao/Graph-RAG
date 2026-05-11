@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import re
 import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
 from functools import lru_cache
 from typing import Any, Callable, TypedDict
@@ -30,6 +31,10 @@ from agentic_graph_rag.agent.correction_planner import (
     CorrectionGap,
     CorrectionPlan,
     build_gap_report,
+)
+from agentic_graph_rag.agent.query_signals import (
+    extract_query_signals,
+    has_strong_form_anchor,
 )
 
 _ANCHOR_PATTERN = re.compile(r"[A-Za-z0-9_.-]+|[\u4e00-\u9fff]{2,}")
@@ -80,6 +85,14 @@ _RELATION_QUERY_TERMS = {
     "影响",
     "差异",
 }
+_MAX_INITIAL_TOOLS = 2
+InitialRetrievalOutput = tuple[
+    list[SearchResult],
+    int,
+    list[WorkflowMemoryEntry],
+    list[ReflectionStep],
+    PipelineTrace | None,
+]
 
 
 @dataclass(frozen=True)
@@ -207,6 +220,60 @@ def _top_evidence_signal(results: list[SearchResult]) -> float:
     if fallback_scores:
         return max(fallback_scores)
     return 0.0
+
+
+def _initial_tool_plan(query: str, decision: RouterDecision) -> list[str]:
+    """Preserve router's primary tool and add at most one companion channel."""
+    tools = [decision.suggested_tool]
+    signals = extract_query_signals(query)
+
+    if has_strong_form_anchor(signals):
+        if "bm25_search" not in tools:
+            tools.append("bm25_search")
+    elif decision.suggested_tool in {"bm25_search", "cypher_traverse"}:
+        tools.append("vector_search")
+
+    planned: list[str] = []
+    for tool in tools:
+        if tool and tool not in planned:
+            planned.append(tool)
+        if len(planned) >= _MAX_INITIAL_TOOLS:
+            break
+    return planned or [decision.suggested_tool]
+
+
+def _decision_for_initial_tool(decision: RouterDecision, tool: str) -> RouterDecision:
+    if tool == decision.suggested_tool:
+        return decision
+    return decision.model_copy(update={"suggested_tool": tool})
+
+
+def _merge_initial_retrieval_outputs(
+    outputs: list[InitialRetrievalOutput],
+    target_trace: PipelineTrace | None,
+) -> tuple[list[SearchResult], int, list[WorkflowMemoryEntry], list[ReflectionStep]]:
+    results: list[SearchResult] = []
+    existing_ids: set[str] = set()
+    retries = 0
+    memory: list[WorkflowMemoryEntry] = []
+    reflections: list[ReflectionStep] = []
+
+    for tool_results, tool_retries, tool_memory, tool_reflections, tool_trace in outputs:
+        retries += tool_retries
+        memory.extend(tool_memory)
+        reflections.extend(tool_reflections)
+        for result in tool_results:
+            chunk_id = result.chunk.id
+            dedupe_key = chunk_id or result.chunk.enriched_content
+            if dedupe_key in existing_ids:
+                continue
+            existing_ids.add(dedupe_key)
+            results.append(result)
+        if target_trace is not None and tool_trace is not None:
+            target_trace.tool_steps.extend(tool_trace.tool_steps)
+            target_trace.escalation_steps.extend(tool_trace.escalation_steps)
+
+    return results, retries, memory, reflections
 
 
 def _record_reflection_trace(
@@ -1214,16 +1281,53 @@ def _route_query(state: AgentWorkflowState) -> dict[str, Any]:
 
 def _retrieve_evidence(state: AgentWorkflowState) -> dict[str, Any]:
     """Run the nested self-correction retrieval workflow."""
-    memory = list(state.get("memory", []))
-    reflection_history = list(state.get("reflection_history", []))
-    results, retries = state["ops"].run_self_correction(
-        query=state["query"],
-        driver=state["driver"],
-        openai_client=state["openai_client"],
-        decision=state["decision"],
-        trace=state["trace"],
-        memory_sink=memory,
-        reflection_history_sink=reflection_history,
+    initial_tools = _initial_tool_plan(state["query"], state["decision"])
+    outputs: list[
+        InitialRetrievalOutput
+    ] = []
+
+    def run_one(tool: str):
+        tool_memory = list(state.get("memory", []))
+        tool_reflections = list(state.get("reflection_history", []))
+        tool_trace = PipelineTrace(
+            trace_id=state["trace"].trace_id,
+            timestamp=state["trace"].timestamp,
+            query=state["query"],
+            session_id=state["trace"].session_id,
+            router_step=state["trace"].router_step,
+        )
+        tool_results, tool_retries = state["ops"].run_self_correction(
+            query=state["query"],
+            driver=state["driver"],
+            openai_client=state["openai_client"],
+            decision=_decision_for_initial_tool(state["decision"], tool),
+            trace=tool_trace,
+            memory_sink=tool_memory,
+            reflection_history_sink=tool_reflections,
+        )
+        return tool_results, tool_retries, tool_memory, tool_reflections, tool_trace
+
+    if len(initial_tools) == 1:
+        outputs.append(run_one(initial_tools[0]))
+    else:
+        with ThreadPoolExecutor(max_workers=len(initial_tools)) as executor:
+            futures = {
+                executor.submit(run_one, tool): index
+                for index, tool in enumerate(initial_tools)
+            }
+            completed: list[
+                tuple[
+                    int,
+                    InitialRetrievalOutput,
+                ]
+            ] = []
+            for future in as_completed(futures):
+                completed.append((futures[future], future.result()))
+            outputs.extend(result for _, result in sorted(completed, key=lambda item: item[0]))
+
+    results, retries, memory, reflection_history = _merge_initial_retrieval_outputs(
+        outputs,
+        state["trace"],
     )
     existing_ids = [result.chunk.id for result in results if result.chunk.id]
     state["trace"].workflow_memory = list(memory)
