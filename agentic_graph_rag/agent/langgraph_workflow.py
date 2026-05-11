@@ -1242,7 +1242,6 @@ class AgentWorkflowOps:
     """Callbacks for the top-level route/retrieve/generate/completeness workflow."""
 
     classify_query: Callable[..., RouterDecision]
-    is_cross_language_global: Callable[[str], bool]
     run_self_correction: Callable[..., tuple[list[SearchResult], int]]
     generate_answer: Callable[..., QAResult]
     evaluate_completeness: Callable[..., bool]
@@ -1296,13 +1295,6 @@ def _route_query(state: AgentWorkflowState) -> dict[str, Any]:
         openai_client=state["openai_client"],
     )
     router_duration_ms = int((time.perf_counter() - started) * 1000)
-    if state["ops"].is_cross_language_global(state["query"]) and decision.suggested_tool != "full_document_read":
-        decision = RouterDecision(
-            query_type=QueryType.GLOBAL,
-            suggested_tool="full_document_read",
-            confidence=decision.confidence,
-            reasoning=decision.reasoning,
-        )
     router_method = (
         "hard_rule"
         if decision.reasoning.startswith("Hard rule:")

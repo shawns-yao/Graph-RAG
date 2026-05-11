@@ -90,7 +90,6 @@ def test_after_verify_requires_planner_for_retry_required_claim():
     )
     ops = AgentWorkflowOps(
         classify_query=lambda *_args, **_kwargs: None,
-        is_cross_language_global=lambda *_args, **_kwargs: False,
         run_self_correction=lambda *_args, **_kwargs: ([], 0),
         generate_answer=lambda *_args, **_kwargs: None,
         evaluate_completeness=lambda *_args, **_kwargs: True,
@@ -127,7 +126,6 @@ def test_after_verify_prefers_planner_when_available():
     )
     ops = AgentWorkflowOps(
         classify_query=lambda *_args, **_kwargs: None,
-        is_cross_language_global=lambda *_args, **_kwargs: False,
         run_self_correction=lambda *_args, **_kwargs: ([], 0),
         generate_answer=lambda *_args, **_kwargs: None,
         evaluate_completeness=lambda *_args, **_kwargs: True,
@@ -174,7 +172,6 @@ def test_after_verify_retries_partial_numeric_gap_with_planner():
     )
     ops = AgentWorkflowOps(
         classify_query=lambda *_args, **_kwargs: None,
-        is_cross_language_global=lambda *_args, **_kwargs: False,
         run_self_correction=lambda *_args, **_kwargs: ([], 0),
         generate_answer=lambda *_args, **_kwargs: None,
         evaluate_completeness=lambda *_args, **_kwargs: True,
@@ -219,7 +216,6 @@ def test_after_verify_does_not_retry_supporting_gap():
     )
     ops = AgentWorkflowOps(
         classify_query=lambda *_args, **_kwargs: None,
-        is_cross_language_global=lambda *_args, **_kwargs: False,
         run_self_correction=lambda *_args, **_kwargs: ([], 0),
         generate_answer=lambda *_args, **_kwargs: None,
         evaluate_completeness=lambda *_args, **_kwargs: True,
@@ -256,7 +252,6 @@ def test_execute_correction_tool_uses_planned_tool_and_appends_unique_results():
 
     ops = AgentWorkflowOps(
         classify_query=lambda *_args, **_kwargs: None,
-        is_cross_language_global=lambda *_args, **_kwargs: False,
         run_self_correction=lambda *_args, **_kwargs: ([], 0),
         generate_answer=lambda *_args, **_kwargs: None,
         evaluate_completeness=lambda *_args, **_kwargs: True,
@@ -310,7 +305,6 @@ def test_execute_correction_tool_marks_zero_added_results():
 
     ops = AgentWorkflowOps(
         classify_query=lambda *_args, **_kwargs: None,
-        is_cross_language_global=lambda *_args, **_kwargs: False,
         run_self_correction=lambda *_args, **_kwargs: ([], 0),
         generate_answer=lambda *_args, **_kwargs: None,
         evaluate_completeness=lambda *_args, **_kwargs: True,
@@ -407,7 +401,6 @@ def test_route_query_builds_retrieval_plan_from_router_and_signals():
     decision = RouterDecision(query_type=QueryType.SIMPLE, suggested_tool="vector_search")
     ops = AgentWorkflowOps(
         classify_query=lambda *_args, **_kwargs: decision,
-        is_cross_language_global=lambda *_args, **_kwargs: False,
         run_self_correction=lambda *_args, **_kwargs: ([], 0),
         generate_answer=lambda *_args, **_kwargs: None,
         evaluate_completeness=lambda *_args, **_kwargs: True,
@@ -465,7 +458,6 @@ def test_retrieve_evidence_runs_companion_tool_and_merges_results():
 
     ops = AgentWorkflowOps(
         classify_query=lambda *_args, **_kwargs: None,
-        is_cross_language_global=lambda *_args, **_kwargs: False,
         run_self_correction=run_self_correction,
         generate_answer=lambda *_args, **_kwargs: None,
         evaluate_completeness=lambda *_args, **_kwargs: True,
@@ -498,7 +490,6 @@ def test_generate_answer_skips_when_llm_budget_exhausted():
     calls = []
     ops = AgentWorkflowOps(
         classify_query=lambda *_args, **_kwargs: None,
-        is_cross_language_global=lambda *_args, **_kwargs: False,
         run_self_correction=lambda *_args, **_kwargs: ([], 0),
         generate_answer=lambda *_args, **_kwargs: calls.append("generate"),
         evaluate_completeness=lambda *_args, **_kwargs: True,
@@ -528,7 +519,6 @@ def test_verify_answer_skips_claim_extraction_when_llm_budget_exhausted():
     trace = PipelineTrace(trace_id="tr_test", timestamp="2026-05-11T00:00:00Z", query="q")
     ops = AgentWorkflowOps(
         classify_query=lambda *_args, **_kwargs: None,
-        is_cross_language_global=lambda *_args, **_kwargs: False,
         run_self_correction=lambda *_args, **_kwargs: ([], 0),
         generate_answer=lambda *_args, **_kwargs: None,
         evaluate_completeness=lambda *_args, **_kwargs: True,
@@ -559,7 +549,6 @@ def test_plan_correction_skips_when_llm_budget_exhausted():
     trace.verification_step = ClaimVerificationStep(status="retry_required")
     ops = AgentWorkflowOps(
         classify_query=lambda *_args, **_kwargs: None,
-        is_cross_language_global=lambda *_args, **_kwargs: False,
         run_self_correction=lambda *_args, **_kwargs: ([], 0),
         generate_answer=lambda *_args, **_kwargs: None,
         evaluate_completeness=lambda *_args, **_kwargs: True,

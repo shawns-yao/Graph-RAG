@@ -8,7 +8,6 @@ and retries with different strategies when quality is low.
 from __future__ import annotations
 
 import logging
-import re
 import time
 import uuid
 from dataclasses import dataclass
@@ -43,11 +42,7 @@ from agentic_graph_rag.agent.langgraph_workflow import (
     run_self_correction_workflow,
 )
 from agentic_graph_rag.agent.router import classify_query
-from agentic_graph_rag.agent.routing_rules import (
-    INTERNAL_ALIAS_CONCEPT_PATTERN,
-    INTERNAL_ALIAS_GLOBAL_PATTERN,
-    RELATION_QUERY_KEYWORDS,
-)
+from agentic_graph_rag.agent.routing_rules import RELATION_QUERY_KEYWORDS
 from agentic_graph_rag.agent.tool_registry import TOOL_NAMES
 from agentic_graph_rag.agent.tools import (
     bm25_search,
@@ -139,19 +134,6 @@ def _extend_unique(target: list[str], values: list[str], *, valid: set[str] | No
             continue
         if value not in target:
             target.append(value)
-
-
-def _matches_internal_alias_global(query: str) -> bool:
-    """Detect internal alias queries that need document-wide coverage."""
-    has_cyrillic = bool(re.search(r'[а-яА-ЯёЁ]', query))
-    has_doc2 = bool(INTERNAL_ALIAS_CONCEPT_PATTERN.search(query))
-    has_global = bool(INTERNAL_ALIAS_GLOBAL_PATTERN.search(query))
-    return has_cyrillic and has_doc2 and has_global
-
-
-def _is_cross_language_global(query: str) -> bool:
-    """Backward-compatible alias for internal alias coverage rule."""
-    return _matches_internal_alias_global(query)
 
 
 # ---------------------------------------------------------------------------
@@ -683,7 +665,6 @@ def run(
 
     ops = AgentWorkflowOps(
         classify_query=classify_query,
-        is_cross_language_global=_matches_internal_alias_global,
         run_self_correction=self_correction_loop,
         generate_answer=generate_answer,
         evaluate_completeness=evaluate_completeness,
@@ -709,7 +690,6 @@ def run(
         )
         ops = AgentWorkflowOps(
             classify_query=lambda query, *, use_llm, openai_client: forced_decision,
-            is_cross_language_global=_matches_internal_alias_global,
             run_self_correction=self_correction_loop,
             generate_answer=generate_answer,
             evaluate_completeness=evaluate_completeness,

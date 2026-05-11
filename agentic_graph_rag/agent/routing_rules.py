@@ -6,8 +6,6 @@ tested, and expanded without scattering hard-coded strings across workflow code.
 
 from __future__ import annotations
 
-import re
-
 # TODO: Replace part of these manual keyword lists with a small local semantic
 # router model once we have enough labeled routing traces for safe rollout.
 
@@ -97,18 +95,3 @@ GLOBAL_QUERY_KEYWORDS = (
     "list all",
     "show all",
 )
-
-INTERNAL_ALIAS_CONCEPT_PATTERN = re.compile(
-    r"\b(semantic\s+c(ore|ompanion)|SCL|companion\s+layer)\b",
-    re.IGNORECASE,
-)
-
-INTERNAL_ALIAS_GLOBAL_PATTERN = re.compile(
-    r"\b(list all|describe all|all\s+\w+\s+decisions)\b",
-    re.IGNORECASE,
-)
-
-# Backward-compatible aliases for existing imports. Keep internal naming neutral
-# because this rule is not a product-level "bilingual mode", only an alias hint.
-CROSS_LANGUAGE_DOC2_PATTERN = INTERNAL_ALIAS_CONCEPT_PATTERN
-CROSS_LANGUAGE_GLOBAL_PATTERN = INTERNAL_ALIAS_GLOBAL_PATTERN

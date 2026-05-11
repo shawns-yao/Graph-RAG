@@ -16,8 +16,6 @@ from rag_core.models import QueryType, RouterDecision
 from agentic_graph_rag.agent.routing_rules import (
     GLOBAL_PATTERNS,
     GLOBAL_QUERY_KEYWORDS,
-    INTERNAL_ALIAS_CONCEPT_PATTERN,
-    INTERNAL_ALIAS_GLOBAL_PATTERN,
     MULTI_HOP_PATTERNS,
     RELATION_PATTERNS,
     RELATION_QUERY_KEYWORDS,
@@ -67,17 +65,6 @@ def _hard_rule_decision(query: str) -> RouterDecision | None:
     relation_pattern_hits = _match_patterns(query, RELATION_PATTERNS)
     multi_hop_pattern_hits = _match_patterns(query, MULTI_HOP_PATTERNS)
     global_pattern_hits = _match_patterns(query, GLOBAL_PATTERNS)
-
-    if (
-        INTERNAL_ALIAS_CONCEPT_PATTERN.search(query)
-        and INTERNAL_ALIAS_GLOBAL_PATTERN.search(query)
-    ):
-        return RouterDecision(
-            query_type=QueryType.GLOBAL,
-            confidence=0.99,
-            reasoning="Hard rule: internal alias coverage requires full document recall.",
-            suggested_tool="full_document_read",
-        )
 
     if global_keyword_hit or global_pattern_hits > 0:
         return RouterDecision(
