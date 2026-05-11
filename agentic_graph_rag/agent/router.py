@@ -6,27 +6,28 @@ Categories: simple, relation, multi_hop, global, temporal.
 
 from __future__ import annotations
 
+import logging
 import re
 
+from openai import OpenAI
 from rag_core.config import get_settings, make_openai_client
 from rag_core.models import QueryType, RouterDecision
 
-from agentic_graph_rag.agent.tool_registry import DEFAULT_TOOL_BY_QUERY_TYPE
 from agentic_graph_rag.agent.routing_rules import (
     GLOBAL_PATTERNS,
     GLOBAL_QUERY_KEYWORDS,
     INTERNAL_ALIAS_CONCEPT_PATTERN,
     INTERNAL_ALIAS_GLOBAL_PATTERN,
     LEXICAL_PRIORITY_PATTERN,
-    LONG_QUERY_TOKEN_LIMIT,
     MULTI_HOP_PATTERNS,
     RELATION_PATTERNS,
     RELATION_QUERY_KEYWORDS,
     SHORT_QUERY_TOKEN_LIMIT,
     TEMPORAL_PATTERNS,
 )
+from agentic_graph_rag.agent.tool_registry import DEFAULT_TOOL_BY_QUERY_TYPE
 
-from openai import OpenAI
+logger = logging.getLogger(__name__)
 
 def _match_patterns(query: str, patterns: list[str]) -> int:
     """Count how many patterns match in the query."""
@@ -94,7 +95,12 @@ def _hard_rule_decision(query: str) -> RouterDecision | None:
             suggested_tool="comprehensive_search",
         )
 
-    if relation_keyword_hit or multi_hop_pattern_hits > 0 or relation_pattern_hits > 0 or _looks_like_medical_decision_query(query):
+    if (
+        relation_keyword_hit
+        or multi_hop_pattern_hits > 0
+        or relation_pattern_hits > 0
+        or _looks_like_medical_decision_query(query)
+    ):
         query_type = QueryType.MULTI_HOP if multi_hop_pattern_hits > 0 else QueryType.RELATION
         return RouterDecision(
             query_type=query_type,
@@ -121,22 +127,6 @@ def _hard_rule_decision(query: str) -> RouterDecision | None:
             confidence=0.94,
             reasoning="Hard rule: temporal anchor detected, prefer temporal retrieval.",
             suggested_tool="temporal_query",
-        )
-
-    if normalized_tokens and len(normalized_tokens) <= SHORT_QUERY_TOKEN_LIMIT:
-        return RouterDecision(
-            query_type=QueryType.SIMPLE,
-            confidence=0.84,
-            reasoning="Hard rule: short factual query detected, prefer vector retrieval first.",
-            suggested_tool="vector_search",
-        )
-
-    if len(normalized_tokens) >= LONG_QUERY_TOKEN_LIMIT:
-        return RouterDecision(
-            query_type=QueryType.GLOBAL,
-            confidence=0.82,
-            reasoning="Hard rule: long query detected, prefer comprehensive retrieval.",
-            suggested_tool="comprehensive_search",
         )
 
     return None
