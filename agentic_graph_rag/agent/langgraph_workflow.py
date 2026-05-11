@@ -79,19 +79,6 @@ _ANCHOR_STOPWORDS = {
     "是否",
     "有关",
 }
-_RELATION_QUERY_TERMS = {
-    "compare",
-    "difference",
-    "impact",
-    "relation",
-    "relationship",
-    "依赖",
-    "关系",
-    "关联",
-    "区别",
-    "影响",
-    "差异",
-}
 _MAX_INITIAL_TOOLS = 2
 InitialRetrievalOutput = tuple[
     list[SearchResult],
@@ -543,8 +530,6 @@ def _query_anchor_terms(query: str) -> list[str]:
         token = match.strip()
         if not token or token in _ANCHOR_STOPWORDS:
             continue
-        if token in _RELATION_QUERY_TERMS:
-            continue
         if token.isalpha() and len(token) < 2:
             continue
         if token not in ordered:
@@ -552,26 +537,14 @@ def _query_anchor_terms(query: str) -> list[str]:
     return ordered
 
 
-def _relation_query_terms(query: str) -> list[str]:
-    """Extract explicit relation operators from the query."""
-    lowered = query.casefold()
-    ordered: list[str] = []
-    for term in _RELATION_QUERY_TERMS:
-        if term in lowered and term not in ordered:
-            ordered.append(term)
-    return ordered
-
-
-def _anchor_hit_profile(query: str, results: list[SearchResult]) -> tuple[int, int, int, int]:
+def _anchor_hit_profile(query: str, results: list[SearchResult]) -> tuple[int, int, int]:
     """Measure objective lexical evidence quality."""
     anchors = _query_anchor_terms(query)
-    relation_terms = _relation_query_terms(query)
-    if not anchors and not relation_terms:
-        return (0, 0, 0, 0)
+    if not anchors:
+        return (0, 0, 0)
 
     distinct_hits: set[str] = set()
     exact_query_hit = 0
-    relation_hits: set[str] = set()
     best_rank = 10**9
     normalized_query = query.casefold().strip()
     for result in results:
@@ -580,15 +553,13 @@ def _anchor_hit_profile(query: str, results: list[SearchResult]) -> tuple[int, i
             continue
         if normalized_query and normalized_query in text:
             exact_query_hit = 1
-        hits = {anchor for anchor in anchors if anchor in text}
-        distinct_hits.update(hits)
-        relation_hits.update(term for term in relation_terms if term in text)
+        distinct_hits.update(anchor for anchor in anchors if anchor in text)
         candidate_rank = result.rank if result.rank > 0 else 10**9
         if candidate_rank < best_rank:
             best_rank = candidate_rank
     if best_rank == 10**9:
         best_rank = 0
-    return (exact_query_hit, len(distinct_hits), len(relation_hits), -best_rank)
+    return (exact_query_hit, len(distinct_hits), -best_rank)
 
 
 def _remaining_budget_ms(state: SelfCorrectionState) -> int:

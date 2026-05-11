@@ -83,6 +83,7 @@ class RetryPlan:
     tools: list[str]
     reason: str
 
+
 _TOOL_CHANNEL_MAP = {
     "vector_search": "vector",
     "bm25_search": "bm25",
@@ -105,6 +106,7 @@ def _extend_unique(target: list[str], values: list[str], *, valid: set[str] | No
 # ---------------------------------------------------------------------------
 # Tool selection
 # ---------------------------------------------------------------------------
+
 
 def select_tool(decision: RouterDecision) -> str:
     """Select the retrieval tool name based on router decision."""
@@ -129,7 +131,8 @@ def _hybrid_cache_plan(
         if source in cached_for_query and (forced_enabled is None or source not in forced_enabled)
     }
     resolved_enabled_providers = [
-        source for source in _HYBRID_CHANNEL_ORDER
+        source
+        for source in _HYBRID_CHANNEL_ORDER
         if (forced_enabled is None and source not in seed_results)
         or (forced_enabled is not None and source in forced_enabled)
     ]
@@ -196,24 +199,30 @@ def _build_provider_diagnostics(
         return []
 
     diagnostics: list[ProviderDiagnostic] = []
-    source_order = list(dict.fromkeys([
-        *reused_sources,
-        *executed_sources,
-        *((provider_results or {}).keys()),
-    ]))
+    source_order = list(
+        dict.fromkeys(
+            [
+                *reused_sources,
+                *executed_sources,
+                *((provider_results or {}).keys()),
+            ]
+        )
+    )
     for source in source_order:
         results = (provider_results or {}).get(source, [])
         scores = [result.score for result in results]
         top_chunk_ids = [result.chunk.id for result in results[:3] if result.chunk.id]
-        diagnostics.append(ProviderDiagnostic(
-            source=source,
-            results_count=len(results),
-            top_score=max(scores, default=0.0),
-            average_score=(sum(scores) / len(scores)) if scores else 0.0,
-            reused=source in reused_sources,
-            executed=source in executed_sources,
-            top_chunk_ids=top_chunk_ids,
-        ))
+        diagnostics.append(
+            ProviderDiagnostic(
+                source=source,
+                results_count=len(results),
+                top_score=max(scores, default=0.0),
+                average_score=(sum(scores) / len(scores)) if scores else 0.0,
+                reused=source in reused_sources,
+                executed=source in executed_sources,
+                top_chunk_ids=top_chunk_ids,
+            )
+        )
     return diagnostics
 
 
@@ -223,10 +232,7 @@ def _diagnostic_gap_sources(
     """Return providers that produced no evidence in the current pass."""
     if not provider_results:
         return []
-    return [
-        source for source in _HYBRID_CHANNEL_ORDER
-        if source in provider_results and not provider_results[source]
-    ]
+    return [source for source in _HYBRID_CHANNEL_ORDER if source in provider_results and not provider_results[source]]
 
 
 def _should_rewrite_query(
@@ -327,10 +333,9 @@ def _plan_incremental_retry(
         return None
     if current_tool in {"comprehensive_search", "full_document_read", "community_search"}:
         return None
-    if (
-        (reflection.action or "").strip().lower() == "retry_graph"
-        or (reflection.required_tool or "").strip().lower() == "cypher_traverse"
-    ):
+    if (reflection.action or "").strip().lower() == "retry_graph" or (
+        reflection.required_tool or ""
+    ).strip().lower() == "cypher_traverse":
         return None
 
     refresh_sources = _preferred_providers_for_reflection(reflection)
@@ -343,8 +348,7 @@ def _plan_incremental_retry(
 
     cached_for_query = channel_cache.get(query, {})
     reusable_sources = [
-        source for source in _HYBRID_CHANNEL_ORDER
-        if source in cached_for_query and source not in refresh_sources
+        source for source in _HYBRID_CHANNEL_ORDER if source in cached_for_query and source not in refresh_sources
     ]
     if not reusable_sources:
         return None
@@ -370,6 +374,7 @@ def _rerank_results(
 # ---------------------------------------------------------------------------
 # Self-correction loop
 # ---------------------------------------------------------------------------
+
 
 def self_correction_loop(
     query: str,
@@ -485,6 +490,7 @@ def _get_next_tool(
 # Main entry point
 # ---------------------------------------------------------------------------
 
+
 def run(
     query: str,
     driver: Driver,
@@ -506,6 +512,7 @@ def run(
     cfg = get_settings()
     if openai_client is None:
         from rag_core.config import make_openai_client
+
         openai_client = make_openai_client(cfg)
 
     trace = PipelineTrace(
@@ -545,16 +552,8 @@ def run(
         run_correction_tool=_run_tool,
     )
     if forced_tool:
-        routed_type = QueryType.SIMPLE
-        if forced_tool == "cypher_traverse":
-            routed_type = QueryType.RELATION
-        elif forced_tool == "full_document_read":
-            routed_type = QueryType.GLOBAL
-        elif forced_tool == "temporal_query":
-            routed_type = QueryType.TEMPORAL
-
         forced_decision = RouterDecision(
-            query_type=routed_type,
+            query_type=QueryType.SIMPLE,
             reasoning=f"Benchmark forced initial tool: {forced_tool}.",
             suggested_tool=forced_tool,
         )
