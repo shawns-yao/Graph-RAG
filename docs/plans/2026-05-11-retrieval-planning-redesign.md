@@ -583,6 +583,11 @@ P1 Query Signal Extractor:
   status: completed
   completed_at: 2026-05-11
   commit: f61fbdb Add query signal extraction
+
+P2/P3 Initial Retrieval + Evidence Pack Builder:
+  status: completed
+  completed_at: 2026-05-11
+  commit: ac16640 Add companion retrieval and evidence packing
 ```
 
 ## 落地顺序
