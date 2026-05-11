@@ -359,3 +359,31 @@ class TestStreamAnswer:
 
         assert parts == []
         client.chat.completions.create.assert_not_called()
+
+
+def test_phrase_anchor_balances_two_entity_relation_evidence():
+    cfg = MagicMock()
+    cfg.retrieval.prompt_max_chunks = 2
+    cfg.retrieval.prompt_max_chars = 10_000
+    cfg.openai.llm_model = "test-model"
+    cfg.openai.llm_temperature = 0.0
+
+    with patch("rag_core.generator.get_settings", return_value=cfg):
+        client = MagicMock()
+        client.chat.completions.create.return_value = _mock_openai_response("answer")
+        results = [
+            _make_scored_result("ACEI 可导致干咳，需要停用", 0.99),
+            _make_scored_result("泛化背景内容", 0.98),
+            _make_scored_result("ARB 干咳风险较低，可作为替代", 0.20),
+        ]
+
+        qa = generate_answer("ACEI 和 ARB 的区别是什么？", results, openai_client=client)
+
+    user_msg = client.chat.completions.create.call_args[1]["messages"][1]["content"]
+    assert "ACEI 可导致干咳，需要停用" in user_msg
+    assert "ARB 干咳风险较低，可作为替代" in user_msg
+    assert "泛化背景内容" not in user_msg
+    assert [source.chunk.content for source in qa.sources] == [
+        "ACEI 可导致干咳，需要停用",
+        "ARB 干咳风险较低，可作为替代",
+    ]

@@ -23,6 +23,7 @@ logger = logging.getLogger(__name__)
 
 _ENUM_RE = None
 _GRAPH_SECTION_SPLIT_RE = re.compile(r"\n\s*\n(?=(?:Graph paths:|Entities:|Evidence:))")
+_ACRONYM_ANCHOR_RE = re.compile(r"\b[A-Z][A-Z0-9]{1,}\b")
 _PHRASE_ANCHOR_CLEAN_RE = re.compile(
     r"^(?:时|当|如果|若|患者|的患者|对于|关于|有关|在|对|和|与|及|、)+|"
     r"(?:怎么处理|如何处理|怎么办|是否正确|是否|可以用|需要注意|有哪些|是什么|是多少|吗|呢)$"
@@ -76,6 +77,10 @@ def _strong_anchor_texts(query: str) -> list[str]:
 def _phrase_anchor_texts(query: str) -> list[str]:
     signals = extract_query_signals(query)
     anchors: list[str] = []
+    for match in _ACRONYM_ANCHOR_RE.finditer(query):
+        text = match.group(0).casefold()
+        if text and text not in anchors:
+            anchors.append(text)
     for anchor in signals.anchors:
         if anchor.kind != "phrase":
             continue
@@ -101,11 +106,15 @@ def _contains_strong_anchor(result: SearchResult, anchors: list[str]) -> bool:
     return any(anchor in content for anchor in anchors)
 
 
-def _contains_phrase_anchor(result: SearchResult, anchors: list[str]) -> bool:
+def _matched_phrase_anchors(result: SearchResult, anchors: list[str]) -> set[str]:
     if not anchors:
-        return False
+        return set()
     content = (result.chunk.enriched_content or result.chunk.content or "").casefold()
-    return any(anchor in content for anchor in anchors)
+    return {anchor for anchor in anchors if anchor in content}
+
+
+def _contains_phrase_anchor(result: SearchResult, anchors: list[str]) -> bool:
+    return bool(_matched_phrase_anchors(result, anchors))
 
 
 def _limit_results_for_generation(query: str, results: list[SearchResult]) -> list[SearchResult]:
@@ -123,24 +132,45 @@ def _limit_results_for_generation(query: str, results: list[SearchResult]) -> li
     ranked = sorted(
         results,
         key=lambda item: (
-            not _contains_phrase_anchor(item, phrase_anchors),
+            -len(_matched_phrase_anchors(item, phrase_anchors)),
             not _contains_strong_anchor(item, anchors),
             -item.score,
             item.rank if item.rank > 0 else 10**9,
         ),
     )
     selected: list[SearchResult] = []
+    selected_ids: set[int] = set()
+    covered_phrase_anchors: set[str] = set()
     total_chars = 0
-    for result in ranked:
+
+    def try_select(result: SearchResult) -> bool:
+        nonlocal total_chars
+        if id(result) in selected_ids or len(selected) >= max_chunks:
+            return False
         chunk_chars = len(result.chunk.enriched_content)
-        if len(selected) >= max_chunks:
-            break
         if selected and total_chars + chunk_chars > max_chars:
-            continue
+            return False
         selected.append(result)
+        selected_ids.add(id(result))
+        covered_phrase_anchors.update(_matched_phrase_anchors(result, phrase_anchors))
         total_chars += chunk_chars
-        if total_chars >= max_chars:
+        return total_chars >= max_chars
+
+    for anchor in phrase_anchors:
+        if anchor in covered_phrase_anchors:
+            continue
+        for result in ranked:
+            if anchor in _matched_phrase_anchors(result, phrase_anchors):
+                if try_select(result):
+                    break
+                break
+        if len(selected) >= max_chunks or total_chars >= max_chars:
             break
+
+    if len(selected) < max_chunks and total_chars < max_chars:
+        for result in ranked:
+            if try_select(result):
+                break
 
     if not selected:
         selected = [ranked[0]]
