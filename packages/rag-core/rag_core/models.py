@@ -265,6 +265,7 @@ RetrievalStatus = Literal["complete", "partial", "empty", "timeout"]
 VerificationStatus = Literal["passed", "partial", "retry_required", "failed", "skipped"]
 ClaimFailureType = Literal["none", "hard_fail", "soft_fail"]
 ClaimVerificationLevel = Literal["correct", "possible_correct", "incorrect"]
+ClaimRole = Literal["core", "supporting", "supplemental"]
 
 
 class GeneratorStep(BaseModel):
@@ -292,6 +293,7 @@ class VerifiedClaim(BaseModel):
     entities: list[str] = Field(default_factory=list)
     numeric_constraints: list[str] = Field(default_factory=list)
     relation_actions: list[str] = Field(default_factory=list)
+    claim_role: ClaimRole = "supporting"
     supported: bool
     verification_level: ClaimVerificationLevel = "possible_correct"
     failure_type: ClaimFailureType = "none"

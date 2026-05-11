@@ -28,6 +28,7 @@ def test_build_gap_report_marks_missing_numeric_fact_for_hard_numeric_claim():
                 entities=["噻托溴铵"],
                 numeric_constraints=["18 μg", "每日1次"],
                 relation_actions=["剂量"],
+                claim_role="core",
                 supported=False,
                 verification_level="possible_correct",
                 failure_type="hard_fail",
@@ -38,10 +39,11 @@ def test_build_gap_report_marks_missing_numeric_fact_for_hard_numeric_claim():
     gaps = build_gap_report(verification)
 
     assert gaps == [
-        CorrectionGap(
-            gap_type="missing_numeric_fact",
-            claim_text="噻托溴铵18 μg每日1次",
-            missing_entities=["噻托溴铵"],
+            CorrectionGap(
+                gap_type="missing_numeric_fact",
+                claim_text="噻托溴铵18 μg每日1次",
+                claim_role="core",
+                missing_entities=["噻托溴铵"],
             missing_facts=["18 μg", "每日1次"],
             relation_actions=["剂量"],
         )

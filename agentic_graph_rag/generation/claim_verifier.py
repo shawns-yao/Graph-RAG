@@ -345,6 +345,7 @@ def _verify_claim_against_evidence(
         "entities": list(claim.entities),
         "numeric_constraints": list(claim.numeric_constraints),
         "relation_actions": list(claim.relation_actions),
+        "claim_role": claim.role,
     }
     if not evidence:
         return VerifiedClaim(

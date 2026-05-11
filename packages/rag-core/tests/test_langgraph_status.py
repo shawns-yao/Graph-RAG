@@ -80,6 +80,7 @@ def test_after_verify_requires_planner_for_retry_required_claim():
         unsupported_claims=[
             VerifiedClaim(
                 text="错误声明",
+                claim_role="core",
                 supported=False,
                 verification_level="incorrect",
                 failure_type="soft_fail",
@@ -116,6 +117,7 @@ def test_after_verify_prefers_planner_when_available():
         unsupported_claims=[
             VerifiedClaim(
                 text="错误声明",
+                claim_role="core",
                 supported=False,
                 verification_level="incorrect",
                 failure_type="soft_fail",
@@ -140,6 +142,13 @@ def test_after_verify_prefers_planner_when_available():
             suggested_tool="vector_search",
         ),
         "verification_retry_attempt": 0,
+        "correction_gaps": [
+            CorrectionGap(
+                gap_type="missing_entity",
+                claim_text="错误声明",
+                claim_role="core",
+            )
+        ],
     }
 
     assert _after_verify(state) == "plan_correction"
@@ -154,6 +163,7 @@ def test_after_verify_retries_partial_numeric_gap_with_planner():
         unsupported_claims=[
             VerifiedClaim(
                 text="eGFR < 30时存在用药禁忌",
+                claim_role="core",
                 numeric_constraints=["< 30"],
                 supported=False,
                 verification_level="possible_correct",
@@ -180,12 +190,58 @@ def test_after_verify_retries_partial_numeric_gap_with_planner():
             CorrectionGap(
                 gap_type="missing_numeric_fact",
                 claim_text="eGFR < 30时存在用药禁忌",
+                claim_role="core",
                 missing_facts=["< 30"],
             )
         ],
     }
 
     assert _after_verify(state) == "plan_correction"
+
+
+def test_after_verify_does_not_retry_supporting_gap():
+    trace = PipelineTrace(trace_id="tr_test", timestamp="2026-05-11T00:00:00Z", query="q")
+    trace.verification_step = ClaimVerificationStep(
+        claims_total=1,
+        claims_possible=1,
+        status="partial",
+        unsupported_claims=[
+            VerifiedClaim(
+                text="背景发生率为15-20%",
+                claim_role="supporting",
+                numeric_constraints=["15-20%"],
+                supported=False,
+                verification_level="possible_correct",
+                failure_type="hard_fail",
+            )
+        ],
+    )
+    ops = AgentWorkflowOps(
+        classify_query=lambda *_args, **_kwargs: None,
+        is_cross_language_global=lambda *_args, **_kwargs: False,
+        run_self_correction=lambda *_args, **_kwargs: ([], 0),
+        generate_answer=lambda *_args, **_kwargs: None,
+        evaluate_completeness=lambda *_args, **_kwargs: True,
+        comprehensive_search=lambda *_args, **_kwargs: [],
+        plan_correction=lambda *_args, **_kwargs: None,
+        run_correction_tool=lambda *_args, **_kwargs: [],
+    )
+    state = {
+        "trace": trace,
+        "ops": ops,
+        "decision": RouterDecision(query_type=QueryType.SIMPLE, suggested_tool="vector_search"),
+        "verification_retry_attempt": 0,
+        "correction_gaps": [
+            CorrectionGap(
+                gap_type="missing_numeric_fact",
+                claim_text="背景发生率为15-20%",
+                claim_role="supporting",
+                missing_facts=["15-20%"],
+            )
+        ],
+    }
+
+    assert _after_verify(state) == "finish"
 
 
 def test_execute_correction_tool_uses_planned_tool_and_appends_unique_results():

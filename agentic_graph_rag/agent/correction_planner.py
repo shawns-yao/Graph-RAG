@@ -74,6 +74,7 @@ Return ONLY JSON:
 class CorrectionGap:
     gap_type: str
     claim_text: str
+    claim_role: str = "supporting"
     missing_entities: list[str] = field(default_factory=list)
     missing_facts: list[str] = field(default_factory=list)
     relation_actions: list[str] = field(default_factory=list)
@@ -82,6 +83,7 @@ class CorrectionGap:
         return {
             "gap_type": self.gap_type,
             "claim_text": self.claim_text,
+            "claim_role": self.claim_role,
             "missing_entities": self.missing_entities,
             "missing_facts": self.missing_facts,
             "relation_actions": self.relation_actions,
@@ -113,6 +115,7 @@ def build_gap_report(verification: ClaimVerificationStep) -> list[CorrectionGap]
             CorrectionGap(
                 gap_type=gap_type,
                 claim_text=claim.text,
+                claim_role=claim.claim_role,
                 missing_entities=list(claim.entities),
                 missing_facts=missing_facts,
                 relation_actions=list(claim.relation_actions),

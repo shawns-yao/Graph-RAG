@@ -63,6 +63,26 @@ def test_extract_claims_defaults_invalid_role_to_supporting():
     assert result.claims[0].role == "supporting"
 
 
+def test_verify_claim_carries_claim_role_into_verified_claim():
+    claim = ExtractedClaim(
+        text="噻托溴铵18μg每日1次",
+        role="core",
+        entities=("噻托溴铵",),
+        numeric_constraints=("18μg",),
+        relation_actions=("每日1次",),
+    )
+
+    step = verify_claims(
+        [claim],
+        cypher_traverse=_cypher_noop,
+        driver=MagicMock(),
+        openai_client=_client(),
+        existing_evidence=[_result("沙丁胺醇起效5-15分钟")],
+    )
+
+    assert step.unsupported_claims[0].claim_role == "core"
+
+
 def test_possible_correct_when_entity_or_number_missing_after_retry():
     claim = ExtractedClaim(
         text="噻托溴铵18μg每日1次",

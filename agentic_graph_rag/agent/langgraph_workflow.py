@@ -1686,11 +1686,16 @@ def _after_verify(state: AgentWorkflowState) -> str:
     retryable_partial = (
         verification is not None
         and verification.status == "partial"
-        and any(gap.gap_type in {"missing_numeric_fact", "missing_entity"} for gap in gaps)
+        and any(
+            gap.claim_role == "core"
+            and gap.gap_type in {"missing_numeric_fact", "missing_entity"}
+            for gap in gaps
+        )
     )
     if (
         verification is not None
         and (verification.status == "retry_required" or retryable_partial)
+        and any(gap.claim_role == "core" for gap in gaps)
         and state.get("verification_retry_attempt", 0) == 0
         and ops is not None
         and ops.plan_correction is not None
