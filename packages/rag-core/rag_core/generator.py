@@ -305,11 +305,21 @@ def _compact_fact_text(text: str) -> str:
     return re.sub(r"[^\w\u4e00-\u9fff]+", "", text.casefold())
 
 
-def _fact_matches_query_terms(normalized_fact: str, query_terms: set[str]) -> bool:
+def _structured_fact_subject(fact_text: str) -> str:
+    if "--" not in fact_text:
+        return ""
+    subject = fact_text.split("--", 1)[0]
+    return subject.strip(" -*\t\r\n")
+
+
+def _fact_matches_query_terms(normalized_fact: str, query_terms: set[str], query_text: str = "") -> bool:
     if not query_terms:
         return True
     compact_fact = _compact_fact_text(normalized_fact)
-    return any(term in normalized_fact or _compact_fact_text(term) in compact_fact for term in query_terms)
+    if any(term in normalized_fact or _compact_fact_text(term) in compact_fact for term in query_terms):
+        return True
+    subject = _structured_fact_subject(normalized_fact)
+    return bool(subject and _compact_fact_text(subject) in _compact_fact_text(query_text))
 
 
 def build_evidence_contract(results: list[SearchResult], query: str = "") -> EvidenceContract:
@@ -317,11 +327,12 @@ def build_evidence_contract(results: list[SearchResult], query: str = "") -> Evi
     facts: list[EvidenceFact] = []
     seen: set[str] = set()
     query_terms = _contract_query_terms(query)
+    query_text = query.casefold()
     for result_index, result in enumerate(results, start=1):
         for fact_index, (text, confidence) in enumerate(_fact_text_candidates(result), start=1):
             normalized = " ".join(text.split())
             normalized_folded = normalized.casefold()
-            if not _fact_matches_query_terms(normalized_folded, query_terms):
+            if not _fact_matches_query_terms(normalized_folded, query_terms, query_text):
                 continue
             if not normalized or normalized_folded in seen:
                 continue

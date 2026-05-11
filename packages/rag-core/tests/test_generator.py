@@ -397,6 +397,15 @@ def test_build_evidence_contract_extracts_graph_and_numeric_facts():
     assert contract.completeness_status == "complete"
 
 
+def test_evidence_contract_keeps_structured_fact_when_subject_matches_query():
+    from rag_core.generator import build_evidence_contract
+
+    results = [_make_scored_result("噻托溴铵 --剂量--> 18 μg每日1次", 0.9)]
+
+    contract = build_evidence_contract(results, query="噻托溴铵每日用几次？")
+
+    assert any("噻托溴铵 --剂量--> 18 μg每日1次" in fact.text for fact in contract.facts)
+
 def test_prompt_includes_evidence_contract_and_fact_citation_instruction():
     client = MagicMock()
     client.chat.completions.create.return_value = _mock_openai_response("answer [fact:f_1_1_c1]")
