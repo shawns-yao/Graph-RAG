@@ -114,6 +114,21 @@ _THRESHOLD_ENTITY_PATTERNS: tuple[re.Pattern[str], ...] = (
 _THRESHOLD_ENTITY_RE = re.compile(
     r"(?:[A-Za-z][A-Za-z0-9/+.-]*\s*)?(?:[<>≤≥]=?\s*\d+(?:\.\d+)?)|(?:至少\s*\d+(?:\.\d+)?\s*(?:个月|周|天|mg|ml|%))"
 )
+_NEGATION_TRIGGERS = (
+    "无",
+    "未见",
+    "否认",
+    "排除",
+    "不考虑",
+    "没有",
+    "未发现",
+    "阴性",
+    "negative for",
+    "no evidence of",
+    "without",
+    "denies",
+)
+_NEGATION_SCOPE_CHARS = 18
 _ALIAS_ENTITY_TYPE_OVERRIDES: dict[str, str] = {
     "ACEI": "DrugClass",
     "ARB": "DrugClass",
@@ -131,6 +146,35 @@ _ALIAS_ENTITY_TYPE_OVERRIDES: dict[str, str] = {
     "eGFR": "Test",
 }
 
+
+def _sentence_for_surface(text: str, surface: str) -> str:
+    for sentence in _sentence_splits(text):
+        if surface and _contains_surface(sentence, surface):
+            return sentence
+    return ""
+
+
+def _is_negated_surface(text: str, surface: str) -> bool:
+    sentence = _sentence_for_surface(text, surface)
+    if not sentence:
+        return False
+    surface_index = sentence.casefold().find(surface.casefold())
+    if surface_index < 0:
+        surface_index = sentence.find(surface)
+    if surface_index < 0:
+        return False
+    prefix = sentence[max(0, surface_index - _NEGATION_SCOPE_CHARS):surface_index]
+    suffix = sentence[surface_index:surface_index + len(surface) + 6]
+    return any(
+        trigger.casefold() in prefix.casefold() or trigger.casefold() in suffix.casefold()
+        for trigger in _NEGATION_TRIGGERS
+    )
+
+
+def _entity_negated_in_chunk(entity: Entity, chunk: Chunk) -> bool:
+    text = chunk.enriched_content
+    surfaces = [entity.name, *entity.metadata.get("aliases", [])]
+    return any(_is_negated_surface(text, str(surface)) for surface in surfaces if str(surface).strip())
 
 def _normalized_name(text: str) -> str:
     return re.sub(r"\s+", " ", text.strip().lower())
@@ -247,7 +291,11 @@ def _infer_sentence_relations(chunk: Chunk, entities: list[Entity]) -> list[Rela
 
     seen_pairs: set[tuple[str, str, str]] = set()
     for sentence in _sentence_splits(chunk.enriched_content):
-        present = [entity for entity in chunk_entities if _entity_occurs_in_sentence(entity, sentence)]
+        present = [
+            entity for entity in chunk_entities
+            if _entity_occurs_in_sentence(entity, sentence)
+            and not _is_negated_surface(sentence, entity.name)
+        ]
         if len(present) < 2:
             continue
         relation_type = ""
@@ -288,11 +336,12 @@ def _pattern_candidates(text: str) -> list[tuple[str, str | None]]:
     for pattern, entity_type in _MEDICAL_TERM_PATTERNS:
         for match in pattern.finditer(text):
             candidate = _strip_candidate_noise(match.group(0))
-            if len(candidate) >= 2:
+            if len(candidate) >= 2 and not _is_negated_surface(text, candidate):
                 candidates.append((candidate, entity_type))
 
     for candidate in _threshold_candidates(text):
-        candidates.append((candidate, "Threshold"))
+        if not _is_negated_surface(text, candidate):
+            candidates.append((candidate, "Threshold"))
 
     return candidates
 
@@ -943,12 +992,14 @@ def _parse_extraction_response(
     source_chunk_id: str | None = None,
     candidate_entities: list[str] | None = None,
     candidate_entities_by_chunk: dict[str, list[str]] | None = None,
+    chunk_text_by_id: dict[str, str] | None = None,
 ) -> tuple[list[Entity], list[Relationship]]:
     """Parse LLM extraction output into Entity and Relationship objects."""
     entities: list[Entity] = []
     relationships: list[Relationship] = []
     candidates = candidate_entities or []
     candidate_map = candidate_entities_by_chunk or {}
+    text_map = chunk_text_by_id or {}
 
     try:
         payload = json.loads(text)
@@ -963,6 +1014,8 @@ def _parse_extraction_response(
             name = str(item.get("name") or "").strip()
             entity_type = str(item.get("type") or "").strip()
             if not name or not entity_type:
+                continue
+            if _is_negated_surface(text_map.get(chunk_id, ""), name):
                 continue
             ent_candidates = candidate_map.get(chunk_id, candidates)
             ent_id = hashlib.md5(name.lower().encode()).hexdigest()[:8]
@@ -989,6 +1042,9 @@ def _parse_extraction_response(
             if not src or not tgt or not rel_type:
                 continue
             chunk_id = str(item.get("chunk_id") or source_chunk_id or "").strip()
+            chunk_text = text_map.get(chunk_id, "")
+            if _is_negated_surface(chunk_text, src) or _is_negated_surface(chunk_text, tgt):
+                continue
             rel_id = hashlib.md5(
                 f"{src}:{rel_type}:{tgt}".lower().encode()
             ).hexdigest()[:8]
@@ -1112,6 +1168,8 @@ def link_peripheral_keywords(
                 _entity_surface_forms(entity),
             )
             if score <= 0:
+                continue
+            if _entity_negated_in_chunk(entity, chunk):
                 continue
 
             rel_id = hashlib.md5(

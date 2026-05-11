@@ -1,8 +1,15 @@
 """Tests for skeleton indexing safeguards."""
 
-from rag_core.models import Chunk
+from rag_core.models import Chunk, Entity
 
-from agentic_graph_rag.indexing.skeleton import build_knn_graph, filter_low_information_chunks
+from agentic_graph_rag.indexing.skeleton import (
+    _infer_sentence_relations,
+    _inject_medical_phrase_entities,
+    _parse_extraction_response,
+    build_knn_graph,
+    filter_low_information_chunks,
+    link_peripheral_keywords,
+)
 
 
 def _chunk(idx: int) -> Chunk:
@@ -41,3 +48,49 @@ def test_filter_low_information_chunks_preserves_short_numeric_facts():
     assert chunks[0].metadata["low_information_chunk"] is False
     assert "tfidf_signal_score" not in chunks[0].metadata
     assert chunks[0].metadata["local_information_score"] >= 0.0
+
+
+def test_negated_pattern_entity_is_not_injected():
+    chunk = Chunk(id="c_neg", content="患者既往无药物支架植入术。")
+
+    entities = _inject_medical_phrase_entities(chunk)
+
+    assert entities == []
+
+
+def test_negated_sentence_does_not_create_positive_relation():
+    chunk = Chunk(id="c_rel", content="患者无ACEI禁忌，可使用ACEI。")
+    entities, _ = _parse_extraction_response(
+        '{"entities": ['
+        '{"chunk_id": "c_rel", "name": "ACEI", "type": "DrugClass", "confidence": 0.9},'
+        '{"chunk_id": "c_rel", "name": "禁忌", "type": "Procedure", "confidence": 0.9}'
+        ']}',
+        chunk_text_by_id={"c_rel": chunk.enriched_content},
+    )
+
+    relationships = _infer_sentence_relations(chunk, entities)
+
+    assert relationships == []
+
+
+def test_llm_entities_in_negation_scope_are_discarded():
+    entities, relationships = _parse_extraction_response(
+        '{"entities": ['
+        '{"chunk_id": "c1", "name": "糖尿病", "type": "Disease", "confidence": 0.9}'
+        '], "relationships": ['
+        '{"chunk_id": "c1", "from": "患者", "to": "糖尿病", "type": "患有", "confidence": 0.9}'
+        ']}',
+        chunk_text_by_id={"c1": "患者既往无高血压、糖尿病史。"},
+    )
+
+    assert entities == []
+    assert relationships == []
+
+
+def test_negated_peripheral_mention_does_not_link_entity():
+    chunk = Chunk(id="p1", content="患者既往无糖尿病史。")
+    entity = Entity(id="e1", name="糖尿病", entity_type="Disease", metadata={"confidence": 1.0})
+
+    relationships = link_peripheral_keywords([chunk], [entity])
+
+    assert relationships == []
