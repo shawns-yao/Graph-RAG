@@ -44,6 +44,9 @@ from agentic_graph_rag.agent.query_signals import (
 )
 
 _ANCHOR_PATTERN = re.compile(r"[A-Za-z0-9_.-]+|[\u4e00-\u9fff]{2,}")
+_RELATION_FALLBACK_RE = re.compile(
+    r"\S+\s*(?:和|与|相比)\s*\S+|\S+\s*(?:会不会|是否会|导致|引发|改用)\s*\S+"
+)
 _REFLECTION_MIN_REMAINING_BUDGET_MS = 1000
 _REFLECTION_TRANSPORT_FAILURE_MARKERS = (
     "connection error",
@@ -245,11 +248,29 @@ def _tools_for_retrieval_needs(needs: tuple[RetrievalNeed, ...]) -> list[str]:
         "broad_recall": "comprehensive_search",
         "temporal_evidence": "temporal_query",
     }
-    for need in needs:
+    for need in (
+        "semantic_passage",
+        "exact_numeric",
+        "graph_relation",
+        "temporal_evidence",
+        "broad_recall",
+    ):
+        if need not in needs:
+            continue
         tool = need_tool_map.get(need)
         if tool and tool not in tools:
             tools.append(tool)
     return tools
+
+
+def _fallback_retrieval_needs(query: str, reason: str) -> NeedResolution:
+    signals = extract_query_signals(query)
+    needs: list[RetrievalNeed] = ["semantic_passage"]
+    if has_strong_form_anchor(signals):
+        needs.append("exact_numeric")
+    if _RELATION_FALLBACK_RE.search(query):
+        needs.append("graph_relation")
+    return NeedResolution(tuple(dict.fromkeys(needs)), reason)
 
 
 def _initial_tool_plan(
@@ -1324,7 +1345,7 @@ class AgentWorkflowState(TypedDict, total=False):
 
 def _resolve_retrieval_needs(state: AgentWorkflowState) -> tuple[NeedResolution, list[WorkflowMemoryEntry]]:
     signals = extract_query_signals(state["query"])
-    fallback = NeedResolution(("semantic_passage",), "need resolver unavailable")
+    fallback = _fallback_retrieval_needs(state["query"], "need resolver unavailable")
     resolver = state["ops"].resolve_retrieval_needs
     if resolver is None:
         return fallback, list(state.get("memory", []))
@@ -1338,7 +1359,7 @@ def _resolve_retrieval_needs(state: AgentWorkflowState) -> tuple[NeedResolution,
             openai_client=state["openai_client"],
         )
     except Exception as exc:
-        resolution = NeedResolution(("semantic_passage",), f"need resolver fallback: {exc}")
+        resolution = _fallback_retrieval_needs(state["query"], f"need resolver fallback: {exc}")
     state_with_budget_memory = dict(state)
     state_with_budget_memory["memory"] = budget_memory
     memory = _append_memory_entry(

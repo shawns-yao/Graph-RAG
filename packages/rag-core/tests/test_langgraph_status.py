@@ -636,3 +636,78 @@ def test_route_query_uses_need_resolver_for_graph_companion():
         "semantic_passage",
         "graph_relation",
     ]
+
+
+def test_route_query_uses_fixed_need_priority_when_resolver_order_varies():
+    decision = RouterDecision(query_type=QueryType.SIMPLE, suggested_tool="vector_search")
+    ops = AgentWorkflowOps(
+        classify_query=lambda *_args, **_kwargs: decision,
+        run_self_correction=lambda *_args, **_kwargs: ([], 0),
+        generate_answer=lambda *_args, **_kwargs: None,
+        evaluate_completeness=lambda *_args, **_kwargs: True,
+        comprehensive_search=lambda *_args, **_kwargs: [],
+        resolve_retrieval_needs=lambda **_kwargs: NeedResolution(
+            ("graph_relation", "semantic_passage", "exact_numeric"),
+            "mixed needs",
+        ),
+    )
+    trace = PipelineTrace(
+        trace_id="tr_test",
+        timestamp="2026-05-11T00:00:00Z",
+        query="ACEI 与 ARB 在 eGFR < 30 时怎么处理？",
+    )
+
+    update = _route_query(
+        {
+            "ops": ops,
+            "query": "ACEI 与 ARB 在 eGFR < 30 时怎么处理？",
+            "openai_client": object(),
+            "use_llm_router": False,
+            "trace": trace,
+            "memory": [],
+            "budget": BudgetTracker(max_llm_calls=1),
+        }
+    )
+
+    assert update["retrieval_plan"].initial_tools == ("vector_search", "bm25_search")
+
+
+def test_route_query_fallback_keeps_numeric_and_relation_signals_when_resolver_fails():
+    decision = RouterDecision(query_type=QueryType.SIMPLE, suggested_tool="vector_search")
+
+    def fail_resolver(**_kwargs):
+        raise RuntimeError("upstream 502")
+
+    ops = AgentWorkflowOps(
+        classify_query=lambda *_args, **_kwargs: decision,
+        run_self_correction=lambda *_args, **_kwargs: ([], 0),
+        generate_answer=lambda *_args, **_kwargs: None,
+        evaluate_completeness=lambda *_args, **_kwargs: True,
+        comprehensive_search=lambda *_args, **_kwargs: [],
+        resolve_retrieval_needs=fail_resolver,
+    )
+    trace = PipelineTrace(
+        trace_id="tr_test",
+        timestamp="2026-05-11T00:00:00Z",
+        query="ACEI 导致干咳时 eGFR < 30 怎么处理？",
+    )
+
+    update = _route_query(
+        {
+            "ops": ops,
+            "query": "ACEI 导致干咳时 eGFR < 30 怎么处理？",
+            "openai_client": object(),
+            "use_llm_router": False,
+            "trace": trace,
+            "memory": [],
+            "budget": BudgetTracker(max_llm_calls=1),
+        }
+    )
+
+    assert update["retrieval_plan"].initial_tools == ("vector_search", "bm25_search")
+    assert update["memory"][-2].metadata["retrieval_needs"] == [
+        "semantic_passage",
+        "exact_numeric",
+        "graph_relation",
+    ]
+    assert "fallback" in update["memory"][-2].metadata["reason"]
