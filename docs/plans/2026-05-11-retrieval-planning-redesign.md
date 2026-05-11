@@ -588,6 +588,11 @@ P2/P3 Initial Retrieval + Evidence Pack Builder:
   status: completed
   completed_at: 2026-05-11
   commit: ac16640 Add companion retrieval and evidence packing
+
+Workflow LLM BudgetTracker:
+  status: completed
+  completed_at: 2026-05-11
+  commit: 93a41ab Add workflow LLM budget tracker
 ```
 
 ## 落地顺序
