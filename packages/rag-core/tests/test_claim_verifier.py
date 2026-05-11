@@ -282,6 +282,27 @@ def test_prohibition_relation_accepts_equivalent_negative_use_action():
     client.chat.completions.create.assert_not_called()
 
 
+def test_generic_attention_action_does_not_require_extra_relation_when_threshold_matches():
+    claim = ExtractedClaim(
+        text="eGFR小于30时需要注意二甲双胍",
+        entities=("eGFR", "二甲双胍"),
+        numeric_constraints=("<30 mL/min/1.73m²",),
+        relation_actions=("需要注意",),
+    )
+    client = _client("possible_correct")
+
+    step = verify_claims(
+        [claim],
+        cypher_traverse=_cypher_noop,
+        driver=MagicMock(),
+        openai_client=client,
+        existing_evidence=[_result("eGFR < 30 mL/min/1.73m² 时禁用二甲双胍。")],
+    )
+
+    assert step.status == "passed"
+    assert step.claims_supported == 1
+    client.chat.completions.create.assert_not_called()
+
 def test_usage_action_does_not_require_extra_relation_when_dose_and_frequency_match():
     claim = ExtractedClaim(
         text="噻托溴铵的用法为18 μg每日1次",

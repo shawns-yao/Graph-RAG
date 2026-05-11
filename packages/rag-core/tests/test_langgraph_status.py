@@ -500,6 +500,41 @@ def test_generate_answer_skips_when_llm_budget_exhausted():
     assert update["memory"][-1].stage == "budget"
 
 
+def test_verify_answer_strips_fact_markers_before_claim_extraction():
+    captured = []
+    trace = PipelineTrace(trace_id="tr_test", timestamp="2026-05-11T00:00:00Z", query="q")
+
+    class Extraction:
+        claims = []
+
+    def extract_claims(answer, **_kwargs):
+        captured.append(answer)
+        return Extraction()
+
+    ops = AgentWorkflowOps(
+        classify_query=lambda *_args, **_kwargs: None,
+        run_self_correction=lambda *_args, **_kwargs: ([], 0),
+        generate_answer=lambda *_args, **_kwargs: None,
+        evaluate_completeness=lambda *_args, **_kwargs: True,
+        comprehensive_search=lambda *_args, **_kwargs: [],
+        extract_claims=extract_claims,
+        verify_claims=lambda *_args, **_kwargs: None,
+    )
+
+    _verify_answer_node(
+        {
+            "ops": ops,
+            "query": "q",
+            "qa_result": QAResult(answer="二甲双胍禁用。[fact:f_1_1_abcd]"),
+            "trace": trace,
+            "memory": [],
+            "budget": BudgetTracker(max_llm_calls=1),
+            "openai_client": object(),
+        }
+    )
+
+    assert captured == ["二甲双胍禁用。"]
+
 def test_verify_answer_skips_claim_extraction_when_llm_budget_exhausted():
     calls = []
     trace = PipelineTrace(trace_id="tr_test", timestamp="2026-05-11T00:00:00Z", query="q")

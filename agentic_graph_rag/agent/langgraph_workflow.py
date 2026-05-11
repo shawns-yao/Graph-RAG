@@ -45,6 +45,7 @@ from agentic_graph_rag.agent.query_signals import (
 
 _ANCHOR_PATTERN = re.compile(r"[A-Za-z0-9_.-]+|[\u4e00-\u9fff]{2,}")
 _RELATION_FALLBACK_RE = re.compile(r"\S+\s*(?:和|与|相比)\s*\S+|\S+\s*(?:会不会|是否会|导致|引发|改用)\s*\S+")
+_FACT_MARKER_RE = re.compile(r"\[fact:[^\]]+\]")
 _REFLECTION_MIN_REMAINING_BUDGET_MS = 1000
 _REFLECTION_TRANSPORT_FAILURE_MARKERS = (
     "connection error",
@@ -1531,6 +1532,11 @@ def _legacy_after_generate_branch(state: AgentWorkflowState) -> str:
     return "finish"
 
 
+def _strip_fact_markers(answer: str) -> str:
+    """Remove inline fact markers before claim extraction."""
+    return _FACT_MARKER_RE.sub("", answer or "").strip()
+
+
 def _verify_answer_node(state: AgentWorkflowState) -> dict[str, Any]:
     """Run Chain-of-Verification claim checking against the knowledge graph.
 
@@ -1563,8 +1569,10 @@ def _verify_answer_node(state: AgentWorkflowState) -> dict[str, Any]:
         return {"qa_result": updated_qa, "memory": budget_memory}
     state["memory"] = budget_memory
 
+    answer_for_verification = _strip_fact_markers(qa_result.answer)
+
     extraction = ops.extract_claims(
-        qa_result.answer,
+        answer_for_verification,
         query=state["query"],
         openai_client=state["openai_client"],
     )
