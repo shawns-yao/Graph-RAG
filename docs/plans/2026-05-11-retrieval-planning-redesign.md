@@ -762,6 +762,17 @@ behavior: 代码型字面锚点进入 query_signals，作为 strong-form anchor 
 verification: 91 focused regression tests passed; ruff passed.
 ```
 
+### P4 Graph Companion Planning
+
+```text
+status: completed
+completed_at: 2026-05-11
+commit: 34e95a0 Plan graph retrieval as companion channel
+scope: 将 relation/multi-hop intent 的默认主通道从 cypher_traverse 降级为 vector_search。
+behavior: RetrievalPlan 对 relation/multi-hop query 追加 cypher_traverse companion，保留图证据覆盖但不让 Router 直接绑定 graph 主工具。
+verification: 94 focused regression tests passed; ruff passed.
+```
+
 ## 明确不做
 
 P1 阶段不做：
