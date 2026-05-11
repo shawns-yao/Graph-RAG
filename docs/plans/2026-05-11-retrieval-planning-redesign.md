@@ -751,6 +751,17 @@ scope: 移除 short query -> vector_search 和 long query -> comprehensive_searc
 verification: tests/test_router_de_tooling.py and packages/rag-core/tests/test_langgraph_status.py passed.
 ```
 
+### P4 Router Lexical Rule De-Tooling
+
+```text
+status: completed
+completed_at: 2026-05-11
+commit: 98d56fc Move lexical routing to query signals
+scope: 移除 lexical anchor + length -> bm25_search 的 Router 主工具硬规则，并删除 retry 阶段同类 query shape 优先级。
+behavior: 代码型字面锚点进入 query_signals，作为 strong-form anchor 触发 bm25 companion，不覆盖 Router 主通道。
+verification: 91 focused regression tests passed; ruff passed.
+```
+
 ## 明确不做
 
 P1 阶段不做：
