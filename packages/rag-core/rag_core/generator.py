@@ -384,7 +384,7 @@ def _build_system_prompt(query: str) -> str:
         "in the query. Use the provided context as evidence, but do not add related "
         "facts, background, classifications, timing, mechanisms, or caveats unless "
         "the query asks for them. If evidence contains extra facts, ignore them. "
-        "Cite chunk numbers used."
+        "Use fact citations when available; do not add separate source sentences."
     )
 
 
@@ -400,7 +400,8 @@ def _build_messages(
         f"Context:\n{context}\n\n"
         "Answer the query directly. Use Evidence Contract facts as strict constraints. "
         "Attach [fact:<id>] after each factual sentence when a matching fact exists. "
-        "Do not include facts that are not needed to answer the exact question."
+        "Do not write separate evidence/source sentences. Do not include facts "
+        "that are not needed to answer the exact question."
     )
     return [
         {"role": "system", "content": system_prompt},

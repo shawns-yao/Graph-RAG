@@ -1426,6 +1426,7 @@ def _generate_answer_node(state: AgentWorkflowState) -> dict[str, Any]:
         retrieval_status=qa_result.retrieval_status,
         verification_status=qa_result.verification_status,
         duration_ms=int((time.perf_counter() - started) * 1000),
+        evidence_contract=qa_result.evidence_contract,
     )
     memory = _append_memory_entry(
         state,
@@ -1437,6 +1438,8 @@ def _generate_answer_node(state: AgentWorkflowState) -> dict[str, Any]:
             "retrieval_status": qa_result.retrieval_status,
             "verification_status": qa_result.verification_status,
             "answer_guard_triggered": state.get("answer_guard_triggered", False),
+            "evidence_contract_facts": len(qa_result.evidence_contract.facts) if qa_result.evidence_contract else 0,
+            "citation_coverage": qa_result.evidence_contract.citation_coverage if qa_result.evidence_contract else {},
         },
     )
     return {"qa_result": qa_result, "memory": memory}
