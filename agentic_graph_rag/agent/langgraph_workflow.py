@@ -26,6 +26,12 @@ from rag_core.models import (
 )
 from rag_core.reflector import resolve_reflection_verdict
 
+from agentic_graph_rag.agent.correction_planner import (
+    CorrectionGap,
+    CorrectionPlan,
+    build_gap_report,
+)
+
 _ANCHOR_PATTERN = re.compile(r"[A-Za-z0-9_.-]+|[\u4e00-\u9fff]{2,}")
 _REFLECTION_MIN_REMAINING_BUDGET_MS = 1000
 _REFLECTION_TRANSPORT_FAILURE_MARKERS = (
@@ -1125,10 +1131,11 @@ class AgentWorkflowOps:
     generate_answer: Callable[..., QAResult]
     evaluate_completeness: Callable[..., bool]
     comprehensive_search: Callable[..., list[SearchResult]]
-    targeted_graph_search: Callable[..., list[SearchResult]] | None = None
     # CoVe-inspired claim verification (optional; skip when None).
     extract_claims: Callable[..., Any] | None = None
     verify_claims: Callable[..., Any] | None = None
+    plan_correction: Callable[..., CorrectionPlan] | None = None
+    run_correction_tool: Callable[..., list[SearchResult]] | None = None
 
 
 class AgentWorkflowState(TypedDict, total=False):
@@ -1157,6 +1164,8 @@ class AgentWorkflowState(TypedDict, total=False):
     answer_guard_triggered: bool
     answer_guard_reason: str
     verification_retry_attempt: int
+    correction_gaps: list[CorrectionGap]
+    correction_plan: CorrectionPlan
 
 
 def _route_query(state: AgentWorkflowState) -> dict[str, Any]:
@@ -1505,21 +1514,31 @@ def _verify_answer_node(state: AgentWorkflowState) -> dict[str, Any]:
             "answer_status_after": updated_qa.answer_status,
         },
     )
-    return {"qa_result": updated_qa, "memory": memory}
+    update: dict[str, Any] = {"qa_result": updated_qa, "memory": memory}
+    if verification.unsupported_claims:
+        update["correction_gaps"] = build_gap_report(verification)
+    return update
 
 
 def _after_verify(state: AgentWorkflowState) -> str:
-    """Routes from verify_answer to legacy completeness branch or finish."""
+    """Route failed verification into the planner-only correction branch."""
     verification = state.get("trace").verification_step if state.get("trace") else None
     ops = state.get("ops")
+    gaps = list(state.get("correction_gaps", []))
+    retryable_partial = (
+        verification is not None
+        and verification.status == "partial"
+        and any(gap.gap_type in {"missing_numeric_fact", "missing_entity"} for gap in gaps)
+    )
     if (
         verification is not None
-        and verification.status == "retry_required"
+        and (verification.status == "retry_required" or retryable_partial)
         and state.get("verification_retry_attempt", 0) == 0
         and ops is not None
-        and ops.targeted_graph_search is not None
+        and ops.plan_correction is not None
+        and ops.run_correction_tool is not None
     ):
-        return "augment_from_verification"
+        return "plan_correction"
     return _legacy_after_generate_branch(state)
 
 
@@ -1542,46 +1561,97 @@ def _claim_focus_query(claim: Any) -> str:
     return " ".join(unique_parts)
 
 
-def _augment_from_verification_node(state: AgentWorkflowState) -> dict[str, Any]:
-    """Target one retry at claims that CoVe marked incorrect."""
+def _plan_correction_node(state: AgentWorkflowState) -> dict[str, Any]:
+    """Ask the planner which allowlisted retrieval tool should fill verification gaps."""
     ops = state["ops"]
+    qa_result = state["qa_result"]
     verification = state["trace"].verification_step
-    if verification is None or ops.targeted_graph_search is None:
+    gaps = list(state.get("correction_gaps", []))
+    if verification is None or not gaps or ops.plan_correction is None:
         return {}
 
-    incorrect_claims = [
-        claim
-        for claim in verification.unsupported_claims
-        if claim.verification_level == "incorrect"
-    ]
-    extra_results: list[SearchResult] = []
-    focus_queries: list[str] = []
-    for claim in incorrect_claims[:2]:
-        focus_query = _claim_focus_query(claim)
-        if not focus_query:
-            continue
-        focus_queries.append(focus_query)
-        extra_results.extend(
-            ops.targeted_graph_search(
-                focus_query,
-                state["driver"],
-                state["openai_client"],
-            )
-        )
+    plan = ops.plan_correction(
+        query=state["query"],
+        answer=qa_result.answer,
+        verification_status=verification.status,
+        gaps=gaps,
+        openai_client=state["openai_client"],
+    )
+    memory = _append_memory_entry(
+        state,
+        stage="verify_plan",
+        message=f"correction planner selected {plan.action}",
+        metadata={
+            "action": plan.action,
+            "tool": plan.tool or "",
+            "focus_query": plan.focus_query,
+            "gap_types": [gap.gap_type for gap in gaps],
+            "reason": plan.reason,
+        },
+    )
+    return {"correction_plan": plan, "memory": memory}
 
+
+def _after_plan_correction(state: AgentWorkflowState) -> str:
+    plan = state.get("correction_plan")
+    if plan is None or plan.action != "retry_with_tool" or not plan.tool:
+        return "finish"
+    if state["ops"].run_correction_tool is None:
+        return "finish"
+    return "execute_correction_tool"
+
+
+def _execute_correction_tool_node(state: AgentWorkflowState) -> dict[str, Any]:
+    """Execute the selected correction tool once and append unique evidence."""
+    ops = state["ops"]
+    plan = state.get("correction_plan")
+    if plan is None or plan.action != "retry_with_tool" or not plan.tool:
+        return {"verification_retry_attempt": 1}
+    if ops.run_correction_tool is None:
+        return {"verification_retry_attempt": 1}
+
+    started = time.perf_counter()
+    extra_results = ops.run_correction_tool(
+        plan.tool,
+        plan.focus_query or state["query"],
+        state["driver"],
+        state["openai_client"],
+        state["decision"],
+    )
+    duration_ms = int((time.perf_counter() - started) * 1000)
     combined, existing_ids = _merge_unique_results(
         state["results"],
         extra_results,
         state.get("existing_ids", []),
     )
+    trace = state.get("trace")
+    if trace is not None:
+        trace.tool_steps.append(
+            ToolStep(
+                tool_name=plan.tool,
+                results_count=len(extra_results),
+                duration_ms=duration_ms,
+                query_used=plan.focus_query,
+            )
+        )
+        trace.escalation_steps.append(
+            EscalationStep(
+                from_tool="verification",
+                to_tool=plan.tool,
+                reason=plan.reason,
+                rephrased_query=plan.focus_query,
+                duration_ms=duration_ms,
+            )
+        )
     memory = _append_memory_entry(
         state,
         stage="verify_retry",
-        message="verification retry appended claim-focused graph evidence",
+        message=f"verification retry appended planner-selected {plan.tool} evidence",
         metadata={
-            "incorrect_claims": len(incorrect_claims),
-            "focus_queries": focus_queries,
+            "tool": plan.tool,
+            "focus_query": plan.focus_query,
             "added_results": len(combined) - len(state["results"]),
+            "duration_ms": duration_ms,
         },
     )
     return {
@@ -1702,7 +1772,8 @@ def _compile_agent_workflow_graph():
     graph.add_node("generate_answer", _generate_answer_node)
     graph.add_node("verify_answer", _verify_answer_node)
     graph.add_node("check_completeness", _check_completeness_node)
-    graph.add_node("augment_from_verification", _augment_from_verification_node)
+    graph.add_node("plan_correction", _plan_correction_node)
+    graph.add_node("execute_correction_tool", _execute_correction_tool_node)
     graph.add_node("augment_with_comprehensive", _augment_with_comprehensive_node)
 
     graph.add_edge(START, "route_query")
@@ -1721,12 +1792,20 @@ def _compile_agent_workflow_graph():
         "verify_answer",
         _after_verify,
         {
-            "augment_from_verification": "augment_from_verification",
+            "plan_correction": "plan_correction",
             "check_completeness": "check_completeness",
             "finish": END,
         },
     )
-    graph.add_edge("augment_from_verification", "generate_answer")
+    graph.add_conditional_edges(
+        "plan_correction",
+        _after_plan_correction,
+        {
+            "execute_correction_tool": "execute_correction_tool",
+            "finish": END,
+        },
+    )
+    graph.add_edge("execute_correction_tool", "generate_answer")
     graph.add_conditional_edges(
         "check_completeness",
         _after_completeness,
@@ -1769,6 +1848,7 @@ def run_agent_workflow(
         "existing_ids": [],
         "total_retries": 0,
         "verification_retry_attempt": 0,
+        "correction_gaps": [],
         "reflection_history": list(reflection_history_seed or []),
         "memory": list(workflow_memory_seed or []),
     }

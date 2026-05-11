@@ -34,6 +34,7 @@ from rag_core.reflector import (
 )
 from rag_core.reranker import rerank
 
+from agentic_graph_rag.agent.correction_planner import plan_correction
 from agentic_graph_rag.agent.langgraph_workflow import (
     AgentWorkflowOps,
     SelfCorrectionOps,
@@ -41,7 +42,6 @@ from agentic_graph_rag.agent.langgraph_workflow import (
     run_self_correction_workflow,
 )
 from agentic_graph_rag.agent.router import classify_query
-from agentic_graph_rag.agent.tool_registry import TOOL_NAMES
 from agentic_graph_rag.agent.routing_rules import (
     INTERNAL_ALIAS_CONCEPT_PATTERN,
     INTERNAL_ALIAS_GLOBAL_PATTERN,
@@ -50,6 +50,7 @@ from agentic_graph_rag.agent.routing_rules import (
     RELATION_QUERY_KEYWORDS,
     SHORT_QUERY_TOKEN_LIMIT,
 )
+from agentic_graph_rag.agent.tool_registry import TOOL_NAMES
 from agentic_graph_rag.agent.tools import (
     bm25_search,
     community_search,
@@ -655,9 +656,10 @@ def run(
         generate_answer=generate_answer,
         evaluate_completeness=evaluate_completeness,
         comprehensive_search=comprehensive_search,
-        targeted_graph_search=cypher_traverse,
         extract_claims=extract_claims,
         verify_claims=_verify_claims_wrapper,
+        plan_correction=plan_correction,
+        run_correction_tool=_run_tool,
     )
     if forced_tool:
         routed_type = QueryType.SIMPLE
@@ -680,9 +682,10 @@ def run(
             generate_answer=generate_answer,
             evaluate_completeness=evaluate_completeness,
             comprehensive_search=comprehensive_search,
-            targeted_graph_search=cypher_traverse,
             extract_claims=extract_claims,
             verify_claims=_verify_claims_wrapper,
+            plan_correction=plan_correction,
+            run_correction_tool=_run_tool,
         )
     qa_result = run_agent_workflow(
         query=query,
