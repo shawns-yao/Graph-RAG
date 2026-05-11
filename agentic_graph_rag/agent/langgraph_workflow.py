@@ -1258,6 +1258,7 @@ class AgentWorkflowState(TypedDict, total=False):
     verification_retry_attempt: int
     correction_gaps: list[CorrectionGap]
     correction_plan: CorrectionPlan
+    correction_added_results: int
     budget: BudgetTracker
 
 
@@ -1763,6 +1764,12 @@ def _after_plan_correction(state: AgentWorkflowState) -> str:
     return "execute_correction_tool"
 
 
+def _after_execute_correction_tool(state: AgentWorkflowState) -> str:
+    if state.get("correction_added_results", 0) <= 0:
+        return "finish"
+    return "generate_answer"
+
+
 def _execute_correction_tool_node(state: AgentWorkflowState) -> dict[str, Any]:
     """Execute the selected correction tool once and append unique evidence."""
     ops = state["ops"]
@@ -1781,11 +1788,13 @@ def _execute_correction_tool_node(state: AgentWorkflowState) -> dict[str, Any]:
         state["decision"],
     )
     duration_ms = int((time.perf_counter() - started) * 1000)
+    previous_count = len(state["results"])
     combined, existing_ids = _merge_unique_results(
         state["results"],
         extra_results,
         state.get("existing_ids", []),
     )
+    added_results = len(combined) - previous_count
     trace = state.get("trace")
     if trace is not None:
         trace.tool_steps.append(
@@ -1812,7 +1821,7 @@ def _execute_correction_tool_node(state: AgentWorkflowState) -> dict[str, Any]:
         metadata={
             "tool": plan.tool,
             "focus_query": plan.focus_query,
-            "added_results": len(combined) - len(state["results"]),
+            "added_results": added_results,
             "duration_ms": duration_ms,
         },
     )
@@ -1820,6 +1829,7 @@ def _execute_correction_tool_node(state: AgentWorkflowState) -> dict[str, Any]:
         "results": combined,
         "existing_ids": existing_ids,
         "verification_retry_attempt": 1,
+        "correction_added_results": added_results,
         "total_retries": state.get("total_retries", state.get("retries", 0)) + (1 if extra_results else 0),
         "memory": memory,
     }
@@ -1967,7 +1977,14 @@ def _compile_agent_workflow_graph():
             "finish": END,
         },
     )
-    graph.add_edge("execute_correction_tool", "generate_answer")
+    graph.add_conditional_edges(
+        "execute_correction_tool",
+        _after_execute_correction_tool,
+        {
+            "generate_answer": "generate_answer",
+            "finish": END,
+        },
+    )
     graph.add_conditional_edges(
         "check_completeness",
         _after_completeness,
@@ -2011,6 +2028,7 @@ def run_agent_workflow(
         "total_retries": 0,
         "verification_retry_attempt": 0,
         "correction_gaps": [],
+        "correction_added_results": 0,
         "budget": BudgetTracker(max_llm_calls=4),
         "reflection_history": list(reflection_history_seed or []),
         "memory": list(workflow_memory_seed or []),

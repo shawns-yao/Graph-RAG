@@ -15,6 +15,7 @@ from agentic_graph_rag.agent.budget import BudgetTracker
 from agentic_graph_rag.agent.correction_planner import CorrectionGap, CorrectionPlan
 from agentic_graph_rag.agent.langgraph_workflow import (
     AgentWorkflowOps,
+    _after_execute_correction_tool,
     _after_verify,
     _answer_guard_status,
     _answer_has_verifiable_claims,
@@ -240,7 +241,49 @@ def test_execute_correction_tool_uses_planned_tool_and_appends_unique_results():
     assert [result.chunk.id for result in update["results"]] == ["base", "extra"]
     assert update["verification_retry_attempt"] == 1
     assert update["total_retries"] == 1
+    assert update["correction_added_results"] == 1
     assert trace.tool_steps[-1].tool_name == "bm25_search"
+
+
+def test_execute_correction_tool_marks_zero_added_results():
+    base = SearchResult(chunk=Chunk(id="base", content="旧证据"), score=0.5)
+
+    def run_correction_tool(*_args, **_kwargs):
+        return []
+
+    ops = AgentWorkflowOps(
+        classify_query=lambda *_args, **_kwargs: None,
+        is_cross_language_global=lambda *_args, **_kwargs: False,
+        run_self_correction=lambda *_args, **_kwargs: ([], 0),
+        generate_answer=lambda *_args, **_kwargs: None,
+        evaluate_completeness=lambda *_args, **_kwargs: True,
+        comprehensive_search=lambda *_args, **_kwargs: [],
+        run_correction_tool=run_correction_tool,
+    )
+
+    update = _execute_correction_tool_node(
+        {
+            "ops": ops,
+            "query": "eGFR < 30 怎么办？",
+            "trace": PipelineTrace(trace_id="tr_test", timestamp="2026-05-11T00:00:00Z", query="q"),
+            "driver": object(),
+            "openai_client": object(),
+            "decision": RouterDecision(query_type=QueryType.SIMPLE, suggested_tool="vector_search"),
+            "results": [base],
+            "existing_ids": ["base"],
+            "retries": 0,
+            "memory": [],
+            "correction_plan": CorrectionPlan(
+                action="retry_with_tool",
+                tool="bm25_search",
+                focus_query="eGFR < 30",
+                reason="Need exact threshold evidence",
+            ),
+        }
+    )
+
+    assert update["correction_added_results"] == 0
+    assert _after_execute_correction_tool(update) == "finish"
 
 
 def test_initial_tool_plan_adds_bm25_for_strong_anchor():
