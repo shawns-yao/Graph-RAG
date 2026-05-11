@@ -598,6 +598,11 @@ Budget Enforcement In Agent Nodes:
   status: completed
   completed_at: 2026-05-11
   commit: a0193cc Enforce workflow LLM budget in agent nodes
+
+P6 Regenerate Gate - New Evidence Required:
+  status: completed
+  completed_at: 2026-05-11
+  commit: 604b4d2 Gate verification regeneration on new evidence
 ```
 
 ## 落地顺序
