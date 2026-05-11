@@ -828,6 +828,17 @@ behavior: self-correction 不再根据 reflection.query_used 的 relation keywor
 verification: 91 focused regression tests passed; ruff passed; _rule_first_tool_preferences / RELATION_QUERY_KEYWORDS residual scan returned no hits in retrieval_agent.
 ```
 
+### P4/P5 Router And Retry Rule Table Removal
+
+```text
+status: completed
+completed_at: 2026-05-11
+commit: d9672e4 Remove router and retry rule tables
+scope: 删除 Router keyword/pattern intent 表和 retrieval_agent retry/reflection/query_type 三张旧规则表。
+behavior: Router deterministic fallback 不再用 RELATION/GLOBAL keyword 或 *_PATTERNS 判断 intent；self-correction 下一工具不再使用 _RETRY_TOOL_MATRIX、_QUERY_TYPE_TOOL_HINTS、_REFLECTION_RULES。
+verification: 91 focused regression tests passed; ruff passed; residual scan returned no hits under agentic_graph_rag/agent, packages, and tests.
+```
+
 ## 明确不做
 
 P1 阶段不做：
