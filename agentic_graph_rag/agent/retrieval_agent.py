@@ -11,6 +11,7 @@ import logging
 import re
 import time
 import uuid
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING
 
@@ -117,6 +118,12 @@ _QUERY_TYPE_TOOL_HINTS: dict[tuple[QueryType, str], list[str]] = {
     (QueryType.GLOBAL, "insufficient_context"): ["comprehensive_search", "full_document_read", "hybrid_search"],
     (QueryType.GLOBAL, "no_results"): ["full_document_read", "comprehensive_search"],
 }
+
+
+@dataclass(frozen=True, slots=True)
+class RetryPlan:
+    tools: list[str]
+    reason: str
 
 _TOOL_CHANNEL_MAP = {
     "vector_search": "vector",
@@ -549,6 +556,42 @@ def _query_type_tool_preferences(
     return list(_QUERY_TYPE_TOOL_HINTS.get((decision.query_type, failure_type), []))
 
 
+def _retry_plan_for_reflection(
+    reflection: ReflectionStep | None,
+    decision: RouterDecision | None,
+) -> RetryPlan:
+    if reflection is None:
+        return RetryPlan([], "no reflection")
+
+    gap_type = (reflection.gap_type or "").strip().lower()
+    failure_type = (reflection.failure_type or "").strip().lower()
+    required_tool = (reflection.required_tool or "").strip().lower()
+    query_type = decision.query_type if decision is not None else None
+    tools: list[str] = []
+
+    if required_tool and required_tool != "none":
+        _extend_unique(tools, [required_tool], valid=_VALID_TOOL_NAMES)
+    if gap_type in {"missing_numeric_threshold", "missing_diagnostic_criterion"}:
+        _extend_unique(tools, _LIGHTWEIGHT_RECALL_TOOLS, valid=_VALID_TOOL_NAMES)
+    elif gap_type in {"missing_relation", "missing_treatment_option"}:
+        _extend_unique(tools, _GRAPH_FIRST_TOOLS, valid=_VALID_TOOL_NAMES)
+    elif gap_type == "missing_entity":
+        _extend_unique(tools, _HYBRID_MISSING_ENTITY_TOOLS, valid=_VALID_TOOL_NAMES)
+    elif gap_type in {"missing_comparison_target", "conflicting_evidence"}:
+        _extend_unique(tools, _HYBRID_RECALL_TOOLS, valid=_VALID_TOOL_NAMES)
+
+    if not tools and failure_type:
+        _extend_unique(
+            tools,
+            _QUERY_TYPE_TOOL_HINTS.get((query_type, failure_type), []),
+            valid=_VALID_TOOL_NAMES,
+        )
+    if query_type == QueryType.GLOBAL and gap_type in {"missing_entity", "missing_treatment_option"}:
+        _extend_unique(tools, ["full_document_read"], valid=_VALID_TOOL_NAMES)
+
+    return RetryPlan(tools, f"gap={gap_type or 'none'} failure={failure_type or 'none'}")
+
+
 def _matrix_tool_preferences(
     current: str,
     decision: RouterDecision | None,
@@ -587,9 +630,10 @@ def _get_next_tool(
     """Get next tool using deterministic rules, targeted hints, then a fallback matrix."""
     candidate_tools: list[str] = []
     if reflection is not None:
-        candidate_tools.extend(_rule_first_tool_preferences(decision, reflection))
+        candidate_tools.extend(_retry_plan_for_reflection(reflection, decision).tools)
         candidate_tools.extend(_query_type_tool_preferences(decision, reflection))
         candidate_tools.extend(_preferred_tools_for_reflection(reflection))
+        candidate_tools.extend(_rule_first_tool_preferences(decision, reflection))
     candidate_tools.extend(_matrix_tool_preferences(current, decision, reflection))
 
     for tool in candidate_tools:
