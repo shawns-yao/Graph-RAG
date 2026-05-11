@@ -45,15 +45,27 @@ Rules:
 - Keep claims concise (under 30 words each).
 - At most 6 claims. Pick the most load-bearing ones if there are more.
 - For each claim, separately identify:
+  - role: core, supporting, or supplemental
   - entities: drug names, disease names, test names, anatomical terms (exact surface forms)
   - numeric_constraints: numeric thresholds, percentages, doses, durations
   - relation_actions: action/relationship phrases (e.g. 禁用, 每日1次, 推荐)
+
+Role rules:
+- core: directly answers the user's question.
+- supporting: condition, source, applicability, or limitation that supports the core answer.
+- supplemental: background explanation or extra information not directly asked.
+- Background explanation is not core.
+- Generic education is not core.
+- Patient general information is not core unless directly asked.
+- Sources, caveats, and applicability ranges are usually supporting, not core.
+- When unsure, use supporting, not core.
 
 Return JSON:
 {
   "claims": [
     {
       "text": "<concise factual claim>",
+      "role": "core|supporting|supplemental",
       "entities": ["entity1", "entity2"],
       "numeric_constraints": ["30", "12个月"],
       "relation_actions": ["禁用"]
@@ -65,15 +77,34 @@ Example:
 Answer: "ACEI常见副作用为干咳（发生率15-20%），此时改用ARB。"
 Output: {
   "claims": [
-    {"text": "ACEI的常见副作用是干咳", "entities": ["ACEI", "干咳"], "numeric_constraints": [], "relation_actions": ["副作用"]},
-    {"text": "ACEI引起干咳的发生率为15-20%", "entities": ["ACEI"], "numeric_constraints": ["15-20%"], "relation_actions": ["发生率"]},
-    {"text": "ACEI干咳后应改用ARB", "entities": ["ACEI", "ARB"], "numeric_constraints": [], "relation_actions": ["改用"]}
+    {
+      "text": "ACEI的常见副作用是干咳",
+      "role": "core",
+      "entities": ["ACEI", "干咳"],
+      "numeric_constraints": [],
+      "relation_actions": ["副作用"]
+    },
+    {
+      "text": "ACEI引起干咳的发生率为15-20%",
+      "role": "supporting",
+      "entities": ["ACEI"],
+      "numeric_constraints": ["15-20%"],
+      "relation_actions": ["发生率"]
+    },
+    {
+      "text": "ACEI干咳后应改用ARB",
+      "role": "core",
+      "entities": ["ACEI", "ARB"],
+      "numeric_constraints": [],
+      "relation_actions": ["改用"]
+    }
   ]
 }
 """
 
 _MAX_CLAIMS = 6
 _MAX_CLAIM_CHARS = 200
+_VALID_CLAIM_ROLES = {"core", "supporting", "supplemental"}
 
 
 @dataclass(frozen=True, slots=True)
@@ -84,6 +115,7 @@ class ClaimExtractionResult:
 @dataclass(frozen=True, slots=True)
 class ExtractedClaim:
     text: str
+    role: str = "supporting"
     entities: tuple[str, ...] = ()
     numeric_constraints: tuple[str, ...] = ()
     relation_actions: tuple[str, ...] = ()
@@ -146,9 +178,13 @@ def extract_claims(
         text = str(item.get("text") or "").strip()
         if not text or len(text) > _MAX_CLAIM_CHARS:
             continue
+        role = str(item.get("role") or "supporting").strip().lower()
+        if role not in _VALID_CLAIM_ROLES:
+            role = "supporting"
         claims.append(
             ExtractedClaim(
                 text=text,
+                role=role,
                 entities=tuple(_str_list(item.get("entities")))[:5],
                 numeric_constraints=tuple(
                     _str_list(item.get("numeric_constraints") or item.get("values"))

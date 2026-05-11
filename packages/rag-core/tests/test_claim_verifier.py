@@ -4,8 +4,8 @@ from rag_core.models import Chunk, SearchResult
 
 from agentic_graph_rag.generation.claim_verifier import (
     ExtractedClaim,
-    extract_claims,
     _verification_evidence_text,
+    extract_claims,
     verify_claims,
 )
 
@@ -31,6 +31,7 @@ def test_extract_claims_includes_question_context_in_prompt():
     client = _client("correct")
     client.chat.completions.create.return_value.choices[0].message.content = (
         '{"claims": [{"text": "GOLD 3-4级且嗜酸性粒细胞≥100/μL推荐LABA+LAMA+ICS", '
+        '"role": "core", '
         '"entities": ["GOLD 3-4级", "嗜酸性粒细胞", "LABA", "LAMA", "ICS"], '
         '"numeric_constraints": ["≥100/μL"], "relation_actions": ["推荐"]}]}'
     )
@@ -44,7 +45,22 @@ def test_extract_claims_includes_question_context_in_prompt():
     prompt = client.chat.completions.create.call_args.kwargs["messages"][0]["content"]
     assert "Question:" in prompt
     assert "GOLD 3-4级患者" in prompt
+    assert "Background explanation is not core" in prompt
     assert result.claims[0].entities[0] == "GOLD 3-4级"
+    assert result.claims[0].role == "core"
+
+
+def test_extract_claims_defaults_invalid_role_to_supporting():
+    client = _client("correct")
+    client.chat.completions.create.return_value.choices[0].message.content = (
+        '{"claims": [{"text": "背景说明不是直接答案", '
+        '"role": "everything", '
+        '"entities": [], "numeric_constraints": [], "relation_actions": []}]}'
+    )
+
+    result = extract_claims("背景说明不是直接答案。", openai_client=client)
+
+    assert result.claims[0].role == "supporting"
 
 
 def test_possible_correct_when_entity_or_number_missing_after_retry():
