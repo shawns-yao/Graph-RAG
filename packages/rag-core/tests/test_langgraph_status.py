@@ -1,6 +1,8 @@
 from rag_core.models import (
     Chunk,
     ClaimVerificationStep,
+    EvidenceContract,
+    EvidenceFact,
     PipelineTrace,
     QAResult,
     QueryType,
@@ -499,6 +501,44 @@ def test_generate_answer_skips_when_llm_budget_exhausted():
     assert update["qa_result"].answer_status == "partial"
     assert update["memory"][-1].stage == "budget"
 
+
+def test_verify_answer_uses_contract_citations_without_claim_extraction():
+    calls = []
+    trace = PipelineTrace(trace_id="tr_test", timestamp="2026-05-11T00:00:00Z", query="q")
+    contract = EvidenceContract(
+        facts=[EvidenceFact(fact_id="f_1", text="eGFR < 30 时禁用二甲双胍")],
+        citation_coverage={
+            "required_fact_count": 1,
+            "cited_fact_count": 1,
+            "unknown_fact_ids": [],
+            "coverage_status": "passed",
+        },
+    )
+    ops = AgentWorkflowOps(
+        classify_query=lambda *_args, **_kwargs: None,
+        run_self_correction=lambda *_args, **_kwargs: ([], 0),
+        generate_answer=lambda *_args, **_kwargs: None,
+        evaluate_completeness=lambda *_args, **_kwargs: True,
+        comprehensive_search=lambda *_args, **_kwargs: [],
+        extract_claims=lambda *_args, **_kwargs: calls.append("extract"),
+        verify_claims=lambda *_args, **_kwargs: None,
+    )
+
+    update = _verify_answer_node(
+        {
+            "ops": ops,
+            "query": "q",
+            "qa_result": QAResult(answer="eGFR < 30 时禁用二甲双胍。[fact:f_1]", evidence_contract=contract),
+            "trace": trace,
+            "memory": [],
+            "budget": BudgetTracker(max_llm_calls=0),
+        }
+    )
+
+    assert calls == []
+    assert trace.verification_step.status == "passed"
+    assert trace.verification_step.claims_supported == 1
+    assert update["qa_result"].answer_status == "verified"
 
 def test_verify_answer_strips_fact_markers_before_claim_extraction():
     captured = []

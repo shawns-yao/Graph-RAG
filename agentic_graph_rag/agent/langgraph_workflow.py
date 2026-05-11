@@ -1537,6 +1537,27 @@ def _strip_fact_markers(answer: str) -> str:
     return _FACT_MARKER_RE.sub("", answer or "").strip()
 
 
+def _contract_citation_verification(
+    qa_result: QAResult,
+    *,
+    duration_ms: int,
+) -> ClaimVerificationStep | None:
+    contract = qa_result.evidence_contract
+    if contract is None or not contract.facts:
+        return None
+    coverage = contract.citation_coverage or {}
+    if coverage.get("coverage_status") != "passed":
+        return None
+    cited_count = int(coverage.get("cited_fact_count") or 0)
+    if cited_count <= 0:
+        return None
+    return ClaimVerificationStep(
+        claims_total=cited_count,
+        claims_supported=cited_count,
+        duration_ms=duration_ms,
+        status="passed",
+    )
+
 def _verify_answer_node(state: AgentWorkflowState) -> dict[str, Any]:
     """Run Chain-of-Verification claim checking against the knowledge graph.
 
@@ -1549,6 +1570,30 @@ def _verify_answer_node(state: AgentWorkflowState) -> dict[str, Any]:
     ops = state["ops"]
     qa_result = state["qa_result"]
 
+    citation_verification = _contract_citation_verification(
+        qa_result,
+        duration_ms=int((time.perf_counter() - started) * 1000),
+    )
+    if citation_verification is not None:
+        state["trace"].verification_step = citation_verification
+        updated_qa = qa_result.model_copy(
+            update={"answer_status": "verified", "verification_status": citation_verification.status}
+        )
+        if state["trace"].generator_step is not None:
+            state["trace"].generator_step.answer_status = updated_qa.answer_status
+            state["trace"].generator_step.verification_status = updated_qa.verification_status
+        memory = _append_memory_entry(
+            state,
+            stage="verify",
+            message="contract citations verified; claim extraction skipped",
+            metadata={
+                "claims_total": citation_verification.claims_total,
+                "claims_supported": citation_verification.claims_supported,
+                "verification_status": citation_verification.status,
+                "answer_status_after": updated_qa.answer_status,
+            },
+        )
+        return {"qa_result": updated_qa, "memory": memory}
     # Defensive: verification is only wired when both callbacks are provided.
     if ops.extract_claims is None or ops.verify_claims is None:
         return {}
