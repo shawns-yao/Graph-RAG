@@ -739,6 +739,18 @@ core numeric contradiction + 新证据 regenerate
 supplemental unsupported 不 regenerate
 ```
 
+## 实现状态
+
+### P4 Router Length Rule De-Tooling
+
+```text
+status: completed
+completed_at: 2026-05-11
+commit: b8901e3 De-tool router length rules
+scope: 移除 short query -> vector_search 和 long query -> comprehensive_search 的长度硬规则。
+verification: tests/test_router_de_tooling.py and packages/rag-core/tests/test_langgraph_status.py passed.
+```
+
 ## 明确不做
 
 P1 阶段不做：
