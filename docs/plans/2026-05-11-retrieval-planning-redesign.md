@@ -603,6 +603,11 @@ P6 Regenerate Gate - New Evidence Required:
   status: completed
   completed_at: 2026-05-11
   commit: 604b4d2 Gate verification regeneration on new evidence
+
+Claim Role Extraction + Fallback:
+  status: completed
+  completed_at: 2026-05-11
+  commit: bca1b70 Add claim role extraction fallback
 ```
 
 ## 落地顺序
