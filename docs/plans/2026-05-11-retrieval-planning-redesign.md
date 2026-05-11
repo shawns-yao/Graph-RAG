@@ -578,6 +578,11 @@ Verification Correction Planner:
   status: completed
   completed_at: 2026-05-11
   commit: 324dca2 Add verification correction planner
+
+P1 Query Signal Extractor:
+  status: completed
+  completed_at: 2026-05-11
+  commit: f61fbdb Add query signal extraction
 ```
 
 ## 落地顺序
