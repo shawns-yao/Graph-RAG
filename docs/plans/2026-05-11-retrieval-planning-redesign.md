@@ -817,6 +817,17 @@ behavior: _hard_rule_decision 改为 _intent_override_decision；router_method �
 verification: 91 focused regression tests passed; ruff passed; Hard rule/hard_rule/test_router_de_tooling scan returned no code hits.
 ```
 
+### P5 Rule-First Self-Correction Removal
+
+```text
+status: completed
+completed_at: 2026-05-11
+commit: e0ec90e Remove rule-first retry preferences
+scope: 删除 retrieval_agent.py::_rule_first_tool_preferences 旧 query-shape retry 入口。
+behavior: self-correction 不再根据 reflection.query_used 的 relation keyword 或 failure_type 独立拼装 graph/lightweight 工具；下一步工具由 gap retry plan、query_type hints、reflection preferred tools 和受控 fallback 负责。
+verification: 91 focused regression tests passed; ruff passed; _rule_first_tool_preferences / RELATION_QUERY_KEYWORDS residual scan returned no hits in retrieval_agent.
+```
+
 ## 明确不做
 
 P1 阶段不做：
