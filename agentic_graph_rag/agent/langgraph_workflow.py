@@ -12,6 +12,7 @@ from typing import Any, Callable, TypedDict
 from langgraph.graph import END, START, StateGraph
 from rag_core.config import get_settings
 from rag_core.models import (
+    ClaimVerificationStep,
     EscalationStep,
     GeneratorStep,
     PipelineTrace,
@@ -27,6 +28,7 @@ from rag_core.models import (
 )
 from rag_core.reflector import resolve_reflection_verdict
 
+from agentic_graph_rag.agent.budget import BudgetTracker, LLMBudgetExceeded
 from agentic_graph_rag.agent.correction_planner import (
     CorrectionGap,
     CorrectionPlan,
@@ -274,6 +276,29 @@ def _merge_initial_retrieval_outputs(
             target_trace.escalation_steps.extend(tool_trace.escalation_steps)
 
     return results, retries, memory, reflections
+
+
+def _start_llm_call_or_skip(state: AgentWorkflowState, operation: str) -> tuple[bool, list[WorkflowMemoryEntry]]:
+    budget = state.get("budget")
+    if budget is None:
+        return True, list(state.get("memory", []))
+    try:
+        budget.start_llm_call(operation)
+    except LLMBudgetExceeded as exc:
+        memory = _append_memory_entry(
+            state,
+            stage="budget",
+            message=str(exc),
+            metadata=budget.snapshot(),
+        )
+        return False, memory
+    memory = _append_memory_entry(
+        state,
+        stage="budget",
+        message=f"started LLM call: {operation}",
+        metadata=budget.snapshot(),
+    )
+    return True, memory
 
 
 def _record_reflection_trace(
@@ -1233,6 +1258,7 @@ class AgentWorkflowState(TypedDict, total=False):
     verification_retry_attempt: int
     correction_gaps: list[CorrectionGap]
     correction_plan: CorrectionPlan
+    budget: BudgetTracker
 
 
 def _route_query(state: AgentWorkflowState) -> dict[str, Any]:
@@ -1376,6 +1402,18 @@ def _generate_answer_node(state: AgentWorkflowState) -> dict[str, Any]:
     reflection_verdict = (
         resolve_reflection_verdict(last_reflection) if last_reflection is not None else ""
     )
+    can_start, budget_memory = _start_llm_call_or_skip(state, "generate_answer")
+    if not can_start:
+        qa_result = QAResult(
+            answer="I don't have enough remaining LLM budget to generate an answer.",
+            sources=state.get("results", []),
+            answer_status="partial",
+            retrieval_status="partial" if state.get("results") else "empty",
+            verification_status="skipped",
+            query=state["query"],
+        )
+        return {"qa_result": qa_result, "memory": budget_memory}
+    state["memory"] = budget_memory
     qa_result = state["ops"].generate_answer(
         state["query"],
         state["results"],
@@ -1531,6 +1569,22 @@ def _verify_answer_node(state: AgentWorkflowState) -> dict[str, Any]:
     if ops.extract_claims is None or ops.verify_claims is None:
         return {}
 
+    can_start, budget_memory = _start_llm_call_or_skip(state, "claim_extraction")
+    if not can_start:
+        verification = ClaimVerificationStep(
+            claims_total=0,
+            claims_supported=0,
+            skipped_reason="llm_budget_exhausted",
+            duration_ms=int((time.perf_counter() - started) * 1000),
+            status="skipped",
+        )
+        state["trace"].verification_step = verification
+        updated_qa = qa_result.model_copy(update={"verification_status": verification.status})
+        if state["trace"].generator_step is not None:
+            state["trace"].generator_step.verification_status = verification.status
+        return {"qa_result": updated_qa, "memory": budget_memory}
+    state["memory"] = budget_memory
+
     extraction = ops.extract_claims(
         qa_result.answer,
         query=state["query"],
@@ -1539,7 +1593,6 @@ def _verify_answer_node(state: AgentWorkflowState) -> dict[str, Any]:
     claims = getattr(extraction, "claims", [])
 
     if not claims:
-        from rag_core.models import ClaimVerificationStep
         verification = ClaimVerificationStep(
             claims_total=0,
             claims_supported=0,
@@ -1673,6 +1726,11 @@ def _plan_correction_node(state: AgentWorkflowState) -> dict[str, Any]:
     gaps = list(state.get("correction_gaps", []))
     if verification is None or not gaps or ops.plan_correction is None:
         return {}
+
+    can_start, budget_memory = _start_llm_call_or_skip(state, "correction_planner")
+    if not can_start:
+        return {"memory": budget_memory}
+    state["memory"] = budget_memory
 
     plan = ops.plan_correction(
         query=state["query"],
@@ -1953,6 +2011,7 @@ def run_agent_workflow(
         "total_retries": 0,
         "verification_retry_attempt": 0,
         "correction_gaps": [],
+        "budget": BudgetTracker(max_llm_calls=4),
         "reflection_history": list(reflection_history_seed or []),
         "memory": list(workflow_memory_seed or []),
     }

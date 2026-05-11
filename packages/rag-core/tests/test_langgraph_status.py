@@ -11,6 +11,7 @@ from rag_core.models import (
     WorkflowMemoryEntry,
 )
 
+from agentic_graph_rag.agent.budget import BudgetTracker
 from agentic_graph_rag.agent.correction_planner import CorrectionGap, CorrectionPlan
 from agentic_graph_rag.agent.langgraph_workflow import (
     AgentWorkflowOps,
@@ -19,8 +20,11 @@ from agentic_graph_rag.agent.langgraph_workflow import (
     _answer_has_verifiable_claims,
     _claim_focus_query,
     _execute_correction_tool_node,
+    _generate_answer_node,
     _initial_tool_plan,
+    _plan_correction_node,
     _retrieve_evidence,
+    _verify_answer_node,
 )
 
 
@@ -316,6 +320,97 @@ def test_retrieve_evidence_runs_companion_tool_and_merges_results():
         "bm25_search",
     ]
     assert [step.tool_name for step in trace.tool_steps] == ["vector_search", "bm25_search"]
+
+
+def test_generate_answer_skips_when_llm_budget_exhausted():
+    calls = []
+    ops = AgentWorkflowOps(
+        classify_query=lambda *_args, **_kwargs: None,
+        is_cross_language_global=lambda *_args, **_kwargs: False,
+        run_self_correction=lambda *_args, **_kwargs: ([], 0),
+        generate_answer=lambda *_args, **_kwargs: calls.append("generate"),
+        evaluate_completeness=lambda *_args, **_kwargs: True,
+        comprehensive_search=lambda *_args, **_kwargs: [],
+    )
+    budget = BudgetTracker(max_llm_calls=0)
+
+    update = _generate_answer_node(
+        {
+            "ops": ops,
+            "query": "q",
+            "results": [SearchResult(chunk=Chunk(id="c1", content="evidence"), score=1.0)],
+            "openai_client": object(),
+            "reflection_history": [],
+            "memory": [],
+            "budget": budget,
+        }
+    )
+
+    assert calls == []
+    assert update["qa_result"].answer_status == "partial"
+    assert update["memory"][-1].stage == "budget"
+
+
+def test_verify_answer_skips_claim_extraction_when_llm_budget_exhausted():
+    calls = []
+    trace = PipelineTrace(trace_id="tr_test", timestamp="2026-05-11T00:00:00Z", query="q")
+    ops = AgentWorkflowOps(
+        classify_query=lambda *_args, **_kwargs: None,
+        is_cross_language_global=lambda *_args, **_kwargs: False,
+        run_self_correction=lambda *_args, **_kwargs: ([], 0),
+        generate_answer=lambda *_args, **_kwargs: None,
+        evaluate_completeness=lambda *_args, **_kwargs: True,
+        comprehensive_search=lambda *_args, **_kwargs: [],
+        extract_claims=lambda *_args, **_kwargs: calls.append("extract"),
+        verify_claims=lambda *_args, **_kwargs: None,
+    )
+
+    update = _verify_answer_node(
+        {
+            "ops": ops,
+            "query": "q",
+            "qa_result": QAResult(answer="FEV1/FVC < 0.70。"),
+            "trace": trace,
+            "memory": [],
+            "budget": BudgetTracker(max_llm_calls=0),
+        }
+    )
+
+    assert calls == []
+    assert trace.verification_step.skipped_reason == "llm_budget_exhausted"
+    assert update["qa_result"].verification_status == "skipped"
+
+
+def test_plan_correction_skips_when_llm_budget_exhausted():
+    calls = []
+    trace = PipelineTrace(trace_id="tr_test", timestamp="2026-05-11T00:00:00Z", query="q")
+    trace.verification_step = ClaimVerificationStep(status="retry_required")
+    ops = AgentWorkflowOps(
+        classify_query=lambda *_args, **_kwargs: None,
+        is_cross_language_global=lambda *_args, **_kwargs: False,
+        run_self_correction=lambda *_args, **_kwargs: ([], 0),
+        generate_answer=lambda *_args, **_kwargs: None,
+        evaluate_completeness=lambda *_args, **_kwargs: True,
+        comprehensive_search=lambda *_args, **_kwargs: [],
+        plan_correction=lambda *_args, **_kwargs: calls.append("plan"),
+    )
+
+    update = _plan_correction_node(
+        {
+            "ops": ops,
+            "query": "q",
+            "qa_result": QAResult(answer="answer"),
+            "trace": trace,
+            "openai_client": object(),
+            "correction_gaps": [CorrectionGap(gap_type="missing_entity", claim_text="claim")],
+            "memory": [],
+            "budget": BudgetTracker(max_llm_calls=0),
+        }
+    )
+
+    assert calls == []
+    assert "correction_plan" not in update
+    assert update["memory"][-1].stage == "budget"
 
 
 def test_claim_focus_query_deduplicates_structured_terms():
