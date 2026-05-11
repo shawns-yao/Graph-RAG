@@ -148,6 +148,9 @@ def run_one(question: dict[str, str]) -> dict[str, Any]:
         )
         trace_dump = qa.trace.model_dump(mode="json") if qa.trace else {}
         verification = trace_dump.get("verification_step") or {}
+        generator = trace_dump.get("generator_step") or {}
+        contract = generator.get("evidence_contract") or {}
+        citation_coverage = contract.get("citation_coverage") or {}
         row = {
             **question,
             "status": "ok",
@@ -158,6 +161,9 @@ def run_one(question: dict[str, str]) -> dict[str, Any]:
             "verification_status": qa.verification_status,
             "source_count": len(qa.sources),
             "retries": qa.retries,
+            "generation_duration_ms": generator.get("duration_ms", 0),
+            "evidence_contract_fact_count": len(contract.get("facts") or []),
+            "citation_coverage": citation_coverage,
             "signal_extractor_output": _anchor_summary(question["query"]),
             "initial_tools": _initial_tools(trace_dump),
             "retrieval_hits_by_provider": _provider_hits(trace_dump),
@@ -174,8 +180,7 @@ def run_one(question: dict[str, str]) -> dict[str, Any]:
             ],
             "retry_tools": _retry_tools(trace_dump),
             "claim_roles": _claim_role_summary(trace_dump),
-            "regenerated": qa.retries > 0
-            and qa.verification_status in {"passed", "partial", "retry_required"},
+            "regenerated": qa.retries > 0 and qa.verification_status in {"passed", "partial", "retry_required"},
             "verification": {
                 "status": verification.get("status"),
                 "claims_total": verification.get("claims_total", 0),

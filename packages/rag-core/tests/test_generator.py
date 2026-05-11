@@ -53,9 +53,7 @@ class TestGenerateAnswer:
 
     def test_generates_answer_from_chunks(self):
         client = MagicMock()
-        client.chat.completions.create.return_value = _mock_openai_response(
-            "The answer based on Chunk 1 is X."
-        )
+        client.chat.completions.create.return_value = _mock_openai_response("The answer based on Chunk 1 is X.")
 
         results = [_make_result("relevant content")]
         qa = generate_answer("What is X?", results, openai_client=client)
@@ -149,9 +147,7 @@ class TestGenerateAnswer:
         assert len(qa.sources) == 4
 
     @patch("rag_core.generator.get_settings")
-    def test_phrase_anchor_orders_subject_evidence_before_generic_threshold_chunks(
-        self, mock_settings
-    ):
+    def test_phrase_anchor_orders_subject_evidence_before_generic_threshold_chunks(self, mock_settings):
         cfg = MagicMock()
         cfg.retrieval.prompt_max_chunks = 2
         cfg.retrieval.prompt_max_chars = 10_000
@@ -329,9 +325,7 @@ class TestGenerateAnswer:
         mock_settings.return_value = cfg
 
         mock_client = MagicMock()
-        mock_client.chat.completions.create.return_value = _mock_openai_response(
-            "answer"
-        )
+        mock_client.chat.completions.create.return_value = _mock_openai_response("answer")
         mock_make_client.return_value = mock_client
 
         qa = generate_answer("q", [_make_result()])
@@ -342,9 +336,7 @@ class TestGenerateAnswer:
 class TestStreamAnswer:
     def test_streams_delta_tokens_from_llm(self):
         client = MagicMock()
-        client.chat.completions.create.return_value = _mock_stream_response(
-            ["Hello", " ", "world"]
-        )
+        client.chat.completions.create.return_value = _mock_stream_response(["Hello", " ", "world"])
 
         parts = list(stream_answer("q", [_make_result("ctx")], openai_client=client))
 
@@ -387,3 +379,46 @@ def test_phrase_anchor_balances_two_entity_relation_evidence():
         "ACEI 可导致干咳，需要停用",
         "ARB 干咳风险较低，可作为替代",
     ]
+
+
+def test_build_evidence_contract_extracts_graph_and_numeric_facts():
+    from rag_core.generator import build_evidence_contract
+
+    results = [
+        _make_graph_result("- ACEI --不良反应--> 干咳"),
+        _make_scored_result("噻托溴铵 --剂量--> 18 μg每日1次", 0.9),
+    ]
+
+    contract = build_evidence_contract(results)
+
+    assert len(contract.facts) >= 2
+    assert any("ACEI --不良反应--> 干咳" in fact.text for fact in contract.facts)
+    assert any("18 μg" in fact.text for fact in contract.facts)
+    assert contract.completeness_status == "complete"
+
+
+def test_prompt_includes_evidence_contract_and_fact_citation_instruction():
+    client = MagicMock()
+    client.chat.completions.create.return_value = _mock_openai_response("answer [fact:f_1_1_c1]")
+    results = [_make_scored_result("噻托溴铵 --剂量--> 18 μg每日1次", 0.9)]
+    results[0].chunk.id = "c1"
+
+    qa = generate_answer("噻托溴铵剂量是多少？", results, openai_client=client)
+
+    user_msg = client.chat.completions.create.call_args[1]["messages"][1]["content"]
+    assert "Evidence Contract:" in user_msg
+    assert "[fact:" in user_msg
+    assert "Attach [fact:<id>]" in user_msg
+    assert qa.evidence_contract is not None
+    assert qa.evidence_contract.facts
+    assert qa.evidence_contract.citation_coverage["coverage_status"] == "passed"
+
+
+def test_contract_citation_check_reports_unknown_fact_ids():
+    from rag_core.generator import build_evidence_contract, check_contract_citations
+
+    contract = build_evidence_contract([_make_scored_result("FEV1/FVC < 0.70", 0.9)])
+    checked = check_contract_citations("answer [fact:not_real]", contract)
+
+    assert checked.citation_coverage["coverage_status"] == "partial"
+    assert checked.citation_coverage["unknown_fact_ids"] == ["not_real"]

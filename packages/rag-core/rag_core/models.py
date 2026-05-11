@@ -11,6 +11,7 @@ from pydantic import BaseModel, Field
 # Ingestion models (from RAG 2.0)
 # ---------------------------------------------------------------------------
 
+
 class DocumentBlock(BaseModel):
     """Structured document block preserved from parsed source content."""
 
@@ -41,6 +42,7 @@ class Chunk(BaseModel):
 # ---------------------------------------------------------------------------
 # Knowledge Graph models (from TKB)
 # ---------------------------------------------------------------------------
+
 
 class Entity(BaseModel):
     """An entity extracted from text.
@@ -86,6 +88,7 @@ class TemporalEvent(BaseModel):
 # Graph RAG models (NEW — KET-RAG / HippoRAG 2)
 # ---------------------------------------------------------------------------
 
+
 class PhraseNode(BaseModel):
     """Entity-level node for graph navigation (HippoRAG 2).
 
@@ -127,6 +130,7 @@ class GraphContext(BaseModel):
 # Router + retrieval models (NEW)
 # ---------------------------------------------------------------------------
 
+
 class QueryType(str, Enum):
     """Query complexity categories for the agentic router."""
 
@@ -165,6 +169,7 @@ class SearchResult(BaseModel):
 # ---------------------------------------------------------------------------
 # Provenance models (v6 — pipeline trace)
 # ---------------------------------------------------------------------------
+
 
 class ProviderDiagnostic(BaseModel):
     """Provider-level retrieval diagnostics for a tool execution."""
@@ -268,6 +273,30 @@ ClaimVerificationLevel = Literal["correct", "possible_correct", "incorrect"]
 ClaimRole = Literal["core", "supporting", "supplemental"]
 
 
+FactConfidence = Literal["hard", "span", "weak"]
+CompletenessStatus = Literal["complete", "partial", "unknown"]
+
+
+class EvidenceFact(BaseModel):
+    """Atomic fact candidate assembled before answer generation."""
+
+    fact_id: str
+    text: str
+    evidence_id: str = ""
+    source: str = ""
+    confidence: FactConfidence = "span"
+
+
+class EvidenceContract(BaseModel):
+    """Fact-level constraints passed into generation."""
+
+    facts: list[EvidenceFact] = Field(default_factory=list)
+    completeness_status: CompletenessStatus = "unknown"
+    completeness_reason: str = ""
+    missing_categories: list[str] = Field(default_factory=list)
+    citation_coverage: dict[str, Any] = Field(default_factory=dict)
+
+
 class GeneratorStep(BaseModel):
     """Answer generation metadata.
 
@@ -283,6 +312,7 @@ class GeneratorStep(BaseModel):
     verification_status: VerificationStatus = "skipped"
     completeness_check: bool | None = None
     duration_ms: int = 0
+    evidence_contract: EvidenceContract | None = None
 
 
 class VerifiedClaim(BaseModel):
@@ -354,4 +384,5 @@ class QAResult(BaseModel):
     graph_context: GraphContext | None = None
     prompt_tokens: int = 0
     completion_tokens: int = 0
+    evidence_contract: EvidenceContract | None = None
     trace: PipelineTrace | None = None  # v6 provenance

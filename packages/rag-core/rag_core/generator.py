@@ -14,7 +14,7 @@ from typing import TYPE_CHECKING
 
 from agentic_graph_rag.agent.query_signals import extract_query_signals
 from rag_core.config import get_settings, make_openai_client
-from rag_core.models import QAResult, SearchResult
+from rag_core.models import EvidenceContract, EvidenceFact, QAResult, SearchResult
 
 if TYPE_CHECKING:
     from openai import OpenAI
@@ -24,6 +24,13 @@ logger = logging.getLogger(__name__)
 _ENUM_RE = None
 _GRAPH_SECTION_SPLIT_RE = re.compile(r"\n\s*\n(?=(?:Graph paths:|Entities:|Evidence:))")
 _ACRONYM_ANCHOR_RE = re.compile(r"\b[A-Z][A-Z0-9]{1,}\b")
+_NUMERIC_FACT_RE = re.compile(
+    r"(?:[A-Za-z][A-Za-z0-9/_.-]*\s*(?:<=|>=|<|>|≤|≥|=)\s*\d+(?:\.\d+)?)"
+    r"|(?:\d+(?:\.\d+)?\s*(?:μg|ug|mg|g|ml|mL|%|次|/μL|/uL|mL/min|ml/min))"
+    r"|(?:每日\s*\d+\s*次|每天\s*\d+\s*次)"
+)
+_GRAPH_FACT_LINE_RE = re.compile(r"^\s*[-*]?\s*(?P<fact>.+?\s--[^\n]+?-->\s.+?)\s*$")
+_SENTENCE_SPLIT_RE = re.compile(r"(?<=[。.!?？])\s*|\n+")
 _PHRASE_ANCHOR_CLEAN_RE = re.compile(
     r"^(?:时|当|如果|若|患者|的患者|对于|关于|有关|在|对|和|与|及|、)+|"
     r"(?:怎么处理|如何处理|怎么办|是否正确|是否|可以用|需要注意|有哪些|是什么|是多少|吗|呢)$"
@@ -35,13 +42,14 @@ def _is_enumeration_query(query: str) -> bool:
     global _ENUM_RE  # noqa: PLW0603
     if _ENUM_RE is None:
         import re
+
         _ENUM_RE = re.compile(
-            r'\b('
-            r'все\b|всех\b|всё\b|перечисл|опиши все|резюмируй все|обзор\b'
-            r'|list all|describe all|summarize all|overview|every\b'
-            r'|все компоненты|все методы|все слои|все решения|семь\b|seven\b'
-            r'|all components|all layers|all methods|all decisions'
-            r')\b',
+            r"\b("
+            r"все\b|всех\b|всё\b|перечисл|опиши все|резюмируй все|обзор\b"
+            r"|list all|describe all|summarize all|overview|every\b"
+            r"|все компоненты|все методы|все слои|все решения|семь\b|seven\b"
+            r"|all components|all layers|all methods|all decisions"
+            r")\b",
             re.IGNORECASE,
         )
     return bool(_ENUM_RE.search(query))
@@ -192,11 +200,7 @@ def _compress_graph_result(result: SearchResult, max_chars: int) -> SearchResult
     if len(content) <= max_chars:
         return result
 
-    sections = [
-        section.strip()
-        for section in _GRAPH_SECTION_SPLIT_RE.split(content)
-        if section.strip()
-    ]
+    sections = [section.strip() for section in _GRAPH_SECTION_SPLIT_RE.split(content) if section.strip()]
     if not sections:
         shortened = content[:max_chars].strip()
         return result.model_copy(
@@ -211,7 +215,7 @@ def _compress_graph_result(result: SearchResult, max_chars: int) -> SearchResult
         elif section.startswith("Entities:"):
             section = "\n".join(section.splitlines()[:7]).strip()
         elif section.startswith("Evidence:"):
-            evidence_body = section[len("Evidence:"):].strip()
+            evidence_body = section[len("Evidence:") :].strip()
             section = ("Evidence:\n" + evidence_body[: max_chars // 2]).strip()
 
         projected = total_chars + len(section) + (2 if kept else 0)
@@ -251,6 +255,84 @@ def _compress_results_for_generation(results: list[SearchResult]) -> list[Search
         else:
             compressed.append(result)
     return compressed
+
+
+def _evidence_id(result: SearchResult, index: int) -> str:
+    return result.chunk.id or f"chunk_{index}"
+
+
+def _fact_id(result: SearchResult, index: int, fact_index: int) -> str:
+    base = _evidence_id(result, index).replace(" ", "_")[:24]
+    return f"f_{index}_{fact_index}_{base}"
+
+
+def _sentences(text: str) -> list[str]:
+    return [part.strip() for part in _SENTENCE_SPLIT_RE.split(text or "") if part.strip()]
+
+
+def _fact_text_candidates(result: SearchResult) -> list[tuple[str, str]]:
+    content = result.chunk.enriched_content or result.chunk.content or ""
+    candidates: list[tuple[str, str]] = []
+    for line in content.splitlines():
+        match = _GRAPH_FACT_LINE_RE.match(line)
+        if match:
+            candidates.append((match.group("fact").strip(" -"), "hard"))
+    for sentence in _sentences(content):
+        if _NUMERIC_FACT_RE.search(sentence):
+            candidates.append((sentence, "span"))
+    if not candidates and result.source == "graph":
+        for sentence in _sentences(content)[:3]:
+            candidates.append((sentence, "hard"))
+    return candidates
+
+
+def build_evidence_contract(results: list[SearchResult]) -> EvidenceContract:
+    """Build lightweight pre-generation facts without LLM extraction."""
+    facts: list[EvidenceFact] = []
+    seen: set[str] = set()
+    for result_index, result in enumerate(results, start=1):
+        for fact_index, (text, confidence) in enumerate(_fact_text_candidates(result), start=1):
+            normalized = " ".join(text.split())
+            if not normalized or normalized.casefold() in seen:
+                continue
+            seen.add(normalized.casefold())
+            facts.append(
+                EvidenceFact(
+                    fact_id=_fact_id(result, result_index, fact_index),
+                    text=normalized[:500],
+                    evidence_id=_evidence_id(result, result_index),
+                    source=result.source,
+                    confidence="hard" if result.source == "graph" or confidence == "hard" else "span",
+                )
+            )
+    status = "complete" if facts else "unknown"
+    reason = "contract built from graph/numeric evidence" if facts else "no structured fact candidates"
+    return EvidenceContract(facts=facts, completeness_status=status, completeness_reason=reason)
+
+
+def check_contract_citations(answer: str, contract: EvidenceContract) -> EvidenceContract:
+    allowed = {fact.fact_id for fact in contract.facts}
+    cited = set(re.findall(r"\[fact:([^\]]+)\]", answer or ""))
+    unknown = sorted(cited - allowed)
+    covered = sorted(cited & allowed)
+    coverage = {
+        "required_fact_count": len(allowed),
+        "cited_fact_count": len(covered),
+        "unknown_fact_ids": unknown,
+        "coverage_status": "passed" if cited and not unknown else "partial",
+    }
+    return contract.model_copy(update={"citation_coverage": coverage})
+
+
+def _build_contract_context(contract: EvidenceContract) -> str:
+    if not contract.facts:
+        return "No structured facts were extracted. Use chunk evidence cautiously."
+    lines = []
+    for fact in contract.facts[:20]:
+        lines.append(
+            f"[fact:{fact.fact_id}] ({fact.confidence}, {fact.source}, evidence_id={fact.evidence_id}) {fact.text}"
+        )
+    return "\n".join(lines)
 
 
 def derive_retrieval_status(results: list[SearchResult]) -> str:
@@ -306,14 +388,19 @@ def _build_system_prompt(query: str) -> str:
     )
 
 
-def _build_messages(query: str, results: list[SearchResult]) -> list[dict[str, str]]:
+def _build_messages(
+    query: str, results: list[SearchResult], contract: EvidenceContract | None = None
+) -> list[dict[str, str]]:
     context = _build_context(results)
     system_prompt = _build_system_prompt(query)
+    contract_context = _build_contract_context(contract or EvidenceContract())
     user_prompt = (
         f"Query: {query}\n\n"
+        f"Evidence Contract:\n{contract_context}\n\n"
         f"Context:\n{context}\n\n"
-        "Answer the query directly. Do not include facts that are not needed to "
-        "answer the exact question."
+        "Answer the query directly. Use Evidence Contract facts as strict constraints. "
+        "Attach [fact:<id>] after each factual sentence when a matching fact exists. "
+        "Do not include facts that are not needed to answer the exact question."
     )
     return [
         {"role": "system", "content": system_prompt},
@@ -359,10 +446,9 @@ def generate_answer(
             query=query,
         )
 
-    selected_results = _compress_results_for_generation(
-        _limit_results_for_generation(query, results)
-    )
-    messages = _build_messages(query, selected_results)
+    selected_results = _compress_results_for_generation(_limit_results_for_generation(query, results))
+    evidence_contract = build_evidence_contract(selected_results)
+    messages = _build_messages(query, selected_results, evidence_contract)
     prompt_chars = len(messages[1]["content"])
     evidence_chars = sum(len(result.chunk.enriched_content) for result in selected_results)
 
@@ -384,6 +470,7 @@ def generate_answer(
         elapsed = time.perf_counter() - started
 
         answer_text = response.choices[0].message.content or ""
+        evidence_contract = check_contract_citations(answer_text, evidence_contract)
         prompt_tokens = getattr(response.usage, "prompt_tokens", 0) or 0
         completion_tokens = getattr(response.usage, "completion_tokens", 0) or 0
         logger.info(
@@ -408,6 +495,7 @@ def generate_answer(
             query=query,
             prompt_tokens=prompt_tokens,
             completion_tokens=completion_tokens,
+            evidence_contract=evidence_contract,
         )
 
     except Exception as e:
@@ -437,7 +525,8 @@ def stream_answer(
         return iter(())
 
     selected_results = _limit_results_for_generation(query, results)
-    messages = _build_messages(query, selected_results)
+    evidence_contract = build_evidence_contract(selected_results)
+    messages = _build_messages(query, selected_results, evidence_contract)
     logger.info("Streaming answer for query: %s", query)
 
     def _stream() -> Iterator[str]:
