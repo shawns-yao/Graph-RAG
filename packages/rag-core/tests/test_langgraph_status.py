@@ -28,6 +28,7 @@ from agentic_graph_rag.agent.langgraph_workflow import (
     _route_query,
     _verify_answer_node,
 )
+from agentic_graph_rag.agent.need_resolver import NeedResolution
 
 
 def test_answer_guard_timeout_does_not_invalidate_complete_answer():
@@ -370,6 +371,16 @@ def test_initial_tool_plan_adds_graph_companion_for_relation_intent():
     ]
 
 
+def test_initial_tool_plan_adds_graph_companion_for_resolved_need():
+    decision = RouterDecision(query_type=QueryType.SIMPLE, suggested_tool="vector_search")
+
+    assert _initial_tool_plan(
+        "ACEI 导致干咳时应该如何处理？",
+        decision,
+        ("semantic_passage", "graph_relation"),
+    ) == ["vector_search", "cypher_traverse"]
+
+
 def test_initial_tool_plan_adds_bm25_companion_for_threshold_relation_query():
     decision = RouterDecision(query_type=QueryType.SIMPLE, suggested_tool="vector_search")
 
@@ -587,3 +598,41 @@ def test_claim_focus_query_deduplicates_structured_terms():
     )
 
     assert _claim_focus_query(claim) == "达比加群在eGFR<30时禁用 达比加群 eGFR<30 禁用"
+
+
+def test_route_query_uses_need_resolver_for_graph_companion():
+    decision = RouterDecision(query_type=QueryType.SIMPLE, suggested_tool="vector_search")
+    ops = AgentWorkflowOps(
+        classify_query=lambda *_args, **_kwargs: decision,
+        run_self_correction=lambda *_args, **_kwargs: ([], 0),
+        generate_answer=lambda *_args, **_kwargs: None,
+        evaluate_completeness=lambda *_args, **_kwargs: True,
+        comprehensive_search=lambda *_args, **_kwargs: [],
+        resolve_retrieval_needs=lambda **_kwargs: NeedResolution(
+            ("semantic_passage", "graph_relation"),
+            "relation evidence needed",
+        ),
+    )
+    trace = PipelineTrace(
+        trace_id="tr_test",
+        timestamp="2026-05-11T00:00:00Z",
+        query="ACEI 导致干咳时应该如何处理？",
+    )
+
+    update = _route_query(
+        {
+            "ops": ops,
+            "query": "ACEI 导致干咳时应该如何处理？",
+            "openai_client": object(),
+            "use_llm_router": False,
+            "trace": trace,
+            "memory": [],
+            "budget": BudgetTracker(max_llm_calls=1),
+        }
+    )
+
+    assert update["retrieval_plan"].initial_tools == ("vector_search", "cypher_traverse")
+    assert update["memory"][-1].metadata["retrieval_needs"] == [
+        "semantic_passage",
+        "graph_relation",
+    ]

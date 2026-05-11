@@ -34,6 +34,10 @@ from agentic_graph_rag.agent.correction_planner import (
     CorrectionPlan,
     build_gap_report,
 )
+from agentic_graph_rag.agent.need_resolver import (
+    NeedResolution,
+    RetrievalNeed,
+)
 from agentic_graph_rag.agent.query_signals import (
     extract_query_signals,
     has_strong_form_anchor,
@@ -102,6 +106,7 @@ class RetrievalPlan:
     primary_tool: str
     initial_tools: tuple[str, ...]
     reason: str = ""
+    retrieval_needs: tuple[RetrievalNeed, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -231,10 +236,34 @@ def _top_evidence_signal(results: list[SearchResult]) -> float:
     return 0.0
 
 
-def _initial_tool_plan(query: str, decision: RouterDecision) -> list[str]:
+def _tools_for_retrieval_needs(needs: tuple[RetrievalNeed, ...]) -> list[str]:
+    tools: list[str] = []
+    need_tool_map: dict[RetrievalNeed, str] = {
+        "semantic_passage": "vector_search",
+        "exact_numeric": "bm25_search",
+        "graph_relation": "cypher_traverse",
+        "broad_recall": "comprehensive_search",
+        "temporal_evidence": "temporal_query",
+    }
+    for need in needs:
+        tool = need_tool_map.get(need)
+        if tool and tool not in tools:
+            tools.append(tool)
+    return tools
+
+
+def _initial_tool_plan(
+    query: str,
+    decision: RouterDecision,
+    retrieval_needs: tuple[RetrievalNeed, ...] = (),
+) -> list[str]:
     """Preserve router's primary tool and add at most one companion channel."""
     tools = [decision.suggested_tool]
     signals = extract_query_signals(query)
+
+    for need_tool in _tools_for_retrieval_needs(retrieval_needs):
+        if need_tool not in tools:
+            tools.append(need_tool)
 
     if (
         decision.query_type in {QueryType.RELATION, QueryType.MULTI_HOP}
@@ -258,13 +287,18 @@ def _initial_tool_plan(query: str, decision: RouterDecision) -> list[str]:
     return planned or [decision.suggested_tool]
 
 
-def _build_retrieval_plan(query: str, decision: RouterDecision) -> RetrievalPlan:
-    initial_tools = tuple(_initial_tool_plan(query, decision))
+def _build_retrieval_plan(
+    query: str,
+    decision: RouterDecision,
+    retrieval_needs: tuple[RetrievalNeed, ...] = (),
+) -> RetrievalPlan:
+    initial_tools = tuple(_initial_tool_plan(query, decision, retrieval_needs))
     primary_tool = initial_tools[0] if initial_tools else decision.suggested_tool
     return RetrievalPlan(
         primary_tool=primary_tool,
         initial_tools=initial_tools,
-        reason="router primary tool with signal-derived companion tools",
+        reason="router primary tool with resolved retrieval needs",
+        retrieval_needs=retrieval_needs,
     )
 
 
@@ -1246,6 +1280,7 @@ class AgentWorkflowOps:
     generate_answer: Callable[..., QAResult]
     evaluate_completeness: Callable[..., bool]
     comprehensive_search: Callable[..., list[SearchResult]]
+    resolve_retrieval_needs: Callable[..., NeedResolution] | None = None
     # CoVe-inspired claim verification (optional; skip when None).
     extract_claims: Callable[..., Any] | None = None
     verify_claims: Callable[..., Any] | None = None
@@ -1265,6 +1300,7 @@ class AgentWorkflowState(TypedDict, total=False):
     settings: Any
     decision: RouterDecision
     retrieval_plan: RetrievalPlan
+    need_resolution: NeedResolution
     results: list[SearchResult]
     retries: int
     qa_result: QAResult
@@ -1286,6 +1322,37 @@ class AgentWorkflowState(TypedDict, total=False):
     budget: BudgetTracker
 
 
+def _resolve_retrieval_needs(state: AgentWorkflowState) -> tuple[NeedResolution, list[WorkflowMemoryEntry]]:
+    signals = extract_query_signals(state["query"])
+    fallback = NeedResolution(("semantic_passage",), "need resolver unavailable")
+    resolver = state["ops"].resolve_retrieval_needs
+    if resolver is None:
+        return fallback, list(state.get("memory", []))
+    can_start, budget_memory = _start_llm_call_or_skip(state, "need_resolver")
+    if not can_start:
+        return fallback, budget_memory
+    try:
+        resolution = resolver(
+            query=state["query"],
+            signals=signals,
+            openai_client=state["openai_client"],
+        )
+    except Exception as exc:
+        resolution = NeedResolution(("semantic_passage",), f"need resolver fallback: {exc}")
+    state_with_budget_memory = dict(state)
+    state_with_budget_memory["memory"] = budget_memory
+    memory = _append_memory_entry(
+        state_with_budget_memory,
+        stage="need_resolver",
+        message="resolved retrieval evidence needs",
+        metadata={
+            "retrieval_needs": list(resolution.retrieval_needs),
+            "reason": resolution.reason,
+        },
+    )
+    return resolution, memory
+
+
 def _route_query(state: AgentWorkflowState) -> dict[str, Any]:
     """Classify the query and record router metadata."""
     started = time.perf_counter()
@@ -1301,9 +1368,16 @@ def _route_query(state: AgentWorkflowState) -> dict[str, Any]:
         decision=decision,
         duration_ms=router_duration_ms,
     )
-    retrieval_plan = _build_retrieval_plan(state["query"], decision)
+    need_resolution, memory = _resolve_retrieval_needs(state)
+    state_with_memory = dict(state)
+    state_with_memory["memory"] = memory
+    retrieval_plan = _build_retrieval_plan(
+        state["query"],
+        decision,
+        need_resolution.retrieval_needs,
+    )
     memory = _append_memory_entry(
-        state,
+        state_with_memory,
         stage="route",
         message=f"router suggested {decision.suggested_tool}; retrieval plan starts {retrieval_plan.primary_tool}",
         metadata={
@@ -1312,10 +1386,12 @@ def _route_query(state: AgentWorkflowState) -> dict[str, Any]:
             "confidence": decision.confidence,
             "primary_tool": retrieval_plan.primary_tool,
             "initial_tools": list(retrieval_plan.initial_tools),
+            "retrieval_needs": list(retrieval_plan.retrieval_needs),
         },
     )
     return {
         "decision": decision,
+        "need_resolution": need_resolution,
         "retrieval_plan": retrieval_plan,
         "router_method": router_method,
         "router_duration_ms": router_duration_ms,
@@ -2055,7 +2131,7 @@ def run_agent_workflow(
         "verification_retry_attempt": 0,
         "correction_gaps": [],
         "correction_added_results": 0,
-        "budget": BudgetTracker(max_llm_calls=4),
+        "budget": BudgetTracker(max_llm_calls=5),
         "reflection_history": list(reflection_history_seed or []),
         "memory": list(workflow_memory_seed or []),
     }

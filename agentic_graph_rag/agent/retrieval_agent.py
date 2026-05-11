@@ -41,6 +41,7 @@ from agentic_graph_rag.agent.langgraph_workflow import (
     run_agent_workflow,
     run_self_correction_workflow,
 )
+from agentic_graph_rag.agent.need_resolver import resolve_retrieval_needs
 from agentic_graph_rag.agent.router import classify_query
 from agentic_graph_rag.agent.tool_registry import TOOL_NAMES
 from agentic_graph_rag.agent.tools import (
@@ -537,6 +538,7 @@ def run(
         generate_answer=generate_answer,
         evaluate_completeness=evaluate_completeness,
         comprehensive_search=comprehensive_search,
+        resolve_retrieval_needs=resolve_retrieval_needs,
         extract_claims=extract_claims,
         verify_claims=_verify_claims_wrapper,
         plan_correction=plan_correction,
@@ -562,6 +564,7 @@ def run(
             generate_answer=generate_answer,
             evaluate_completeness=evaluate_completeness,
             comprehensive_search=comprehensive_search,
+            resolve_retrieval_needs=resolve_retrieval_needs,
             extract_claims=extract_claims,
             verify_claims=_verify_claims_wrapper,
             plan_correction=plan_correction,
