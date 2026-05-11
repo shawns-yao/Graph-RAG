@@ -42,7 +42,6 @@ from agentic_graph_rag.agent.langgraph_workflow import (
     run_self_correction_workflow,
 )
 from agentic_graph_rag.agent.router import classify_query
-from agentic_graph_rag.agent.routing_rules import RELATION_QUERY_KEYWORDS
 from agentic_graph_rag.agent.tool_registry import TOOL_NAMES
 from agentic_graph_rag.agent.tools import (
     bm25_search,
@@ -487,32 +486,6 @@ def _preferred_tools_for_reflection(reflection: ReflectionStep) -> list[str]:
     return ordered
 
 
-def _rule_first_tool_preferences(
-    decision: RouterDecision | None,
-    reflection: ReflectionStep | None,
-) -> list[str]:
-    """Apply deterministic query heuristics before softer reflection hints."""
-    if decision is None or reflection is None:
-        return []
-
-    query = (reflection.query_used or "").strip()
-    lowered_query = query.casefold()
-    tools: list[str] = []
-
-    if any(keyword in lowered_query for keyword in RELATION_QUERY_KEYWORDS):
-        tools.extend(_GRAPH_FIRST_TOOLS)
-
-    failure_type = (reflection.failure_type or "").strip().lower()
-    if failure_type == "relation_missing":
-        tools.extend(_GRAPH_FIRST_TOOLS)
-    if failure_type in {"missing_entity", "no_results"}:
-        tools.extend(_LIGHTWEIGHT_RECALL_TOOLS)
-
-    ordered: list[str] = []
-    _extend_unique(ordered, tools, valid=_VALID_TOOL_NAMES)
-    return ordered
-
-
 def _query_type_tool_preferences(
     decision: RouterDecision | None,
     reflection: ReflectionStep | None,
@@ -603,7 +576,6 @@ def _get_next_tool(
         candidate_tools.extend(_retry_plan_for_reflection(reflection, decision).tools)
         candidate_tools.extend(_query_type_tool_preferences(decision, reflection))
         candidate_tools.extend(_preferred_tools_for_reflection(reflection))
-        candidate_tools.extend(_rule_first_tool_preferences(decision, reflection))
     candidate_tools.extend(_matrix_tool_preferences(current, decision, reflection))
 
     for tool in candidate_tools:
