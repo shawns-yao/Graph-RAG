@@ -20,8 +20,8 @@ TOOL_NAMES: tuple[ToolName, ...] = get_args(ToolName)
 
 DEFAULT_TOOL_BY_QUERY_TYPE: dict[QueryType, str] = {
     QueryType.SIMPLE: "vector_search",
-    QueryType.RELATION: "cypher_traverse",
-    QueryType.MULTI_HOP: "cypher_traverse",
+    QueryType.RELATION: "vector_search",
+    QueryType.MULTI_HOP: "vector_search",
     QueryType.GLOBAL: "comprehensive_search",
     QueryType.TEMPORAL: "temporal_query",
 }

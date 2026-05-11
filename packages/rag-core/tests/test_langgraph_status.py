@@ -376,6 +376,15 @@ def test_initial_tool_plan_preserves_router_tool_when_threshold_present():
     ]
 
 
+def test_initial_tool_plan_adds_graph_companion_for_relation_intent():
+    decision = RouterDecision(query_type=QueryType.RELATION, suggested_tool="vector_search")
+
+    assert _initial_tool_plan("ACEI 和 ARB 有什么区别？", decision) == [
+        "vector_search",
+        "cypher_traverse",
+    ]
+
+
 def test_route_query_builds_retrieval_plan_from_router_and_signals():
     decision = RouterDecision(query_type=QueryType.SIMPLE, suggested_tool="vector_search")
     ops = AgentWorkflowOps(

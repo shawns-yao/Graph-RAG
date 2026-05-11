@@ -98,11 +98,11 @@ def _hard_rule_decision(query: str) -> RouterDecision | None:
             query_type=query_type,
             confidence=0.96 if query_type == QueryType.RELATION else 0.94,
             reasoning=(
-                "Hard rule: relation keyword detected, prefer graph traversal."
+                "Hard rule: relation intent detected; retrieval planner may add graph companion."
                 if query_type == QueryType.RELATION
-                else "Hard rule: multi-hop reasoning cue detected, prefer graph traversal."
+                else "Hard rule: multi-hop intent detected; retrieval planner may add graph companion."
             ),
-            suggested_tool="cypher_traverse",
+            suggested_tool=DEFAULT_TOOL_BY_QUERY_TYPE[query_type],
         )
 
     if _match_patterns(query, TEMPORAL_PATTERNS) > 0:

@@ -27,3 +27,19 @@ def test_lexical_anchor_no_longer_forces_bm25_router_tool():
     assert decision.query_type == QueryType.SIMPLE
     assert decision.suggested_tool == "vector_search"
     assert "lexical anchor detected" not in decision.reasoning
+
+
+def test_relation_intent_no_longer_forces_cypher_router_tool():
+    decision = classify_query("ACEI 和 ARB 有什么区别？", use_llm=False)
+
+    assert decision.query_type == QueryType.RELATION
+    assert decision.suggested_tool == "vector_search"
+    assert "prefer graph traversal" not in decision.reasoning
+
+
+def test_multihop_intent_no_longer_forces_cypher_router_tool():
+    decision = classify_query("为什么 ACEI 不用？说明原因", use_llm=False)
+
+    assert decision.query_type == QueryType.MULTI_HOP
+    assert decision.suggested_tool == "vector_search"
+    assert "prefer graph traversal" not in decision.reasoning
