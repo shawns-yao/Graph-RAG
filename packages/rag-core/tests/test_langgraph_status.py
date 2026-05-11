@@ -385,6 +385,15 @@ def test_initial_tool_plan_adds_graph_companion_for_relation_intent():
     ]
 
 
+def test_initial_tool_plan_adds_comprehensive_companion_for_global_intent():
+    decision = RouterDecision(query_type=QueryType.GLOBAL, suggested_tool="vector_search")
+
+    assert _initial_tool_plan("列出 COPD 的所有诊断指标", decision) == [
+        "vector_search",
+        "comprehensive_search",
+    ]
+
+
 def test_route_query_builds_retrieval_plan_from_router_and_signals():
     decision = RouterDecision(query_type=QueryType.SIMPLE, suggested_tool="vector_search")
     ops = AgentWorkflowOps(

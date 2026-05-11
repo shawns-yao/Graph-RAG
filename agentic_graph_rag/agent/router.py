@@ -83,8 +83,8 @@ def _hard_rule_decision(query: str) -> RouterDecision | None:
         return RouterDecision(
             query_type=QueryType.GLOBAL,
             confidence=0.9,
-            reasoning="Hard rule: global summary intent detected, prefer comprehensive retrieval.",
-            suggested_tool="comprehensive_search",
+            reasoning="Hard rule: global summary intent detected; retrieval planner may add broad recall.",
+            suggested_tool=DEFAULT_TOOL_BY_QUERY_TYPE[QueryType.GLOBAL],
         )
 
     if (

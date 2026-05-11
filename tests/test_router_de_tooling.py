@@ -43,3 +43,11 @@ def test_multihop_intent_no_longer_forces_cypher_router_tool():
     assert decision.query_type == QueryType.MULTI_HOP
     assert decision.suggested_tool == "vector_search"
     assert "prefer graph traversal" not in decision.reasoning
+
+
+def test_global_intent_no_longer_forces_comprehensive_router_tool():
+    decision = classify_query("列出 COPD 的所有诊断指标", use_llm=False)
+
+    assert decision.query_type == QueryType.GLOBAL
+    assert decision.suggested_tool == "vector_search"
+    assert "prefer comprehensive retrieval" not in decision.reasoning

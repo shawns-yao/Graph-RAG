@@ -241,6 +241,8 @@ def _initial_tool_plan(query: str, decision: RouterDecision) -> list[str]:
         and "cypher_traverse" not in tools
     ):
         tools.append("cypher_traverse")
+    elif decision.query_type == QueryType.GLOBAL and "comprehensive_search" not in tools:
+        tools.append("comprehensive_search")
     elif has_strong_form_anchor(signals):
         if "bm25_search" not in tools:
             tools.append("bm25_search")
