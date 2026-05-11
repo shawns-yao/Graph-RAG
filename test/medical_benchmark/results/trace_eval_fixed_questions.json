@@ -2,24 +2,18 @@
   "summary": {
     "total": 10,
     "ok": 10,
-    "verified": 7,
-    "retried": 3,
+    "verified": 8,
+    "retried": 5,
     "by_group": {
       "graph_direct": {
         "total": 3,
         "ok": 3,
-        "verified": 0,
-        "retried": 0
+        "verified": 2,
+        "retried": 1
       },
       "numeric_exact": {
         "total": 3,
         "ok": 3,
-        "verified": 3,
-        "retried": 0
-      },
-      "boundary": {
-        "total": 2,
-        "ok": 2,
         "verified": 2,
         "retried": 1
       },
@@ -28,11 +22,17 @@
         "ok": 2,
         "verified": 2,
         "retried": 2
+      },
+      "boundary": {
+        "total": 2,
+        "ok": 2,
+        "verified": 2,
+        "retried": 1
       }
     }
   },
   "pending": [],
-  "elapsed_seconds": 82.38,
+  "elapsed_seconds": 118.49,
   "results": [
     {
       "id": "boundary_001",
@@ -40,11 +40,11 @@
       "query": "二甲双胍什么时候禁用？",
       "status": "ok",
       "error": "",
-      "duration_seconds": 9.24,
+      "duration_seconds": 32.97,
       "answer_status": "verified",
       "retrieval_status": "complete",
       "verification_status": "passed",
-      "source_count": 4,
+      "source_count": 5,
       "retries": 0,
       "signal_extractor_output": {
         "anchors": [
@@ -59,11 +59,14 @@
         }
       },
       "initial_tools": [
-        "vector_search"
+        "vector_search",
+        "cypher_traverse"
       ],
       "retrieval_hits_by_provider": {
         "vector_search": 4,
-        "vector": 4
+        "vector": 4,
+        "cypher_traverse": 1,
+        "graph": 1
       },
       "reflection_verdicts": [
         {
@@ -73,9 +76,31 @@
           "required_tool": "none",
           "preferred_tools": [],
           "preferred_providers": []
+        },
+        {
+          "verdict": "retry",
+          "gap_type": "missing_numeric_threshold",
+          "failure_type": "insufficient_context",
+          "required_tool": "hybrid_search",
+          "preferred_tools": [
+            "hybrid_search",
+            "full_document_read",
+            "vector_search",
+            "cypher_traverse"
+          ],
+          "preferred_providers": [
+            "vector",
+            "graph",
+            "bm25"
+          ]
         }
       ],
-      "retry_tools": [],
+      "retry_tools": [
+        "hybrid_search",
+        "full_document_read",
+        "vector_search",
+        "cypher_traverse"
+      ],
       "claim_roles": {
         "core": 1
       },
@@ -88,23 +113,23 @@
         "claims_incorrect": 0,
         "skipped_reason": ""
       },
-      "answer_preview": "eGFR < 30 mL/min/1.73m² 时禁用二甲双胍。[Chunk 1]",
+      "answer_preview": "二甲双胍在 **eGFR < 30 mL/min/1.73m²** 时禁用。[Chunk 5]",
       "source_previews": [
         {
           "rank": 1,
-          "score": 0.764,
+          "score": 0.7639,
           "source": "vector",
           "content": "ACEI（血管紧张素转换酶抑制剂）可引起刺激性干咳。若患者使用 ACEI 后出现持续干咳，应停用 ACEI，并改用 ARB（血管紧张素 II 受体阻滞剂）。ARB 与 ACEI 同属肾素-血管紧张素系统药物，但 ARB 发生干咳的风险较低。\n\n关键事实：\n\n- ACEI --不良反应--> 干咳\n\n- ACEI --处理措施--> 停用\n\n- 干咳 --替代方案--> ARB\n\n- ARB --优势--> 干咳风险较低\n\n二甲双胍用于 2 型糖尿病治疗时需要根据肾功能调整。eGFR < 30 mL/min/1.73"
         },
         {
           "rank": 2,
-          "score": 0.6484,
+          "score": 0.6483,
           "source": "vector",
           "content": "- CAT评分 --阈值--> ≥10分提示症状负担较重\n\n- 沙丁胺醇 --剂量--> 100-200 μg/次\n\n- 沙丁胺醇 --起效时间--> 5-15分钟\n\n- 沙丁胺醇 --持续时间--> 4-6小时\n\n- 福莫特罗 --剂量--> 12 μg每日2次\n\n- 噻托溴铵 --剂量--> 18 μg每日1次\n\n- 噻托溴铵 --起效时间--> 30-60分钟\n\n- GOLD 1级 --推荐治疗--> SABA按需\n\n- GOLD 2级且嗜酸性粒细胞≥300/μL --推荐治疗--> LABA+ICS\n\n- "
         },
         {
           "rank": 3,
-          "score": 0.6442,
+          "score": 0.6447,
           "source": "vector",
           "content": "- GOLD 1级仅需按需使用SABA\n- 嗜酸性粒细胞≥300/μL时考虑ICS\n- GOLD 3-4级且嗜酸性粒细胞≥100/μL时使用三联方案\n\n- 慢性阻塞性肺疾病 [疾病] aliases: COPD, 慢阻肺\n\n- FEV1 [检查指标] aliases: 第一秒用力呼气容积\n\n- 沙丁胺醇 [药物] aliases: Salbutamol, SABA\n\n- 福莫特罗 [药物] aliases: Formoterol, LABA\n\n- 噻托溴铵 [药物] aliases: Tiotropium, LAM"
         },
@@ -113,14 +138,20 @@
           "score": 0.6432,
           "source": "vector",
           "content": "慢性阻塞性肺疾病（Chronic Obstructive Pulmonary Disease, COPD）是一种以持续气流受限为特征的可预防和可治疗的疾病。诊断依据肺功能检查：使用支气管舒张剂后，FEV1/FVC < 0.70即可确诊。\n\n根据FEV1占预计值百分比分为4级：\n\n- GOLD 1级（轻度）：FEV1 ≥ 80%预计值\n\n- GOLD 2级（中度）：50% ≤ FEV1 < 80%预计值\n\n- GOLD 3级（重度）：30% ≤ FEV1 < 50%预计值\n\n- GOLD 4级（极重度）：FEV1 <"
+        },
+        {
+          "rank": 1,
+          "score": 1.0,
+          "source": "graph",
+          "content": "Entities:\n不建议新启用二甲 (Procedure)\n建议新启用二甲双 (Procedure)\n时需要根据肾功能 (Procedure)\n稳定期可使用长效 (Procedure)\n风险并考虑减量 (Procedure)"
         }
       ],
       "trace": {
-        "trace_id": "tr_db364974ba5d",
-        "timestamp": "2026-05-11T08:36:29.963439+00:00",
+        "trace_id": "tr_644da6fb2088",
+        "timestamp": "2026-05-11T11:00:12.569218+00:00",
         "query": "二甲双胍什么时候禁用？",
         "expanded_query": "",
-        "final_answer": "eGFR < 30 mL/min/1.73m² 时禁用二甲双胍。[Chunk 1]",
+        "final_answer": "二甲双胍在 **eGFR < 30 mL/min/1.73m²** 时禁用。[Chunk 5]",
         "session_id": "trace-eval::boundary_001",
         "router_step": {
           "method": "deterministic",
@@ -138,7 +169,7 @@
             "tool_name": "vector_search",
             "results_count": 4,
             "relevance_score": 1.0,
-            "duration_ms": 1413,
+            "duration_ms": 3246,
             "query_used": "二甲双胍什么时候禁用？",
             "cache_hit": false,
             "reused_sources": [],
@@ -149,14 +180,39 @@
               {
                 "source": "vector",
                 "results_count": 4,
-                "top_score": 0.7639923095703125,
-                "average_score": 0.6749561429023743,
+                "top_score": 0.7638578414916992,
+                "average_score": 0.6750357151031494,
                 "reused": false,
                 "executed": true,
                 "top_chunk_ids": [
                   "28080b21",
                   "a29f33f2",
                   "7a25e64c"
+                ]
+              }
+            ]
+          },
+          {
+            "tool_name": "cypher_traverse",
+            "results_count": 1,
+            "relevance_score": 0.6,
+            "duration_ms": 6314,
+            "query_used": "二甲双胍什么时候禁用？",
+            "cache_hit": false,
+            "reused_sources": [],
+            "executed_sources": [
+              "graph"
+            ],
+            "provider_diagnostics": [
+              {
+                "source": "graph",
+                "results_count": 1,
+                "top_score": 1.0,
+                "average_score": 1.0,
+                "reused": false,
+                "executed": true,
+                "top_chunk_ids": [
+                  "graph-8fbac1253b9b"
                 ]
               }
             ]
@@ -189,9 +245,85 @@
             "should_rewrite_query": false,
             "should_rerank_again": false,
             "comparison_to_previous": "Auto-accepted due to strong retrieval evidence."
+          },
+          {
+            "attempt": 0,
+            "tool_name": "cypher_traverse",
+            "query_used": "二甲双胍什么时候禁用？",
+            "evidence_status": "insufficient",
+            "gap_type": "missing_numeric_threshold",
+            "action": "retry_hybrid",
+            "required_tool": "hybrid_search",
+            "verdict": "retry",
+            "missing_information": [
+              "二甲双胍的明确禁用情形",
+              "与肾功能相关的具体数值阈值或分级标准",
+              "是否存在乳酸性酸中毒、检查/手术等其他禁用条件"
+            ],
+            "missing_entities": [
+              "二甲双胍",
+              "肾功能阈值",
+              "乳酸性酸中毒",
+              "造影检查/手术相关停用条件"
+            ],
+            "missing_relationships": [
+              "二甲双胍-禁用条件-肾功能异常",
+              "二甲双胍-禁用条件-乳酸性酸中毒",
+              "二甲双胍-停用/禁用条件-造影检查或手术"
+            ],
+            "coverage_gap_sources": [
+              "graph"
+            ],
+            "candidate_fix_paths": [
+              "hybrid_search -> full_document_read",
+              "vector_search -> cypher_traverse"
+            ],
+            "preferred_tools": [
+              "hybrid_search",
+              "full_document_read",
+              "vector_search",
+              "cypher_traverse"
+            ],
+            "preferred_providers": [
+              "vector",
+              "graph",
+              "bm25"
+            ],
+            "retry_scope": "tool_escalation",
+            "reasoning": "现有证据仅显示与肾功能相关的片段化提示，如“不建议新启用”“需要根据肾功能”，无法直接回答“什么时候禁用”，且缺少关键禁忌证和精确阈值，当前证据不足以可靠作答。",
+            "failure_type": "insufficient_context",
+            "recommended_action": "use_comprehensive_search",
+            "should_retry": true,
+            "should_rewrite_query": true,
+            "should_rerank_again": false,
+            "comparison_to_previous": "无前次反思记录；当前仅有graph返回1条碎片化结果，覆盖明显不足。"
           }
         ],
         "workflow_memory": [
+          {
+            "stage": "budget",
+            "message": "started LLM call: need_resolver",
+            "metadata": {
+              "max_llm_calls": 5,
+              "calls_started": 1,
+              "remaining_llm_calls": 4,
+              "operations": [
+                "need_resolver"
+              ]
+            }
+          },
+          {
+            "stage": "need_resolver",
+            "message": "resolved retrieval evidence needs",
+            "metadata": {
+              "retrieval_needs": [
+                "semantic_passage",
+                "graph_relation",
+                "exact_numeric"
+              ],
+              "reason": "问题询问二甲双胍的禁用情形，需要语义性禁忌证描述；禁用常涉及与肾功能、酸中毒、检查/手术等条件或状态的关系，因此需要关系证据；部分禁用标准依赖精确阈值或数值条件，因此需要精确数值证据。"
+            }
+          },
           {
             "stage": "route",
             "message": "router suggested vector_search; retrieval plan starts vector_search",
@@ -201,7 +333,13 @@
               "confidence": 0.5,
               "primary_tool": "vector_search",
               "initial_tools": [
-                "vector_search"
+                "vector_search",
+                "cypher_traverse"
+              ],
+              "retrieval_needs": [
+                "semantic_passage",
+                "graph_relation",
+                "exact_numeric"
               ]
             }
           },
@@ -226,12 +364,98 @@
           },
           {
             "stage": "budget",
+            "message": "started LLM call: need_resolver",
+            "metadata": {
+              "max_llm_calls": 5,
+              "calls_started": 1,
+              "remaining_llm_calls": 4,
+              "operations": [
+                "need_resolver"
+              ]
+            }
+          },
+          {
+            "stage": "need_resolver",
+            "message": "resolved retrieval evidence needs",
+            "metadata": {
+              "retrieval_needs": [
+                "semantic_passage",
+                "graph_relation",
+                "exact_numeric"
+              ],
+              "reason": "问题询问二甲双胍的禁用情形，需要语义性禁忌证描述；禁用常涉及与肾功能、酸中毒、检查/手术等条件或状态的关系，因此需要关系证据；部分禁用标准依赖精确阈值或数值条件，因此需要精确数值证据。"
+            }
+          },
+          {
+            "stage": "route",
+            "message": "router suggested vector_search; retrieval plan starts vector_search",
+            "metadata": {
+              "query_type": "QueryType.SIMPLE",
+              "method": "deterministic",
+              "confidence": 0.5,
+              "primary_tool": "vector_search",
+              "initial_tools": [
+                "vector_search",
+                "cypher_traverse"
+              ],
+              "retrieval_needs": [
+                "semantic_passage",
+                "graph_relation",
+                "exact_numeric"
+              ]
+            }
+          },
+          {
+            "stage": "retrieval",
+            "message": "cypher_traverse returned 1 results",
+            "metadata": {
+              "query": "二甲双胍什么时候禁用？",
+              "tool": "cypher_traverse",
+              "executed_sources": [
+                "graph"
+              ]
+            }
+          },
+          {
+            "stage": "reflection",
+            "message": "cypher_traverse classified evidence as insufficient with action retry_hybrid",
+            "metadata": {
+              "evidence_status": "insufficient",
+              "gap_type": "missing_numeric_threshold",
+              "action": "retry_hybrid",
+              "verdict": "retry",
+              "failure_type": "insufficient_context",
+              "missing_information": [
+                "二甲双胍的明确禁用情形",
+                "与肾功能相关的具体数值阈值或分级标准",
+                "是否存在乳酸性酸中毒、检查/手术等其他禁用条件"
+              ],
+              "missing_entities": [
+                "二甲双胍",
+                "肾功能阈值",
+                "乳酸性酸中毒",
+                "造影检查/手术相关停用条件"
+              ],
+              "retry_scope": "tool_escalation"
+            }
+          },
+          {
+            "stage": "retry",
+            "message": "request time budget exhausted; returning best known evidence",
+            "metadata": {
+              "tool": "cypher_traverse",
+              "remaining_budget_ms": 0
+            }
+          },
+          {
+            "stage": "budget",
             "message": "started LLM call: generate_answer",
             "metadata": {
-              "max_llm_calls": 4,
-              "calls_started": 1,
+              "max_llm_calls": 5,
+              "calls_started": 2,
               "remaining_llm_calls": 3,
               "operations": [
+                "need_resolver",
                 "generate_answer"
               ]
             }
@@ -240,21 +464,22 @@
             "stage": "generate",
             "message": "generated answer from current evidence",
             "metadata": {
-              "sources": 4,
-              "answer_status": "unverified",
+              "sources": 5,
+              "answer_status": "partial",
               "retrieval_status": "complete",
               "verification_status": "skipped",
-              "answer_guard_triggered": false
+              "answer_guard_triggered": true
             }
           },
           {
             "stage": "budget",
             "message": "started LLM call: claim_extraction",
             "metadata": {
-              "max_llm_calls": 4,
-              "calls_started": 2,
+              "max_llm_calls": 5,
+              "calls_started": 3,
               "remaining_llm_calls": 2,
               "operations": [
+                "need_resolver",
                 "generate_answer",
                 "claim_extraction"
               ]
@@ -276,13 +501,13 @@
         "escalation_steps": [],
         "generator_step": {
           "model": "gpt-5.4",
-          "prompt_tokens": 3382,
-          "completion_tokens": 32,
+          "prompt_tokens": 3435,
+          "completion_tokens": 35,
           "answer_status": "verified",
           "retrieval_status": "complete",
           "verification_status": "passed",
           "completeness_check": null,
-          "duration_ms": 4570
+          "duration_ms": 8942
         },
         "verification_step": {
           "claims_total": 1,
@@ -291,19 +516,19 @@
           "claims_incorrect": 0,
           "verified_claims": [
             {
-              "text": "eGFR小于30 mL/min/1.73m²时禁用二甲双胍",
+              "text": "二甲双胍在eGFR低于30 mL/min/1.73m²时禁用",
               "key_terms": [
-                "eGFR",
                 "二甲双胍",
-                "< 30 mL/min/1.73m²",
+                "eGFR",
+                "<30 mL/min/1.73m²",
                 "禁用"
               ],
               "entities": [
-                "eGFR",
-                "二甲双胍"
+                "二甲双胍",
+                "eGFR"
               ],
               "numeric_constraints": [
-                "< 30 mL/min/1.73m²"
+                "<30 mL/min/1.73m²"
               ],
               "relation_actions": [
                 "禁用"
@@ -317,10 +542,10 @@
           ],
           "unsupported_claims": [],
           "skipped_reason": "",
-          "duration_ms": 3187,
+          "duration_ms": 3345,
           "status": "passed"
         },
-        "total_duration_ms": 9177
+        "total_duration_ms": 32925
       }
     },
     {
@@ -329,12 +554,12 @@
       "query": "eGFR < 30 时有哪些药物需要注意？",
       "status": "ok",
       "error": "",
-      "duration_seconds": 33.77,
+      "duration_seconds": 27.55,
       "answer_status": "verified",
       "retrieval_status": "complete",
       "verification_status": "passed",
       "source_count": 5,
-      "retries": 2,
+      "retries": 1,
       "signal_extractor_output": {
         "anchors": [
           {
@@ -359,11 +584,11 @@
       ],
       "retrieval_hits_by_provider": {
         "vector_search": 4,
-        "vector": 12,
-        "hybrid_search": 10,
+        "vector": 8,
+        "bm25_search": 0,
         "bm25": 0,
-        "graph": 10,
-        "bm25_search": 0
+        "hybrid_search": 5,
+        "graph": 5
       },
       "reflection_verdicts": [
         {
@@ -373,21 +598,12 @@
           "required_tool": "hybrid_search",
           "preferred_tools": [
             "hybrid_search",
-            "bm25_search",
             "full_document_read"
           ],
           "preferred_providers": [
             "vector",
             "bm25"
           ]
-        },
-        {
-          "verdict": "retry",
-          "gap_type": "off_topic",
-          "failure_type": "insufficient_context",
-          "required_tool": "none",
-          "preferred_tools": [],
-          "preferred_providers": []
         },
         {
           "verdict": "retry",
@@ -398,19 +614,25 @@
           "preferred_providers": []
         },
         {
-          "verdict": "retry",
-          "gap_type": "off_topic",
+          "verdict": "stop",
+          "gap_type": "missing_treatment_option",
           "failure_type": "insufficient_context",
           "required_tool": "none",
-          "preferred_tools": [],
-          "preferred_providers": []
+          "preferred_tools": [
+            "comprehensive_search",
+            "full_document_read"
+          ],
+          "preferred_providers": [
+            "vector",
+            "graph"
+          ]
         }
       ],
       "retry_tools": [
         "hybrid_search",
-        "bm25_search",
         "full_document_read",
-        "hybrid_search"
+        "hybrid_search",
+        "comprehensive_search"
       ],
       "claim_roles": {
         "core": 1
@@ -428,25 +650,25 @@
       "source_previews": [
         {
           "rank": 1,
-          "score": 0.703,
+          "score": 0.7026,
           "source": "vector",
           "content": "ACEI（血管紧张素转换酶抑制剂）可引起刺激性干咳。若患者使用 ACEI 后出现持续干咳，应停用 ACEI，并改用 ARB（血管紧张素 II 受体阻滞剂）。ARB 与 ACEI 同属肾素-血管紧张素系统药物，但 ARB 发生干咳的风险较低。\n\n关键事实：\n\n- ACEI --不良反应--> 干咳\n\n- ACEI --处理措施--> 停用\n\n- 干咳 --替代方案--> ARB\n\n- ARB --优势--> 干咳风险较低\n\n二甲双胍用于 2 型糖尿病治疗时需要根据肾功能调整。eGFR < 30 mL/min/1.73"
         },
         {
           "rank": 2,
-          "score": 0.6638,
+          "score": 0.6637,
           "source": "vector",
           "content": "- GOLD 1级仅需按需使用SABA\n- 嗜酸性粒细胞≥300/μL时考虑ICS\n- GOLD 3-4级且嗜酸性粒细胞≥100/μL时使用三联方案\n\n- 慢性阻塞性肺疾病 [疾病] aliases: COPD, 慢阻肺\n\n- FEV1 [检查指标] aliases: 第一秒用力呼气容积\n\n- 沙丁胺醇 [药物] aliases: Salbutamol, SABA\n\n- 福莫特罗 [药物] aliases: Formoterol, LABA\n\n- 噻托溴铵 [药物] aliases: Tiotropium, LAM"
         },
         {
           "rank": 3,
-          "score": 0.656,
+          "score": 0.6561,
           "source": "vector",
           "content": "- CAT评分 --阈值--> ≥10分提示症状负担较重\n\n- 沙丁胺醇 --剂量--> 100-200 μg/次\n\n- 沙丁胺醇 --起效时间--> 5-15分钟\n\n- 沙丁胺醇 --持续时间--> 4-6小时\n\n- 福莫特罗 --剂量--> 12 μg每日2次\n\n- 噻托溴铵 --剂量--> 18 μg每日1次\n\n- 噻托溴铵 --起效时间--> 30-60分钟\n\n- GOLD 1级 --推荐治疗--> SABA按需\n\n- GOLD 2级且嗜酸性粒细胞≥300/μL --推荐治疗--> LABA+ICS\n\n- "
         },
         {
           "rank": 4,
-          "score": 0.654,
+          "score": 0.6536,
           "source": "vector",
           "content": "慢性阻塞性肺疾病（Chronic Obstructive Pulmonary Disease, COPD）是一种以持续气流受限为特征的可预防和可治疗的疾病。诊断依据肺功能检查：使用支气管舒张剂后，FEV1/FVC < 0.70即可确诊。\n\n根据FEV1占预计值百分比分为4级：\n\n- GOLD 1级（轻度）：FEV1 ≥ 80%预计值\n\n- GOLD 2级（中度）：50% ≤ FEV1 < 80%预计值\n\n- GOLD 3级（重度）：30% ≤ FEV1 < 50%预计值\n\n- GOLD 4级（极重度）：FEV1 <"
         },
@@ -458,8 +680,8 @@
         }
       ],
       "trace": {
-        "trace_id": "tr_ffb8adb433e9",
-        "timestamp": "2026-05-11T08:36:39.197337+00:00",
+        "trace_id": "tr_c6f33639f1f1",
+        "timestamp": "2026-05-11T11:00:27.694408+00:00",
         "query": "eGFR < 30 时有哪些药物需要注意？",
         "expanded_query": "eGFR < 30 时有哪些药物需要注意？\n\nMedical aliases: 估算肾小球滤过率, 肾功能指标",
         "final_answer": "eGFR < 30 时需要注意的药物：**二甲双胍**，此时**禁用**。[Chunk 1]",
@@ -479,8 +701,8 @@
           {
             "tool_name": "vector_search",
             "results_count": 4,
-            "relevance_score": 0.7029585838317871,
-            "duration_ms": 3297,
+            "relevance_score": 0.7025995254516602,
+            "duration_ms": 1335,
             "query_used": "eGFR < 30 时有哪些药物需要注意？\n\nMedical aliases: 估算肾小球滤过率, 肾功能指标",
             "cache_hit": false,
             "reused_sources": [],
@@ -491,66 +713,14 @@
               {
                 "source": "vector",
                 "results_count": 4,
-                "top_score": 0.7029585838317871,
-                "average_score": 0.6691860556602478,
+                "top_score": 0.7025995254516602,
+                "average_score": 0.6690082550048828,
                 "reused": false,
                 "executed": true,
                 "top_chunk_ids": [
                   "28080b21",
                   "7a25e64c",
                   "a29f33f2"
-                ]
-              }
-            ]
-          },
-          {
-            "tool_name": "hybrid_search",
-            "results_count": 5,
-            "relevance_score": 1.0,
-            "duration_ms": 12400,
-            "query_used": "eGFR < 30 时有哪些药物需要注意？\n\nMedical aliases: 估算肾小球滤过率, 肾功能指标",
-            "cache_hit": true,
-            "reused_sources": [
-              "vector"
-            ],
-            "executed_sources": [
-              "bm25",
-              "graph"
-            ],
-            "provider_diagnostics": [
-              {
-                "source": "vector",
-                "results_count": 4,
-                "top_score": 0.7029585838317871,
-                "average_score": 0.6691860556602478,
-                "reused": true,
-                "executed": false,
-                "top_chunk_ids": [
-                  "28080b21",
-                  "7a25e64c",
-                  "a29f33f2"
-                ]
-              },
-              {
-                "source": "bm25",
-                "results_count": 0,
-                "top_score": 0.0,
-                "average_score": 0.0,
-                "reused": false,
-                "executed": true,
-                "top_chunk_ids": []
-              },
-              {
-                "source": "graph",
-                "results_count": 5,
-                "top_score": 1.0,
-                "average_score": 0.45666666666666667,
-                "reused": false,
-                "executed": true,
-                "top_chunk_ids": [
-                  "28080b21",
-                  "c656706e",
-                  "a0b336aa"
                 ]
               }
             ]
@@ -559,7 +729,7 @@
             "tool_name": "bm25_search",
             "results_count": 0,
             "relevance_score": 0.0,
-            "duration_ms": 27,
+            "duration_ms": 75,
             "query_used": "eGFR < 30 时有哪些药物需要注意？\n\nMedical aliases: 估算肾小球滤过率, 肾功能指标",
             "cache_hit": false,
             "reused_sources": [],
@@ -582,7 +752,7 @@
             "tool_name": "hybrid_search",
             "results_count": 5,
             "relevance_score": 1.0,
-            "duration_ms": 18923,
+            "duration_ms": 1681,
             "query_used": "eGFR < 30 时有哪些药物需要注意？\n\nMedical aliases: 估算肾小球滤过率, 肾功能指标",
             "cache_hit": true,
             "reused_sources": [
@@ -605,8 +775,8 @@
               {
                 "source": "vector",
                 "results_count": 4,
-                "top_score": 0.7025995254516602,
-                "average_score": 0.6690082550048828,
+                "top_score": 0.7029585838317871,
+                "average_score": 0.6691860556602478,
                 "reused": false,
                 "executed": true,
                 "top_chunk_ids": [
@@ -642,25 +812,24 @@
             "required_tool": "hybrid_search",
             "verdict": "retry",
             "missing_information": [
-              "除二甲双胍外，eGFR < 30 时还需要注意哪些药物及其处理建议",
-              "药物与 eGFR < 30 之间的具体禁用、慎用、减量或监测要求"
+              "除二甲双胍外，eGFR < 30 时还需要注意的其他药物或药物类别",
+              "这些药物在 eGFR < 30 时的具体处理建议（禁用、减量、慎用、监测）"
             ],
             "missing_entities": [
-              "其他需在 eGFR < 30 时调整或避免的药物类别/具体药物"
+              "其他需肾功能调整的药物",
+              "药物类别"
             ],
             "missing_relationships": [
-              "药物 -> 在 eGFR < 30 时的处理措施",
-              "药物 -> 肾功能不全相关风险/禁忌/剂量调整"
+              "eGFR < 30 -> 药物 -> 注意事项/禁用/减量/慎用"
             ],
             "coverage_gap_sources": [
               "vector"
             ],
             "candidate_fix_paths": [
-              "hybrid_search -> bm25_search -> full_document_read"
+              "hybrid_search -> full_document_read"
             ],
             "preferred_tools": [
               "hybrid_search",
-              "bm25_search",
               "full_document_read"
             ],
             "preferred_providers": [
@@ -668,42 +837,13 @@
               "bm25"
             ],
             "retry_scope": "tool_escalation",
-            "reasoning": "当前证据仅直接覆盖二甲双胍在 eGFR < 30 时禁用，能回答部分问题，但查询使用“有哪些药物”暗示需要更全面的药物清单与对应处理建议，现有检索结果缺少其他相关药物信息。",
+            "reasoning": "现有证据仅直接回答了二甲双胍在 eGFR < 30 时禁用，但用户问的是“有哪些药物需要注意”，范围更广，缺少其他药物选项与对应处理建议。",
             "failure_type": "insufficient_context",
             "recommended_action": "use_comprehensive_search",
             "should_retry": true,
             "should_rewrite_query": true,
             "should_rerank_again": false,
-            "comparison_to_previous": "无前次反思；本次首次检索仅获得单一药物的部分相关证据。"
-          },
-          {
-            "attempt": 1,
-            "tool_name": "hybrid_search",
-            "query_used": "eGFR < 30 时有哪些药物需要注意？\n\nMedical aliases: 估算肾小球滤过率, 肾功能指标",
-            "evidence_status": "insufficient",
-            "gap_type": "off_topic",
-            "action": "stop",
-            "required_tool": "none",
-            "verdict": "retry",
-            "missing_information": [
-              "Request time budget is too low for reflection."
-            ],
-            "missing_entities": [],
-            "missing_relationships": [],
-            "coverage_gap_sources": [],
-            "candidate_fix_paths": [
-              "skip_reflection_due_to_budget"
-            ],
-            "preferred_tools": [],
-            "preferred_providers": [],
-            "retry_scope": "tool_escalation",
-            "reasoning": "Skipped LLM reflection because the remaining request time budget was too low.",
-            "failure_type": "insufficient_context",
-            "recommended_action": "stop_due_to_time_budget",
-            "should_retry": true,
-            "should_rewrite_query": false,
-            "should_rerank_again": false,
-            "comparison_to_previous": "Budget guard stop."
+            "comparison_to_previous": "无历史反思；本次首次检索仅覆盖到单一药物，需扩大召回范围。"
           },
           {
             "attempt": 0,
@@ -738,30 +878,46 @@
             "attempt": 1,
             "tool_name": "hybrid_search",
             "query_used": "eGFR < 30 时有哪些药物需要注意？\n\nMedical aliases: 估算肾小球滤过率, 肾功能指标",
-            "evidence_status": "insufficient",
-            "gap_type": "off_topic",
-            "action": "stop",
+            "evidence_status": "partial",
+            "gap_type": "missing_treatment_option",
+            "action": "answer_with_caveat",
             "required_tool": "none",
-            "verdict": "retry",
+            "verdict": "stop",
             "missing_information": [
-              "Request time budget is too low for reflection."
+              "除二甲双胍外，eGFR < 30 时还需注意的其他药物或药物类别未被检索到",
+              "缺少针对“需要注意”这一范围的完整用药清单与处理建议（禁用、减量、监测等）"
             ],
-            "missing_entities": [],
-            "missing_relationships": [],
-            "coverage_gap_sources": [],
+            "missing_entities": [
+              "其他肾功能不全需调整或避免的药物",
+              "具体药物类别清单"
+            ],
+            "missing_relationships": [
+              "eGFR < 30 与其他药物之间的禁用/慎用/减量/监测关系"
+            ],
+            "coverage_gap_sources": [
+              "vector",
+              "graph"
+            ],
             "candidate_fix_paths": [
-              "skip_reflection_due_to_budget"
+              "answer current finding with caveat -> comprehensive_search for renal dosing guidance",
+              "hybrid_search with expanded drug-adjustment terms -> full_document_read"
             ],
-            "preferred_tools": [],
-            "preferred_providers": [],
-            "retry_scope": "tool_escalation",
-            "reasoning": "Skipped LLM reflection because the remaining request time budget was too low.",
+            "preferred_tools": [
+              "comprehensive_search",
+              "full_document_read"
+            ],
+            "preferred_providers": [
+              "vector",
+              "graph"
+            ],
+            "retry_scope": "stop",
+            "reasoning": "检索结果仅直接支持“eGFR < 30 时禁用二甲双胍”，与问题中的复数“有哪些药物需要注意”不匹配，证据只覆盖部分答案。",
             "failure_type": "insufficient_context",
-            "recommended_action": "stop_due_to_time_budget",
-            "should_retry": true,
+            "recommended_action": "answer_with_caveat",
+            "should_retry": false,
             "should_rewrite_query": false,
             "should_rerank_again": false,
-            "comparison_to_previous": "Budget guard stop."
+            "comparison_to_previous": "相比前一次空结果，当前已获得与eGFR < 30相关的直接证据，但覆盖面仍不足。"
           }
         ],
         "workflow_memory": [
@@ -771,6 +927,28 @@
             "metadata": {
               "original_query": "eGFR < 30 时有哪些药物需要注意？",
               "expanded_query": "eGFR < 30 时有哪些药物需要注意？\n\nMedical aliases: 估算肾小球滤过率, 肾功能指标"
+            }
+          },
+          {
+            "stage": "budget",
+            "message": "started LLM call: need_resolver",
+            "metadata": {
+              "max_llm_calls": 5,
+              "calls_started": 1,
+              "remaining_llm_calls": 4,
+              "operations": [
+                "need_resolver"
+              ]
+            }
+          },
+          {
+            "stage": "need_resolver",
+            "message": "resolved retrieval evidence needs",
+            "metadata": {
+              "retrieval_needs": [
+                "semantic_passage"
+              ],
+              "reason": "resolver fallback after exception"
             }
           },
           {
@@ -784,6 +962,9 @@
               "initial_tools": [
                 "vector_search",
                 "bm25_search"
+              ],
+              "retrieval_needs": [
+                "semantic_passage"
               ]
             }
           },
@@ -808,59 +989,22 @@
               "verdict": "retry",
               "failure_type": "insufficient_context",
               "missing_information": [
-                "除二甲双胍外，eGFR < 30 时还需要注意哪些药物及其处理建议",
-                "药物与 eGFR < 30 之间的具体禁用、慎用、减量或监测要求"
+                "除二甲双胍外，eGFR < 30 时还需要注意的其他药物或药物类别",
+                "这些药物在 eGFR < 30 时的具体处理建议（禁用、减量、慎用、监测）"
               ],
               "missing_entities": [
-                "其他需在 eGFR < 30 时调整或避免的药物类别/具体药物"
+                "其他需肾功能调整的药物",
+                "药物类别"
               ],
               "retry_scope": "tool_escalation"
             }
           },
           {
             "stage": "retry",
-            "message": "retry planned from vector_search to hybrid_search",
+            "message": "reflection requested already-covered gap: 药物类别",
             "metadata": {
-              "current_query": "eGFR < 30 时有哪些药物需要注意？\n\nMedical aliases: 估算肾小球滤过率, 肾功能指标",
-              "next_query": "eGFR < 30 时有哪些药物需要注意？\n\nMedical aliases: 估算肾小球滤过率, 肾功能指标"
-            }
-          },
-          {
-            "stage": "retrieval",
-            "message": "hybrid_search returned 5 results",
-            "metadata": {
-              "query": "eGFR < 30 时有哪些药物需要注意？\n\nMedical aliases: 估算肾小球滤过率, 肾功能指标",
-              "tool": "hybrid_search",
-              "reused_sources": [
-                "vector"
-              ],
-              "executed_sources": [
-                "bm25",
-                "graph"
-              ]
-            }
-          },
-          {
-            "stage": "reflection",
-            "message": "hybrid_search classified evidence as insufficient with action stop",
-            "metadata": {
-              "evidence_status": "insufficient",
-              "gap_type": "off_topic",
-              "action": "stop",
-              "verdict": "retry",
-              "failure_type": "insufficient_context",
-              "missing_information": [
-                "Request time budget is too low for reflection."
-              ],
-              "retry_scope": "tool_escalation"
-            }
-          },
-          {
-            "stage": "retry",
-            "message": "request time budget exhausted; returning best known evidence",
-            "metadata": {
-              "tool": "hybrid_search",
-              "remaining_budget_ms": 0
+              "tool": "vector_search",
+              "remaining_budget_ms": 5480
             }
           },
           {
@@ -869,6 +1013,28 @@
             "metadata": {
               "original_query": "eGFR < 30 时有哪些药物需要注意？",
               "expanded_query": "eGFR < 30 时有哪些药物需要注意？\n\nMedical aliases: 估算肾小球滤过率, 肾功能指标"
+            }
+          },
+          {
+            "stage": "budget",
+            "message": "started LLM call: need_resolver",
+            "metadata": {
+              "max_llm_calls": 5,
+              "calls_started": 1,
+              "remaining_llm_calls": 4,
+              "operations": [
+                "need_resolver"
+              ]
+            }
+          },
+          {
+            "stage": "need_resolver",
+            "message": "resolved retrieval evidence needs",
+            "metadata": {
+              "retrieval_needs": [
+                "semantic_passage"
+              ],
+              "reason": "resolver fallback after exception"
             }
           },
           {
@@ -882,6 +1048,9 @@
               "initial_tools": [
                 "vector_search",
                 "bm25_search"
+              ],
+              "retrieval_needs": [
+                "semantic_passage"
               ]
             }
           },
@@ -936,35 +1105,33 @@
           },
           {
             "stage": "reflection",
-            "message": "hybrid_search classified evidence as insufficient with action stop",
+            "message": "hybrid_search classified evidence as partial with action answer_with_caveat",
             "metadata": {
-              "evidence_status": "insufficient",
-              "gap_type": "off_topic",
-              "action": "stop",
-              "verdict": "retry",
+              "evidence_status": "partial",
+              "gap_type": "missing_treatment_option",
+              "action": "answer_with_caveat",
+              "verdict": "stop",
               "failure_type": "insufficient_context",
               "missing_information": [
-                "Request time budget is too low for reflection."
+                "除二甲双胍外，eGFR < 30 时还需注意的其他药物或药物类别未被检索到",
+                "缺少针对“需要注意”这一范围的完整用药清单与处理建议（禁用、减量、监测等）"
               ],
-              "retry_scope": "tool_escalation"
-            }
-          },
-          {
-            "stage": "retry",
-            "message": "request time budget exhausted; returning best known evidence",
-            "metadata": {
-              "tool": "hybrid_search",
-              "remaining_budget_ms": 0
+              "missing_entities": [
+                "其他肾功能不全需调整或避免的药物",
+                "具体药物类别清单"
+              ],
+              "retry_scope": "stop"
             }
           },
           {
             "stage": "budget",
             "message": "started LLM call: generate_answer",
             "metadata": {
-              "max_llm_calls": 4,
-              "calls_started": 1,
+              "max_llm_calls": 5,
+              "calls_started": 2,
               "remaining_llm_calls": 3,
               "operations": [
+                "need_resolver",
                 "generate_answer"
               ]
             }
@@ -984,10 +1151,11 @@
             "stage": "budget",
             "message": "started LLM call: claim_extraction",
             "metadata": {
-              "max_llm_calls": 4,
-              "calls_started": 2,
+              "max_llm_calls": 5,
+              "calls_started": 3,
               "remaining_llm_calls": 2,
               "operations": [
+                "need_resolver",
                 "generate_answer",
                 "claim_extraction"
               ]
@@ -1008,14 +1176,6 @@
         ],
         "escalation_steps": [
           {
-            "from_tool": "vector_search",
-            "to_tool": "hybrid_search",
-            "reason": "insufficient_context: 当前证据仅直接覆盖二甲双胍在 eGFR < 30 时禁用，能回答部分问题，但查询使用“有哪些药物”暗示需要更全面的药物清单与对应处理建议，现有检索结果缺少其他相关药物信息。",
-            "rephrased_query": "eGFR < 30 时有哪些药物需要注意？\n\nMedical aliases: 估算肾小球滤过率, 肾功能指标",
-            "duration_ms": 0,
-            "cached_sources_reused": []
-          },
-          {
             "from_tool": "bm25_search",
             "to_tool": "hybrid_search",
             "reason": "no_results: No results were returned by the retrieval tool.",
@@ -1032,7 +1192,7 @@
           "retrieval_status": "complete",
           "verification_status": "passed",
           "completeness_check": null,
-          "duration_ms": 4367
+          "duration_ms": 2147
         },
         "verification_step": {
           "claims_total": 1,
@@ -1067,10 +1227,10 @@
           ],
           "unsupported_claims": [],
           "skipped_reason": "",
-          "duration_ms": 2758,
+          "duration_ms": 2752,
           "status": "passed"
         },
-        "total_duration_ms": 33723
+        "total_duration_ms": 27511
       }
     },
     {
@@ -1079,10 +1239,10 @@
       "query": "ACEI 导致干咳时应该如何处理？",
       "status": "ok",
       "error": "",
-      "duration_seconds": 7.22,
-      "answer_status": "unverified",
+      "duration_seconds": 26.1,
+      "answer_status": "verified",
       "retrieval_status": "complete",
-      "verification_status": "skipped",
+      "verification_status": "passed",
       "source_count": 4,
       "retries": 0,
       "signal_extractor_output": {
@@ -1098,11 +1258,14 @@
         }
       },
       "initial_tools": [
-        "vector_search"
+        "vector_search",
+        "cypher_traverse"
       ],
       "retrieval_hits_by_provider": {
         "vector_search": 4,
-        "vector": 4
+        "vector": 4,
+        "cypher_traverse": 1,
+        "graph": 1
       },
       "reflection_verdicts": [
         {
@@ -1112,15 +1275,25 @@
           "required_tool": "none",
           "preferred_tools": [],
           "preferred_providers": []
+        },
+        {
+          "verdict": "answer",
+          "gap_type": "none",
+          "failure_type": "acceptable",
+          "required_tool": "none",
+          "preferred_tools": [],
+          "preferred_providers": []
         }
       ],
       "retry_tools": [],
-      "claim_roles": {},
+      "claim_roles": {
+        "core": 2
+      },
       "regenerated": false,
       "verification": {
-        "status": null,
-        "claims_total": 0,
-        "claims_supported": 0,
+        "status": "passed",
+        "claims_total": 2,
+        "claims_supported": 2,
         "claims_possible": 0,
         "claims_incorrect": 0,
         "skipped_reason": ""
@@ -1135,26 +1308,26 @@
         },
         {
           "rank": 2,
-          "score": 0.6481,
+          "score": 0.6486,
           "source": "vector",
           "content": "- GOLD 1级仅需按需使用SABA\n- 嗜酸性粒细胞≥300/μL时考虑ICS\n- GOLD 3-4级且嗜酸性粒细胞≥100/μL时使用三联方案\n\n- 慢性阻塞性肺疾病 [疾病] aliases: COPD, 慢阻肺\n\n- FEV1 [检查指标] aliases: 第一秒用力呼气容积\n\n- 沙丁胺醇 [药物] aliases: Salbutamol, SABA\n\n- 福莫特罗 [药物] aliases: Formoterol, LABA\n\n- 噻托溴铵 [药物] aliases: Tiotropium, LAM"
         },
         {
           "rank": 3,
-          "score": 0.6456,
+          "score": 0.645,
           "source": "vector",
           "content": "慢性阻塞性肺疾病（Chronic Obstructive Pulmonary Disease, COPD）是一种以持续气流受限为特征的可预防和可治疗的疾病。诊断依据肺功能检查：使用支气管舒张剂后，FEV1/FVC < 0.70即可确诊。\n\n根据FEV1占预计值百分比分为4级：\n\n- GOLD 1级（轻度）：FEV1 ≥ 80%预计值\n\n- GOLD 2级（中度）：50% ≤ FEV1 < 80%预计值\n\n- GOLD 3级（重度）：30% ≤ FEV1 < 50%预计值\n\n- GOLD 4级（极重度）：FEV1 <"
         },
         {
           "rank": 4,
-          "score": 0.6417,
+          "score": 0.6414,
           "source": "vector",
           "content": "- CAT评分 --阈值--> ≥10分提示症状负担较重\n\n- 沙丁胺醇 --剂量--> 100-200 μg/次\n\n- 沙丁胺醇 --起效时间--> 5-15分钟\n\n- 沙丁胺醇 --持续时间--> 4-6小时\n\n- 福莫特罗 --剂量--> 12 μg每日2次\n\n- 噻托溴铵 --剂量--> 18 μg每日1次\n\n- 噻托溴铵 --起效时间--> 30-60分钟\n\n- GOLD 1级 --推荐治疗--> SABA按需\n\n- GOLD 2级且嗜酸性粒细胞≥300/μL --推荐治疗--> LABA+ICS\n\n- "
         }
       ],
       "trace": {
-        "trace_id": "tr_a88190071acb",
-        "timestamp": "2026-05-11T08:35:56.307897+00:00",
+        "trace_id": "tr_790884fb3d0c",
+        "timestamp": "2026-05-11T10:59:00.399009+00:00",
         "query": "ACEI 导致干咳时应该如何处理？",
         "expanded_query": "ACEI 导致干咳时应该如何处理？\n\nMedical aliases: 血管紧张素转换酶抑制剂, 普利类药物",
         "final_answer": "应停用 ACEI，并改用 ARB。[Chunk 1]",
@@ -1175,7 +1348,7 @@
             "tool_name": "vector_search",
             "results_count": 4,
             "relevance_score": 0.9,
-            "duration_ms": 2802,
+            "duration_ms": 5295,
             "query_used": "ACEI 导致干咳时应该如何处理？\n\nMedical aliases: 血管紧张素转换酶抑制剂, 普利类药物",
             "cache_hit": false,
             "reused_sources": [],
@@ -1186,14 +1359,39 @@
               {
                 "source": "vector",
                 "results_count": 4,
-                "top_score": 0.7888398170471191,
-                "average_score": 0.681056797504425,
+                "top_score": 0.7887625694274902,
+                "average_score": 0.6809398531913757,
                 "reused": false,
                 "executed": true,
                 "top_chunk_ids": [
                   "28080b21",
                   "7a25e64c",
                   "c656706e"
+                ]
+              }
+            ]
+          },
+          {
+            "tool_name": "cypher_traverse",
+            "results_count": 1,
+            "relevance_score": 0.9,
+            "duration_ms": 5706,
+            "query_used": "ACEI 导致干咳时应该如何处理？\n\nMedical aliases: 血管紧张素转换酶抑制剂, 普利类药物",
+            "cache_hit": false,
+            "reused_sources": [],
+            "executed_sources": [
+              "graph"
+            ],
+            "provider_diagnostics": [
+              {
+                "source": "graph",
+                "results_count": 1,
+                "top_score": 1.0,
+                "average_score": 1.0,
+                "reused": false,
+                "executed": true,
+                "top_chunk_ids": [
+                  "28080b21"
                 ]
               }
             ]
@@ -1226,6 +1424,31 @@
             "should_rewrite_query": false,
             "should_rerank_again": false,
             "comparison_to_previous": "Auto-accepted due to strong retrieval evidence."
+          },
+          {
+            "attempt": 0,
+            "tool_name": "cypher_traverse",
+            "query_used": "ACEI 导致干咳时应该如何处理？\n\nMedical aliases: 血管紧张素转换酶抑制剂, 普利类药物",
+            "evidence_status": "sufficient",
+            "gap_type": "none",
+            "action": "answer",
+            "required_tool": "none",
+            "verdict": "answer",
+            "missing_information": [],
+            "missing_entities": [],
+            "missing_relationships": [],
+            "coverage_gap_sources": [],
+            "candidate_fix_paths": [],
+            "preferred_tools": [],
+            "preferred_providers": [],
+            "retry_scope": "stop",
+            "reasoning": "检索证据直接回答了问题：ACEI可致干咳，出现持续干咳时应停用ACEI并改用ARB，且ARB干咳风险更低。",
+            "failure_type": "acceptable",
+            "recommended_action": "answer_ready",
+            "should_retry": false,
+            "should_rewrite_query": false,
+            "should_rerank_again": false,
+            "comparison_to_previous": "无前次反思，当前证据已足够。"
           }
         ],
         "workflow_memory": [
@@ -1238,6 +1461,29 @@
             }
           },
           {
+            "stage": "budget",
+            "message": "started LLM call: need_resolver",
+            "metadata": {
+              "max_llm_calls": 5,
+              "calls_started": 1,
+              "remaining_llm_calls": 4,
+              "operations": [
+                "need_resolver"
+              ]
+            }
+          },
+          {
+            "stage": "need_resolver",
+            "message": "resolved retrieval evidence needs",
+            "metadata": {
+              "retrieval_needs": [
+                "semantic_passage",
+                "graph_relation"
+              ],
+              "reason": "问题询问ACEI与干咳这一不良反应的关系，以及出现该情况后的处理/替代方案，需要语义证据和实体间关系证据。"
+            }
+          },
+          {
             "stage": "route",
             "message": "router suggested vector_search; retrieval plan starts vector_search",
             "metadata": {
@@ -1246,7 +1492,12 @@
               "confidence": 0.5,
               "primary_tool": "vector_search",
               "initial_tools": [
-                "vector_search"
+                "vector_search",
+                "cypher_traverse"
+              ],
+              "retrieval_needs": [
+                "semantic_passage",
+                "graph_relation"
               ]
             }
           },
@@ -1270,13 +1521,86 @@
             }
           },
           {
+            "stage": "session_context",
+            "message": "Applied recent conversation context to resolve follow-up references.",
+            "metadata": {
+              "original_query": "ACEI 导致干咳时应该如何处理？",
+              "expanded_query": "ACEI 导致干咳时应该如何处理？\n\nMedical aliases: 血管紧张素转换酶抑制剂, 普利类药物"
+            }
+          },
+          {
+            "stage": "budget",
+            "message": "started LLM call: need_resolver",
+            "metadata": {
+              "max_llm_calls": 5,
+              "calls_started": 1,
+              "remaining_llm_calls": 4,
+              "operations": [
+                "need_resolver"
+              ]
+            }
+          },
+          {
+            "stage": "need_resolver",
+            "message": "resolved retrieval evidence needs",
+            "metadata": {
+              "retrieval_needs": [
+                "semantic_passage",
+                "graph_relation"
+              ],
+              "reason": "问题询问ACEI与干咳这一不良反应的关系，以及出现该情况后的处理/替代方案，需要语义证据和实体间关系证据。"
+            }
+          },
+          {
+            "stage": "route",
+            "message": "router suggested vector_search; retrieval plan starts vector_search",
+            "metadata": {
+              "query_type": "QueryType.SIMPLE",
+              "method": "deterministic",
+              "confidence": 0.5,
+              "primary_tool": "vector_search",
+              "initial_tools": [
+                "vector_search",
+                "cypher_traverse"
+              ],
+              "retrieval_needs": [
+                "semantic_passage",
+                "graph_relation"
+              ]
+            }
+          },
+          {
+            "stage": "retrieval",
+            "message": "cypher_traverse returned 1 results",
+            "metadata": {
+              "query": "ACEI 导致干咳时应该如何处理？\n\nMedical aliases: 血管紧张素转换酶抑制剂, 普利类药物",
+              "tool": "cypher_traverse",
+              "executed_sources": [
+                "graph"
+              ]
+            }
+          },
+          {
+            "stage": "reflection",
+            "message": "cypher_traverse classified evidence as sufficient with action answer",
+            "metadata": {
+              "evidence_status": "sufficient",
+              "gap_type": "none",
+              "action": "answer",
+              "verdict": "answer",
+              "failure_type": "acceptable",
+              "retry_scope": "stop"
+            }
+          },
+          {
             "stage": "budget",
             "message": "started LLM call: generate_answer",
             "metadata": {
-              "max_llm_calls": 4,
-              "calls_started": 1,
+              "max_llm_calls": 5,
+              "calls_started": 2,
               "remaining_llm_calls": 3,
               "operations": [
+                "need_resolver",
                 "generate_answer"
               ]
             }
@@ -1291,6 +1615,32 @@
               "verification_status": "skipped",
               "answer_guard_triggered": false
             }
+          },
+          {
+            "stage": "budget",
+            "message": "started LLM call: claim_extraction",
+            "metadata": {
+              "max_llm_calls": 5,
+              "calls_started": 3,
+              "remaining_llm_calls": 2,
+              "operations": [
+                "need_resolver",
+                "generate_answer",
+                "claim_extraction"
+              ]
+            }
+          },
+          {
+            "stage": "verify",
+            "message": "claim verification: correct=2, possible=0, incorrect=0 (passed)",
+            "metadata": {
+              "claims_total": 2,
+              "claims_supported": 2,
+              "claims_possible": 0,
+              "claims_incorrect": 0,
+              "verification_status": "passed",
+              "answer_status_after": "verified"
+            }
           }
         ],
         "escalation_steps": [],
@@ -1298,14 +1648,69 @@
           "model": "gpt-5.4",
           "prompt_tokens": 3408,
           "completion_tokens": 19,
-          "answer_status": "unverified",
+          "answer_status": "verified",
           "retrieval_status": "complete",
-          "verification_status": "skipped",
+          "verification_status": "passed",
           "completeness_check": null,
-          "duration_ms": 3639
+          "duration_ms": 2000
         },
-        "verification_step": null,
-        "total_duration_ms": 6488
+        "verification_step": {
+          "claims_total": 2,
+          "claims_supported": 2,
+          "claims_possible": 0,
+          "claims_incorrect": 0,
+          "verified_claims": [
+            {
+              "text": "ACEI导致干咳时应停用ACEI",
+              "key_terms": [
+                "ACEI",
+                "干咳",
+                "停用"
+              ],
+              "entities": [
+                "ACEI",
+                "干咳"
+              ],
+              "numeric_constraints": [],
+              "relation_actions": [
+                "停用"
+              ],
+              "claim_role": "core",
+              "supported": true,
+              "verification_level": "correct",
+              "failure_type": "none",
+              "top_chunk_id": "28080b21"
+            },
+            {
+              "text": "ACEI导致干咳时应改用ARB",
+              "key_terms": [
+                "ACEI",
+                "干咳",
+                "ARB",
+                "改用"
+              ],
+              "entities": [
+                "ACEI",
+                "干咳",
+                "ARB"
+              ],
+              "numeric_constraints": [],
+              "relation_actions": [
+                "改用"
+              ],
+              "claim_role": "core",
+              "supported": true,
+              "verification_level": "correct",
+              "failure_type": "none",
+              "top_chunk_id": "28080b21"
+            }
+          ],
+          "unsupported_claims": [],
+          "skipped_reason": "",
+          "duration_ms": 3894,
+          "status": "passed"
+        },
+        "total_duration_ms": 25488
       }
     },
     {
@@ -1314,10 +1719,10 @@
       "query": "ACEI、干咳、ARB 之间是什么关系？",
       "status": "ok",
       "error": "",
-      "duration_seconds": 14.37,
-      "answer_status": "unverified",
+      "duration_seconds": 25.24,
+      "answer_status": "verified",
       "retrieval_status": "complete",
-      "verification_status": "skipped",
+      "verification_status": "passed",
       "source_count": 4,
       "retries": 0,
       "signal_extractor_output": {
@@ -1338,13 +1743,24 @@
         }
       },
       "initial_tools": [
-        "vector_search"
+        "vector_search",
+        "cypher_traverse"
       ],
       "retrieval_hits_by_provider": {
         "vector_search": 4,
-        "vector": 4
+        "vector": 4,
+        "cypher_traverse": 1,
+        "graph": 1
       },
       "reflection_verdicts": [
+        {
+          "verdict": "answer",
+          "gap_type": "none",
+          "failure_type": "acceptable",
+          "required_tool": "none",
+          "preferred_tools": [],
+          "preferred_providers": []
+        },
         {
           "verdict": "answer",
           "gap_type": "none",
@@ -1355,12 +1771,15 @@
         }
       ],
       "retry_tools": [],
-      "claim_roles": {},
+      "claim_roles": {
+        "core": 3,
+        "supporting": 1
+      },
       "regenerated": false,
       "verification": {
-        "status": null,
-        "claims_total": 0,
-        "claims_supported": 0,
+        "status": "passed",
+        "claims_total": 4,
+        "claims_supported": 4,
         "claims_possible": 0,
         "claims_incorrect": 0,
         "skipped_reason": ""
@@ -1369,19 +1788,19 @@
       "source_previews": [
         {
           "rank": 1,
-          "score": 0.7632,
+          "score": 0.7636,
           "source": "vector",
           "content": "ACEI（血管紧张素转换酶抑制剂）可引起刺激性干咳。若患者使用 ACEI 后出现持续干咳，应停用 ACEI，并改用 ARB（血管紧张素 II 受体阻滞剂）。ARB 与 ACEI 同属肾素-血管紧张素系统药物，但 ARB 发生干咳的风险较低。\n\n关键事实：\n\n- ACEI --不良反应--> 干咳\n\n- ACEI --处理措施--> 停用\n\n- 干咳 --替代方案--> ARB\n\n- ARB --优势--> 干咳风险较低\n\n二甲双胍用于 2 型糖尿病治疗时需要根据肾功能调整。eGFR < 30 mL/min/1.73"
         },
         {
           "rank": 2,
-          "score": 0.6428,
+          "score": 0.6427,
           "source": "vector",
           "content": "- CAT评分 --阈值--> ≥10分提示症状负担较重\n\n- 沙丁胺醇 --剂量--> 100-200 μg/次\n\n- 沙丁胺醇 --起效时间--> 5-15分钟\n\n- 沙丁胺醇 --持续时间--> 4-6小时\n\n- 福莫特罗 --剂量--> 12 μg每日2次\n\n- 噻托溴铵 --剂量--> 18 μg每日1次\n\n- 噻托溴铵 --起效时间--> 30-60分钟\n\n- GOLD 1级 --推荐治疗--> SABA按需\n\n- GOLD 2级且嗜酸性粒细胞≥300/μL --推荐治疗--> LABA+ICS\n\n- "
         },
         {
           "rank": 3,
-          "score": 0.6366,
+          "score": 0.6363,
           "source": "vector",
           "content": "- GOLD 1级仅需按需使用SABA\n- 嗜酸性粒细胞≥300/μL时考虑ICS\n- GOLD 3-4级且嗜酸性粒细胞≥100/μL时使用三联方案\n\n- 慢性阻塞性肺疾病 [疾病] aliases: COPD, 慢阻肺\n\n- FEV1 [检查指标] aliases: 第一秒用力呼气容积\n\n- 沙丁胺醇 [药物] aliases: Salbutamol, SABA\n\n- 福莫特罗 [药物] aliases: Formoterol, LABA\n\n- 噻托溴铵 [药物] aliases: Tiotropium, LAM"
         },
@@ -1393,8 +1812,8 @@
         }
       ],
       "trace": {
-        "trace_id": "tr_ff89abd1890f",
-        "timestamp": "2026-05-11T08:35:56.307897+00:00",
+        "trace_id": "tr_1c3fc7100bbb",
+        "timestamp": "2026-05-11T10:59:00.397006+00:00",
         "query": "ACEI、干咳、ARB 之间是什么关系？",
         "expanded_query": "ACEI、干咳、ARB 之间是什么关系？\n\nMedical aliases: 血管紧张素转换酶抑制剂, 普利类药物, 血管紧张素受体拮抗剂, 沙坦类药物",
         "final_answer": "ACEI 可引起干咳；如果使用 ACEI 后出现持续干咳，应停用 ACEI，改用 ARB；ARB 的干咳风险较低。[Chunk 1]",
@@ -1414,8 +1833,8 @@
           {
             "tool_name": "vector_search",
             "results_count": 4,
-            "relevance_score": 0.7631969451904297,
-            "duration_ms": 1343,
+            "relevance_score": 0.7635641098022461,
+            "duration_ms": 1412,
             "query_used": "ACEI、干咳、ARB 之间是什么关系？\n\nMedical aliases: 血管紧张素转换酶抑制剂, 普利类药物, 血管紧张素受体拮抗剂, 沙坦类药物",
             "cache_hit": false,
             "reused_sources": [],
@@ -1426,14 +1845,39 @@
               {
                 "source": "vector",
                 "results_count": 4,
-                "top_score": 0.7631969451904297,
-                "average_score": 0.6691397428512573,
+                "top_score": 0.7635641098022461,
+                "average_score": 0.6691321134567261,
                 "reused": false,
                 "executed": true,
                 "top_chunk_ids": [
                   "28080b21",
                   "a29f33f2",
                   "7a25e64c"
+                ]
+              }
+            ]
+          },
+          {
+            "tool_name": "cypher_traverse",
+            "results_count": 1,
+            "relevance_score": 0.6,
+            "duration_ms": 4037,
+            "query_used": "ACEI、干咳、ARB 之间是什么关系？\n\nMedical aliases: 血管紧张素转换酶抑制剂, 普利类药物, 血管紧张素受体拮抗剂, 沙坦类药物",
+            "cache_hit": false,
+            "reused_sources": [],
+            "executed_sources": [
+              "graph"
+            ],
+            "provider_diagnostics": [
+              {
+                "source": "graph",
+                "results_count": 1,
+                "top_score": 1.0,
+                "average_score": 1.0,
+                "reused": false,
+                "executed": true,
+                "top_chunk_ids": [
+                  "28080b21"
                 ]
               }
             ]
@@ -1457,13 +1901,38 @@
             "preferred_tools": [],
             "preferred_providers": [],
             "retry_scope": "stop",
-            "reasoning": "检索结果直接说明：ACEI可引起干咳；若因ACEI出现持续干咳，应停用ACEI并改用ARB；ARB与ACEI同属肾素-血管紧张素系统药物，且干咳风险较低。",
+            "reasoning": "检索结果直接说明了三者关系：ACEI可引起干咳；出现ACEI相关持续干咳时应停用ACEI并改用ARB；ARB与ACEI同属RAS系统药物且干咳风险更低。",
             "failure_type": "acceptable",
             "recommended_action": "answer_ready",
             "should_retry": false,
             "should_rewrite_query": false,
             "should_rerank_again": false,
-            "comparison_to_previous": "无前次反思记录，本次证据已可直接回答问题。"
+            "comparison_to_previous": "首次反思，无前次结果可比。"
+          },
+          {
+            "attempt": 0,
+            "tool_name": "cypher_traverse",
+            "query_used": "ACEI、干咳、ARB 之间是什么关系？\n\nMedical aliases: 血管紧张素转换酶抑制剂, 普利类药物, 血管紧张素受体拮抗剂, 沙坦类药物",
+            "evidence_status": "sufficient",
+            "gap_type": "none",
+            "action": "answer",
+            "required_tool": "none",
+            "verdict": "answer",
+            "missing_information": [],
+            "missing_entities": [],
+            "missing_relationships": [],
+            "coverage_gap_sources": [],
+            "candidate_fix_paths": [],
+            "preferred_tools": [],
+            "preferred_providers": [],
+            "retry_scope": "stop",
+            "reasoning": "检索结果直接说明了三者关系：ACEI可导致干咳，出现持续干咳时应停用ACEI并改用ARB，且ARB相较ACEI干咳风险更低。",
+            "failure_type": "acceptable",
+            "recommended_action": "answer_ready",
+            "should_retry": false,
+            "should_rewrite_query": false,
+            "should_rerank_again": false,
+            "comparison_to_previous": "No previous reflection history."
           }
         ],
         "workflow_memory": [
@@ -1476,6 +1945,29 @@
             }
           },
           {
+            "stage": "budget",
+            "message": "started LLM call: need_resolver",
+            "metadata": {
+              "max_llm_calls": 5,
+              "calls_started": 1,
+              "remaining_llm_calls": 4,
+              "operations": [
+                "need_resolver"
+              ]
+            }
+          },
+          {
+            "stage": "need_resolver",
+            "message": "resolved retrieval evidence needs",
+            "metadata": {
+              "retrieval_needs": [
+                "semantic_passage",
+                "graph_relation"
+              ],
+              "reason": "The query asks for the relationship among ACEI, dry cough, and ARB, including likely adverse-effect and replacement/comparison relations, so semantic context plus entity-relation evidence are needed."
+            }
+          },
+          {
             "stage": "route",
             "message": "router suggested vector_search; retrieval plan starts vector_search",
             "metadata": {
@@ -1484,7 +1976,12 @@
               "confidence": 0.5,
               "primary_tool": "vector_search",
               "initial_tools": [
-                "vector_search"
+                "vector_search",
+                "cypher_traverse"
+              ],
+              "retrieval_needs": [
+                "semantic_passage",
+                "graph_relation"
               ]
             }
           },
@@ -1512,13 +2009,86 @@
             }
           },
           {
+            "stage": "session_context",
+            "message": "Applied recent conversation context to resolve follow-up references.",
+            "metadata": {
+              "original_query": "ACEI、干咳、ARB 之间是什么关系？",
+              "expanded_query": "ACEI、干咳、ARB 之间是什么关系？\n\nMedical aliases: 血管紧张素转换酶抑制剂, 普利类药物, 血管紧张素受体拮抗剂, 沙坦类药物"
+            }
+          },
+          {
+            "stage": "budget",
+            "message": "started LLM call: need_resolver",
+            "metadata": {
+              "max_llm_calls": 5,
+              "calls_started": 1,
+              "remaining_llm_calls": 4,
+              "operations": [
+                "need_resolver"
+              ]
+            }
+          },
+          {
+            "stage": "need_resolver",
+            "message": "resolved retrieval evidence needs",
+            "metadata": {
+              "retrieval_needs": [
+                "semantic_passage",
+                "graph_relation"
+              ],
+              "reason": "The query asks for the relationship among ACEI, dry cough, and ARB, including likely adverse-effect and replacement/comparison relations, so semantic context plus entity-relation evidence are needed."
+            }
+          },
+          {
+            "stage": "route",
+            "message": "router suggested vector_search; retrieval plan starts vector_search",
+            "metadata": {
+              "query_type": "QueryType.SIMPLE",
+              "method": "deterministic",
+              "confidence": 0.5,
+              "primary_tool": "vector_search",
+              "initial_tools": [
+                "vector_search",
+                "cypher_traverse"
+              ],
+              "retrieval_needs": [
+                "semantic_passage",
+                "graph_relation"
+              ]
+            }
+          },
+          {
+            "stage": "retrieval",
+            "message": "cypher_traverse returned 1 results",
+            "metadata": {
+              "query": "ACEI、干咳、ARB 之间是什么关系？\n\nMedical aliases: 血管紧张素转换酶抑制剂, 普利类药物, 血管紧张素受体拮抗剂, 沙坦类药物",
+              "tool": "cypher_traverse",
+              "executed_sources": [
+                "graph"
+              ]
+            }
+          },
+          {
+            "stage": "reflection",
+            "message": "cypher_traverse classified evidence as sufficient with action answer",
+            "metadata": {
+              "evidence_status": "sufficient",
+              "gap_type": "none",
+              "action": "answer",
+              "verdict": "answer",
+              "failure_type": "acceptable",
+              "retry_scope": "stop"
+            }
+          },
+          {
             "stage": "budget",
             "message": "started LLM call: generate_answer",
             "metadata": {
-              "max_llm_calls": 4,
-              "calls_started": 1,
+              "max_llm_calls": 5,
+              "calls_started": 2,
               "remaining_llm_calls": 3,
               "operations": [
+                "need_resolver",
                 "generate_answer"
               ]
             }
@@ -1533,6 +2103,32 @@
               "verification_status": "skipped",
               "answer_guard_triggered": false
             }
+          },
+          {
+            "stage": "budget",
+            "message": "started LLM call: claim_extraction",
+            "metadata": {
+              "max_llm_calls": 5,
+              "calls_started": 3,
+              "remaining_llm_calls": 2,
+              "operations": [
+                "need_resolver",
+                "generate_answer",
+                "claim_extraction"
+              ]
+            }
+          },
+          {
+            "stage": "verify",
+            "message": "claim verification: correct=4, possible=0, incorrect=0 (passed)",
+            "metadata": {
+              "claims_total": 4,
+              "claims_supported": 4,
+              "claims_possible": 0,
+              "claims_incorrect": 0,
+              "verification_status": "passed",
+              "answer_status_after": "verified"
+            }
           }
         ],
         "escalation_steps": [],
@@ -1540,14 +2136,111 @@
           "model": "gpt-5.4",
           "prompt_tokens": 3428,
           "completion_tokens": 47,
-          "answer_status": "unverified",
+          "answer_status": "verified",
           "retrieval_status": "complete",
-          "verification_status": "skipped",
+          "verification_status": "passed",
           "completeness_check": null,
-          "duration_ms": 3862
+          "duration_ms": 4504
         },
-        "verification_step": null,
-        "total_duration_ms": 13638
+        "verification_step": {
+          "claims_total": 4,
+          "claims_supported": 4,
+          "claims_possible": 0,
+          "claims_incorrect": 0,
+          "verified_claims": [
+            {
+              "text": "ACEI可引起干咳",
+              "key_terms": [
+                "ACEI",
+                "干咳",
+                "引起"
+              ],
+              "entities": [
+                "ACEI",
+                "干咳"
+              ],
+              "numeric_constraints": [],
+              "relation_actions": [
+                "引起"
+              ],
+              "claim_role": "core",
+              "supported": true,
+              "verification_level": "correct",
+              "failure_type": "none",
+              "top_chunk_id": "28080b21"
+            },
+            {
+              "text": "使用ACEI后出现持续干咳时应停用ACEI",
+              "key_terms": [
+                "ACEI",
+                "干咳",
+                "停用"
+              ],
+              "entities": [
+                "ACEI",
+                "干咳"
+              ],
+              "numeric_constraints": [],
+              "relation_actions": [
+                "停用"
+              ],
+              "claim_role": "core",
+              "supported": true,
+              "verification_level": "correct",
+              "failure_type": "none",
+              "top_chunk_id": "28080b21"
+            },
+            {
+              "text": "使用ACEI后出现持续干咳时应改用ARB",
+              "key_terms": [
+                "ACEI",
+                "干咳",
+                "ARB",
+                "改用"
+              ],
+              "entities": [
+                "ACEI",
+                "干咳",
+                "ARB"
+              ],
+              "numeric_constraints": [],
+              "relation_actions": [
+                "改用"
+              ],
+              "claim_role": "core",
+              "supported": true,
+              "verification_level": "correct",
+              "failure_type": "none",
+              "top_chunk_id": "28080b21"
+            },
+            {
+              "text": "ARB的干咳风险较低",
+              "key_terms": [
+                "ARB",
+                "干咳",
+                "风险较低"
+              ],
+              "entities": [
+                "ARB",
+                "干咳"
+              ],
+              "numeric_constraints": [],
+              "relation_actions": [
+                "风险较低"
+              ],
+              "claim_role": "supporting",
+              "supported": true,
+              "verification_level": "correct",
+              "failure_type": "none",
+              "top_chunk_id": "28080b21"
+            }
+          ],
+          "unsupported_claims": [],
+          "skipped_reason": "",
+          "duration_ms": 5651,
+          "status": "passed"
+        },
+        "total_duration_ms": 24627
       }
     },
     {
@@ -1556,12 +2249,12 @@
       "query": "ARB 相比 ACEI 在干咳方面有什么优势？",
       "status": "ok",
       "error": "",
-      "duration_seconds": 13.04,
+      "duration_seconds": 70.45,
       "answer_status": "unverified",
       "retrieval_status": "complete",
       "verification_status": "skipped",
-      "source_count": 4,
-      "retries": 0,
+      "source_count": 5,
+      "retries": 1,
       "signal_extractor_output": {
         "anchors": [
           {
@@ -1580,13 +2273,25 @@
         }
       },
       "initial_tools": [
-        "vector_search"
+        "vector_search",
+        "cypher_traverse"
       ],
       "retrieval_hits_by_provider": {
         "vector_search": 4,
-        "vector": 4
+        "vector": 4,
+        "cypher_traverse": 1,
+        "graph": 1,
+        "hybrid_search": 5
       },
       "reflection_verdicts": [
+        {
+          "verdict": "answer",
+          "gap_type": "none",
+          "failure_type": "acceptable",
+          "required_tool": "none",
+          "preferred_tools": [],
+          "preferred_providers": []
+        },
         {
           "verdict": "answer",
           "gap_type": "none",
@@ -1600,14 +2305,14 @@
       "claim_roles": {},
       "regenerated": false,
       "verification": {
-        "status": null,
+        "status": "skipped",
         "claims_total": 0,
         "claims_supported": 0,
         "claims_possible": 0,
         "claims_incorrect": 0,
-        "skipped_reason": ""
+        "skipped_reason": "llm_budget_exhausted"
       },
-      "answer_preview": "ARB 相比 ACEI 的优势是：**干咳发生风险较低**；如果使用 ACEI 后出现持续干咳，可改用 ARB。[Chunk 1]",
+      "answer_preview": "ARB 相比 ACEI 的优势是：**发生干咳的风险较低**。[Chunk 1]",
       "source_previews": [
         {
           "rank": 1,
@@ -1632,14 +2337,20 @@
           "score": 0.6501,
           "source": "vector",
           "content": "- GOLD 1级仅需按需使用SABA\n- 嗜酸性粒细胞≥300/μL时考虑ICS\n- GOLD 3-4级且嗜酸性粒细胞≥100/μL时使用三联方案\n\n- 慢性阻塞性肺疾病 [疾病] aliases: COPD, 慢阻肺\n\n- FEV1 [检查指标] aliases: 第一秒用力呼气容积\n\n- 沙丁胺醇 [药物] aliases: Salbutamol, SABA\n\n- 福莫特罗 [药物] aliases: Formoterol, LABA\n\n- 噻托溴铵 [药物] aliases: Tiotropium, LAM"
+        },
+        {
+          "rank": 5,
+          "score": -6.2932,
+          "source": "hybrid",
+          "content": "Entities:\nLAMA (DrugClass)\nSABA (DrugClass)\n\nEvidence:\n| 1级 | 轻 | 0-1次/年 | 任意 | SABA按需 | | 2级 | 轻-中 | 0-1次/年 | 任意 | LABA或LAMA |"
         }
       ],
       "trace": {
-        "trace_id": "tr_5e34f6b09b49",
-        "timestamp": "2026-05-11T08:35:56.304280+00:00",
+        "trace_id": "tr_5cbdb3051f5c",
+        "timestamp": "2026-05-11T10:59:00.399009+00:00",
         "query": "ARB 相比 ACEI 在干咳方面有什么优势？",
         "expanded_query": "ARB 相比 ACEI 在干咳方面有什么优势？\n\nMedical aliases: 血管紧张素转换酶抑制剂, 普利类药物, 血管紧张素受体拮抗剂, 沙坦类药物",
-        "final_answer": "ARB 相比 ACEI 的优势是：**干咳发生风险较低**；如果使用 ACEI 后出现持续干咳，可改用 ARB。[Chunk 1]",
+        "final_answer": "ARB 相比 ACEI 的优势是：**发生干咳的风险较低**。[Chunk 1]",
         "session_id": "trace-eval::graph_direct_003",
         "router_step": {
           "method": "deterministic",
@@ -1657,7 +2368,7 @@
             "tool_name": "vector_search",
             "results_count": 4,
             "relevance_score": 0.7730278968811035,
-            "duration_ms": 1522,
+            "duration_ms": 1258,
             "query_used": "ARB 相比 ACEI 在干咳方面有什么优势？\n\nMedical aliases: 血管紧张素转换酶抑制剂, 普利类药物, 血管紧张素受体拮抗剂, 沙坦类药物",
             "cache_hit": false,
             "reused_sources": [],
@@ -1679,6 +2390,42 @@
                 ]
               }
             ]
+          },
+          {
+            "tool_name": "cypher_traverse",
+            "results_count": 1,
+            "relevance_score": 0.6,
+            "duration_ms": 4361,
+            "query_used": "ARB 相比 ACEI 在干咳方面有什么优势？\n\nMedical aliases: 血管紧张素转换酶抑制剂, 普利类药物, 血管紧张素受体拮抗剂, 沙坦类药物",
+            "cache_hit": false,
+            "reused_sources": [],
+            "executed_sources": [
+              "graph"
+            ],
+            "provider_diagnostics": [
+              {
+                "source": "graph",
+                "results_count": 1,
+                "top_score": 1.0,
+                "average_score": 1.0,
+                "reused": false,
+                "executed": true,
+                "top_chunk_ids": [
+                  "28080b21"
+                ]
+              }
+            ]
+          },
+          {
+            "tool_name": "hybrid_search",
+            "results_count": 5,
+            "relevance_score": 0.0,
+            "duration_ms": 43109,
+            "query_used": "ARB ACEI 干咳 发生风险较低 持续干咳 改用 ARB",
+            "cache_hit": false,
+            "reused_sources": [],
+            "executed_sources": [],
+            "provider_diagnostics": []
           }
         ],
         "reflection_steps": [
@@ -1699,13 +2446,38 @@
             "preferred_tools": [],
             "preferred_providers": [],
             "retry_scope": "stop",
-            "reasoning": "检索结果直接说明ACEI可引起刺激性干咳，若出现持续干咳应停用并改用ARB，且ARB发生干咳的风险较低，已直接回答ARB相对ACEI在干咳方面的优势。",
+            "reasoning": "检索结果直接说明 ACEI 可引起刺激性干咳，ARB 发生干咳的风险较低，且 ACEI 出现持续干咳时可改用 ARB，已足以回答比较性问题。",
             "failure_type": "acceptable",
             "recommended_action": "answer_ready",
             "should_retry": false,
             "should_rewrite_query": false,
             "should_rerank_again": false,
-            "comparison_to_previous": "无前次反思记录，本次证据已足够回答。"
+            "comparison_to_previous": "无前次反思记录，本次证据已可直接作答。"
+          },
+          {
+            "attempt": 0,
+            "tool_name": "cypher_traverse",
+            "query_used": "ARB 相比 ACEI 在干咳方面有什么优势？\n\nMedical aliases: 血管紧张素转换酶抑制剂, 普利类药物, 血管紧张素受体拮抗剂, 沙坦类药物",
+            "evidence_status": "sufficient",
+            "gap_type": "none",
+            "action": "answer",
+            "required_tool": "none",
+            "verdict": "answer",
+            "missing_information": [],
+            "missing_entities": [],
+            "missing_relationships": [],
+            "coverage_gap_sources": [],
+            "candidate_fix_paths": [],
+            "preferred_tools": [],
+            "preferred_providers": [],
+            "retry_scope": "stop",
+            "reasoning": "检索结果直接说明 ACEI 可引起刺激性干咳，ARB 发生干咳的风险较低，且 ACEI 出现持续干咳时可改用 ARB，已直接回答比较问题。",
+            "failure_type": "acceptable",
+            "recommended_action": "answer_ready",
+            "should_retry": false,
+            "should_rewrite_query": false,
+            "should_rerank_again": false,
+            "comparison_to_previous": "首次判定，无历史对比。"
           }
         ],
         "workflow_memory": [
@@ -1718,6 +2490,29 @@
             }
           },
           {
+            "stage": "budget",
+            "message": "started LLM call: need_resolver",
+            "metadata": {
+              "max_llm_calls": 5,
+              "calls_started": 1,
+              "remaining_llm_calls": 4,
+              "operations": [
+                "need_resolver"
+              ]
+            }
+          },
+          {
+            "stage": "need_resolver",
+            "message": "resolved retrieval evidence needs",
+            "metadata": {
+              "retrieval_needs": [
+                "semantic_passage",
+                "graph_relation"
+              ],
+              "reason": "该问题要求比较 ARB 与 ACEI 在干咳不良反应上的差异与优势，需要语义性说明，以及药物类别与不良反应之间的比较/关联证据。"
+            }
+          },
+          {
             "stage": "route",
             "message": "router suggested vector_search; retrieval plan starts vector_search",
             "metadata": {
@@ -1726,7 +2521,12 @@
               "confidence": 0.5,
               "primary_tool": "vector_search",
               "initial_tools": [
-                "vector_search"
+                "vector_search",
+                "cypher_traverse"
+              ],
+              "retrieval_needs": [
+                "semantic_passage",
+                "graph_relation"
               ]
             }
           },
@@ -1754,200 +2554,36 @@
             }
           },
           {
-            "stage": "budget",
-            "message": "started LLM call: generate_answer",
+            "stage": "session_context",
+            "message": "Applied recent conversation context to resolve follow-up references.",
             "metadata": {
-              "max_llm_calls": 4,
+              "original_query": "ARB 相比 ACEI 在干咳方面有什么优势？",
+              "expanded_query": "ARB 相比 ACEI 在干咳方面有什么优势？\n\nMedical aliases: 血管紧张素转换酶抑制剂, 普利类药物, 血管紧张素受体拮抗剂, 沙坦类药物"
+            }
+          },
+          {
+            "stage": "budget",
+            "message": "started LLM call: need_resolver",
+            "metadata": {
+              "max_llm_calls": 5,
               "calls_started": 1,
-              "remaining_llm_calls": 3,
+              "remaining_llm_calls": 4,
               "operations": [
-                "generate_answer"
+                "need_resolver"
               ]
             }
           },
           {
-            "stage": "generate",
-            "message": "generated answer from current evidence",
+            "stage": "need_resolver",
+            "message": "resolved retrieval evidence needs",
             "metadata": {
-              "sources": 4,
-              "answer_status": "unverified",
-              "retrieval_status": "complete",
-              "verification_status": "skipped",
-              "answer_guard_triggered": false
+              "retrieval_needs": [
+                "semantic_passage",
+                "graph_relation"
+              ],
+              "reason": "该问题要求比较 ARB 与 ACEI 在干咳不良反应上的差异与优势，需要语义性说明，以及药物类别与不良反应之间的比较/关联证据。"
             }
-          }
-        ],
-        "escalation_steps": [],
-        "generator_step": {
-          "model": "gpt-5.4",
-          "prompt_tokens": 3429,
-          "completion_tokens": 43,
-          "answer_status": "unverified",
-          "retrieval_status": "complete",
-          "verification_status": "skipped",
-          "completeness_check": null,
-          "duration_ms": 2937
-        },
-        "verification_step": null,
-        "total_duration_ms": 12313
-      }
-    },
-    {
-      "id": "numeric_exact_001",
-      "group": "numeric_exact",
-      "query": "噻托溴铵每日用几次？",
-      "status": "ok",
-      "error": "",
-      "duration_seconds": 14.32,
-      "answer_status": "verified",
-      "retrieval_status": "complete",
-      "verification_status": "passed",
-      "source_count": 4,
-      "retries": 0,
-      "signal_extractor_output": {
-        "anchors": [
-          {
-            "text": "噻托溴铵每日用几次",
-            "kind": "phrase",
-            "source": "query"
-          }
-        ],
-        "by_kind": {
-          "phrase": 1
-        }
-      },
-      "initial_tools": [
-        "vector_search"
-      ],
-      "retrieval_hits_by_provider": {
-        "vector_search": 4,
-        "vector": 4
-      },
-      "reflection_verdicts": [
-        {
-          "verdict": "answer",
-          "gap_type": "none",
-          "failure_type": "acceptable",
-          "required_tool": "none",
-          "preferred_tools": [],
-          "preferred_providers": []
-        }
-      ],
-      "retry_tools": [],
-      "claim_roles": {
-        "core": 1
-      },
-      "regenerated": false,
-      "verification": {
-        "status": "passed",
-        "claims_total": 1,
-        "claims_supported": 1,
-        "claims_possible": 0,
-        "claims_incorrect": 0,
-        "skipped_reason": ""
-      },
-      "answer_preview": "噻托溴铵每日1次。 [Chunk 1][Chunk 4]",
-      "source_previews": [
-        {
-          "rank": 1,
-          "score": 0.7462,
-          "source": "vector",
-          "content": "ACEI（血管紧张素转换酶抑制剂）可引起刺激性干咳。若患者使用 ACEI 后出现持续干咳，应停用 ACEI，并改用 ARB（血管紧张素 II 受体阻滞剂）。ARB 与 ACEI 同属肾素-血管紧张素系统药物，但 ARB 发生干咳的风险较低。\n\n关键事实：\n\n- ACEI --不良反应--> 干咳\n\n- ACEI --处理措施--> 停用\n\n- 干咳 --替代方案--> ARB\n\n- ARB --优势--> 干咳风险较低\n\n二甲双胍用于 2 型糖尿病治疗时需要根据肾功能调整。eGFR < 30 mL/min/1.73"
-        },
-        {
-          "rank": 2,
-          "score": 0.7439,
-          "source": "vector",
-          "content": "- CAT评分 --阈值--> ≥10分提示症状负担较重\n\n- 沙丁胺醇 --剂量--> 100-200 μg/次\n\n- 沙丁胺醇 --起效时间--> 5-15分钟\n\n- 沙丁胺醇 --持续时间--> 4-6小时\n\n- 福莫特罗 --剂量--> 12 μg每日2次\n\n- 噻托溴铵 --剂量--> 18 μg每日1次\n\n- 噻托溴铵 --起效时间--> 30-60分钟\n\n- GOLD 1级 --推荐治疗--> SABA按需\n\n- GOLD 2级且嗜酸性粒细胞≥300/μL --推荐治疗--> LABA+ICS\n\n- "
-        },
-        {
-          "rank": 3,
-          "score": 0.7073,
-          "source": "vector",
-          "content": "慢性阻塞性肺疾病（Chronic Obstructive Pulmonary Disease, COPD）是一种以持续气流受限为特征的可预防和可治疗的疾病。诊断依据肺功能检查：使用支气管舒张剂后，FEV1/FVC < 0.70即可确诊。\n\n根据FEV1占预计值百分比分为4级：\n\n- GOLD 1级（轻度）：FEV1 ≥ 80%预计值\n\n- GOLD 2级（中度）：50% ≤ FEV1 < 80%预计值\n\n- GOLD 3级（重度）：30% ≤ FEV1 < 50%预计值\n\n- GOLD 4级（极重度）：FEV1 <"
-        },
-        {
-          "rank": 4,
-          "score": 0.7039,
-          "source": "vector",
-          "content": "- GOLD 1级仅需按需使用SABA\n- 嗜酸性粒细胞≥300/μL时考虑ICS\n- GOLD 3-4级且嗜酸性粒细胞≥100/μL时使用三联方案\n\n- 慢性阻塞性肺疾病 [疾病] aliases: COPD, 慢阻肺\n\n- FEV1 [检查指标] aliases: 第一秒用力呼气容积\n\n- 沙丁胺醇 [药物] aliases: Salbutamol, SABA\n\n- 福莫特罗 [药物] aliases: Formoterol, LABA\n\n- 噻托溴铵 [药物] aliases: Tiotropium, LAM"
-        }
-      ],
-      "trace": {
-        "trace_id": "tr_c3aeace845da",
-        "timestamp": "2026-05-11T08:36:02.849428+00:00",
-        "query": "噻托溴铵每日用几次？",
-        "expanded_query": "",
-        "final_answer": "噻托溴铵每日1次。 [Chunk 1][Chunk 4]",
-        "session_id": "trace-eval::numeric_exact_001",
-        "router_step": {
-          "method": "deterministic",
-          "decision": {
-            "query_type": "simple",
-            "confidence": 0.5,
-            "reasoning": "Deterministic default; retrieval planner handles companion channels.",
-            "suggested_tool": "vector_search"
           },
-          "duration_ms": 0,
-          "rules_fired": []
-        },
-        "tool_steps": [
-          {
-            "tool_name": "vector_search",
-            "results_count": 4,
-            "relevance_score": 0.7462253570556641,
-            "duration_ms": 1305,
-            "query_used": "噻托溴铵每日用几次？",
-            "cache_hit": false,
-            "reused_sources": [],
-            "executed_sources": [
-              "vector"
-            ],
-            "provider_diagnostics": [
-              {
-                "source": "vector",
-                "results_count": 4,
-                "top_score": 0.7462253570556641,
-                "average_score": 0.7253429889678955,
-                "reused": false,
-                "executed": true,
-                "top_chunk_ids": [
-                  "28080b21",
-                  "a29f33f2",
-                  "c656706e"
-                ]
-              }
-            ]
-          }
-        ],
-        "reflection_steps": [
-          {
-            "attempt": 0,
-            "tool_name": "vector_search",
-            "query_used": "噻托溴铵每日用几次？",
-            "evidence_status": "sufficient",
-            "gap_type": "none",
-            "action": "answer",
-            "required_tool": "none",
-            "verdict": "answer",
-            "missing_information": [],
-            "missing_entities": [],
-            "missing_relationships": [],
-            "coverage_gap_sources": [],
-            "candidate_fix_paths": [],
-            "preferred_tools": [],
-            "preferred_providers": [],
-            "retry_scope": "stop",
-            "reasoning": "检索结果直接包含“噻托溴铵 --剂量--> 18 μg每日1次”，可直接回答每日用药次数。",
-            "failure_type": "acceptable",
-            "recommended_action": "answer_ready",
-            "should_retry": false,
-            "should_rewrite_query": false,
-            "should_rerank_again": false,
-            "comparison_to_previous": "无前次反思；本次证据已足够直接作答。"
-          }
-        ],
-        "workflow_memory": [
           {
             "stage": "route",
             "message": "router suggested vector_search; retrieval plan starts vector_search",
@@ -1957,24 +2593,29 @@
               "confidence": 0.5,
               "primary_tool": "vector_search",
               "initial_tools": [
-                "vector_search"
+                "vector_search",
+                "cypher_traverse"
+              ],
+              "retrieval_needs": [
+                "semantic_passage",
+                "graph_relation"
               ]
             }
           },
           {
             "stage": "retrieval",
-            "message": "vector_search returned 4 results",
+            "message": "cypher_traverse returned 1 results",
             "metadata": {
-              "query": "噻托溴铵每日用几次？",
-              "tool": "vector_search",
+              "query": "ARB 相比 ACEI 在干咳方面有什么优势？\n\nMedical aliases: 血管紧张素转换酶抑制剂, 普利类药物, 血管紧张素受体拮抗剂, 沙坦类药物",
+              "tool": "cypher_traverse",
               "executed_sources": [
-                "vector"
+                "graph"
               ]
             }
           },
           {
             "stage": "reflection",
-            "message": "vector_search classified evidence as sufficient with action answer",
+            "message": "cypher_traverse classified evidence as sufficient with action answer",
             "metadata": {
               "evidence_status": "sufficient",
               "gap_type": "none",
@@ -1988,10 +2629,11 @@
             "stage": "budget",
             "message": "started LLM call: generate_answer",
             "metadata": {
-              "max_llm_calls": 4,
-              "calls_started": 1,
+              "max_llm_calls": 5,
+              "calls_started": 2,
               "remaining_llm_calls": 3,
               "operations": [
+                "need_resolver",
                 "generate_answer"
               ]
             }
@@ -2011,10 +2653,582 @@
             "stage": "budget",
             "message": "started LLM call: claim_extraction",
             "metadata": {
-              "max_llm_calls": 4,
-              "calls_started": 2,
+              "max_llm_calls": 5,
+              "calls_started": 3,
               "remaining_llm_calls": 2,
               "operations": [
+                "need_resolver",
+                "generate_answer",
+                "claim_extraction"
+              ]
+            }
+          },
+          {
+            "stage": "verify",
+            "message": "claim verification: correct=1, possible=1, incorrect=0 (partial)",
+            "metadata": {
+              "claims_total": 2,
+              "claims_supported": 1,
+              "claims_possible": 1,
+              "claims_incorrect": 0,
+              "verification_status": "partial",
+              "answer_status_after": "partial"
+            }
+          },
+          {
+            "stage": "budget",
+            "message": "started LLM call: correction_planner",
+            "metadata": {
+              "max_llm_calls": 5,
+              "calls_started": 4,
+              "remaining_llm_calls": 1,
+              "operations": [
+                "need_resolver",
+                "generate_answer",
+                "claim_extraction",
+                "correction_planner"
+              ]
+            }
+          },
+          {
+            "stage": "verify_plan",
+            "message": "correction planner selected retry_with_tool",
+            "metadata": {
+              "action": "retry_with_tool",
+              "tool": "hybrid_search",
+              "focus_query": "ARB ACEI 干咳 发生风险较低 持续干咳 改用 ARB",
+              "gap_types": [
+                "missing_entity"
+              ],
+              "reason": "核心缺口是比较性结论，需同时召回 ARB、ACEI、干咳 及替代用药表述的精确与语义证据。"
+            }
+          },
+          {
+            "stage": "verify_retry",
+            "message": "verification retry appended planner-selected hybrid_search evidence",
+            "metadata": {
+              "tool": "hybrid_search",
+              "focus_query": "ARB ACEI 干咳 发生风险较低 持续干咳 改用 ARB",
+              "added_results": 1,
+              "duration_ms": 43109
+            }
+          },
+          {
+            "stage": "budget",
+            "message": "started LLM call: generate_answer",
+            "metadata": {
+              "max_llm_calls": 5,
+              "calls_started": 5,
+              "remaining_llm_calls": 0,
+              "operations": [
+                "need_resolver",
+                "generate_answer",
+                "claim_extraction",
+                "correction_planner",
+                "generate_answer"
+              ]
+            }
+          },
+          {
+            "stage": "generate",
+            "message": "generated answer from current evidence",
+            "metadata": {
+              "sources": 5,
+              "answer_status": "unverified",
+              "retrieval_status": "complete",
+              "verification_status": "skipped",
+              "answer_guard_triggered": false
+            }
+          },
+          {
+            "stage": "budget",
+            "message": "LLM budget exhausted before claim_extraction: 5/5 calls already started",
+            "metadata": {
+              "max_llm_calls": 5,
+              "calls_started": 5,
+              "remaining_llm_calls": 0,
+              "operations": [
+                "need_resolver",
+                "generate_answer",
+                "claim_extraction",
+                "correction_planner",
+                "generate_answer"
+              ]
+            }
+          }
+        ],
+        "escalation_steps": [
+          {
+            "from_tool": "verification",
+            "to_tool": "hybrid_search",
+            "reason": "核心缺口是比较性结论，需同时召回 ARB、ACEI、干咳 及替代用药表述的精确与语义证据。",
+            "rephrased_query": "ARB ACEI 干咳 发生风险较低 持续干咳 改用 ARB",
+            "duration_ms": 43109,
+            "cached_sources_reused": []
+          }
+        ],
+        "generator_step": {
+          "model": "gpt-5.4",
+          "prompt_tokens": 3501,
+          "completion_tokens": 28,
+          "answer_status": "unverified",
+          "retrieval_status": "complete",
+          "verification_status": "skipped",
+          "completeness_check": null,
+          "duration_ms": 2634
+        },
+        "verification_step": {
+          "claims_total": 0,
+          "claims_supported": 0,
+          "claims_possible": 0,
+          "claims_incorrect": 0,
+          "verified_claims": [],
+          "unsupported_claims": [],
+          "skipped_reason": "llm_budget_exhausted",
+          "duration_ms": 0,
+          "status": "skipped"
+        },
+        "total_duration_ms": 69839
+      }
+    },
+    {
+      "id": "numeric_exact_001",
+      "group": "numeric_exact",
+      "query": "噻托溴铵每日用几次？",
+      "status": "ok",
+      "error": "",
+      "duration_seconds": 27.19,
+      "answer_status": "verified",
+      "retrieval_status": "complete",
+      "verification_status": "passed",
+      "source_count": 5,
+      "retries": 0,
+      "signal_extractor_output": {
+        "anchors": [
+          {
+            "text": "噻托溴铵每日用几次",
+            "kind": "phrase",
+            "source": "query"
+          }
+        ],
+        "by_kind": {
+          "phrase": 1
+        }
+      },
+      "initial_tools": [
+        "vector_search",
+        "bm25_search"
+      ],
+      "retrieval_hits_by_provider": {
+        "vector_search": 4,
+        "vector": 4,
+        "bm25_search": 5,
+        "bm25": 5
+      },
+      "reflection_verdicts": [
+        {
+          "verdict": "retry",
+          "gap_type": "off_topic",
+          "failure_type": "insufficient_context",
+          "required_tool": "none",
+          "preferred_tools": [],
+          "preferred_providers": []
+        },
+        {
+          "verdict": "retry",
+          "gap_type": "off_topic",
+          "failure_type": "no_results",
+          "required_tool": "vector_search",
+          "preferred_tools": [
+            "vector_search",
+            "full_document_read"
+          ],
+          "preferred_providers": [
+            "vector"
+          ]
+        }
+      ],
+      "retry_tools": [
+        "vector_search",
+        "full_document_read"
+      ],
+      "claim_roles": {
+        "core": 1
+      },
+      "regenerated": false,
+      "verification": {
+        "status": "passed",
+        "claims_total": 1,
+        "claims_supported": 1,
+        "claims_possible": 0,
+        "claims_incorrect": 0,
+        "skipped_reason": ""
+      },
+      "answer_preview": "噻托溴铵每日1次。[Chunk 1][Chunk 5]",
+      "source_previews": [
+        {
+          "rank": 1,
+          "score": 0.746,
+          "source": "vector",
+          "content": "ACEI（血管紧张素转换酶抑制剂）可引起刺激性干咳。若患者使用 ACEI 后出现持续干咳，应停用 ACEI，并改用 ARB（血管紧张素 II 受体阻滞剂）。ARB 与 ACEI 同属肾素-血管紧张素系统药物，但 ARB 发生干咳的风险较低。\n\n关键事实：\n\n- ACEI --不良反应--> 干咳\n\n- ACEI --处理措施--> 停用\n\n- 干咳 --替代方案--> ARB\n\n- ARB --优势--> 干咳风险较低\n\n二甲双胍用于 2 型糖尿病治疗时需要根据肾功能调整。eGFR < 30 mL/min/1.73"
+        },
+        {
+          "rank": 2,
+          "score": 0.7447,
+          "source": "vector",
+          "content": "- CAT评分 --阈值--> ≥10分提示症状负担较重\n\n- 沙丁胺醇 --剂量--> 100-200 μg/次\n\n- 沙丁胺醇 --起效时间--> 5-15分钟\n\n- 沙丁胺醇 --持续时间--> 4-6小时\n\n- 福莫特罗 --剂量--> 12 μg每日2次\n\n- 噻托溴铵 --剂量--> 18 μg每日1次\n\n- 噻托溴铵 --起效时间--> 30-60分钟\n\n- GOLD 1级 --推荐治疗--> SABA按需\n\n- GOLD 2级且嗜酸性粒细胞≥300/μL --推荐治疗--> LABA+ICS\n\n- "
+        },
+        {
+          "rank": 3,
+          "score": 0.7084,
+          "source": "vector",
+          "content": "慢性阻塞性肺疾病（Chronic Obstructive Pulmonary Disease, COPD）是一种以持续气流受限为特征的可预防和可治疗的疾病。诊断依据肺功能检查：使用支气管舒张剂后，FEV1/FVC < 0.70即可确诊。\n\n根据FEV1占预计值百分比分为4级：\n\n- GOLD 1级（轻度）：FEV1 ≥ 80%预计值\n\n- GOLD 2级（中度）：50% ≤ FEV1 < 80%预计值\n\n- GOLD 3级（重度）：30% ≤ FEV1 < 50%预计值\n\n- GOLD 4级（极重度）：FEV1 <"
+        },
+        {
+          "rank": 4,
+          "score": 0.705,
+          "source": "vector",
+          "content": "- GOLD 1级仅需按需使用SABA\n- 嗜酸性粒细胞≥300/μL时考虑ICS\n- GOLD 3-4级且嗜酸性粒细胞≥100/μL时使用三联方案\n\n- 慢性阻塞性肺疾病 [疾病] aliases: COPD, 慢阻肺\n\n- FEV1 [检查指标] aliases: 第一秒用力呼气容积\n\n- 沙丁胺醇 [药物] aliases: Salbutamol, SABA\n\n- 福莫特罗 [药物] aliases: Formoterol, LABA\n\n- 噻托溴铵 [药物] aliases: Tiotropium, LAM"
+        },
+        {
+          "rank": 5,
+          "score": 0.3078,
+          "source": "bm25",
+          "content": "Document summary: 慢性阻塞性肺疾病（Chronic Obstructive Pulmonary Disease, COPD）是一种以持续气流受限为特征的可预防和可治疗的疾病。诊断依据肺功能检查：使用支气管舒张剂后，FEV1/FVC < 0.70即可确诊。 根据FEV1占预计值百分比分为4级： - GOLD 1级（轻度）：FEV1 ≥ 80%预计值 - GOLD 2级（中度）：50% ≤ FEV1 < 80%预计值 - GOLD 3级（重度）：30% ≤ FEV1 < 50%预计值 - GOLD 4"
+        }
+      ],
+      "trace": {
+        "trace_id": "tr_8c6a14002150",
+        "timestamp": "2026-05-11T10:59:25.061919+00:00",
+        "query": "噻托溴铵每日用几次？",
+        "expanded_query": "",
+        "final_answer": "噻托溴铵每日1次。[Chunk 1][Chunk 5]",
+        "session_id": "trace-eval::numeric_exact_001",
+        "router_step": {
+          "method": "deterministic",
+          "decision": {
+            "query_type": "simple",
+            "confidence": 0.5,
+            "reasoning": "Deterministic default; retrieval planner handles companion channels.",
+            "suggested_tool": "vector_search"
+          },
+          "duration_ms": 0,
+          "rules_fired": []
+        },
+        "tool_steps": [
+          {
+            "tool_name": "vector_search",
+            "results_count": 4,
+            "relevance_score": 0.7460460662841797,
+            "duration_ms": 17460,
+            "query_used": "噻托溴铵每日用几次？",
+            "cache_hit": false,
+            "reused_sources": [],
+            "executed_sources": [
+              "vector"
+            ],
+            "provider_diagnostics": [
+              {
+                "source": "vector",
+                "results_count": 4,
+                "top_score": 0.7460460662841797,
+                "average_score": 0.7260404825210571,
+                "reused": false,
+                "executed": true,
+                "top_chunk_ids": [
+                  "28080b21",
+                  "a29f33f2",
+                  "c656706e"
+                ]
+              }
+            ]
+          },
+          {
+            "tool_name": "bm25_search",
+            "results_count": 5,
+            "relevance_score": 0.6714950419240318,
+            "duration_ms": 109,
+            "query_used": "噻托溴铵每日用几次？",
+            "cache_hit": false,
+            "reused_sources": [],
+            "executed_sources": [
+              "bm25"
+            ],
+            "provider_diagnostics": [
+              {
+                "source": "bm25",
+                "results_count": 5,
+                "top_score": 2.0440940856933594,
+                "average_score": 1.3321686148643495,
+                "reused": false,
+                "executed": true,
+                "top_chunk_ids": [
+                  "a29f33f2",
+                  "28080b21",
+                  "c656706e"
+                ]
+              }
+            ]
+          }
+        ],
+        "reflection_steps": [
+          {
+            "attempt": 0,
+            "tool_name": "vector_search",
+            "query_used": "噻托溴铵每日用几次？",
+            "evidence_status": "insufficient",
+            "gap_type": "off_topic",
+            "action": "stop",
+            "required_tool": "none",
+            "verdict": "retry",
+            "missing_information": [
+              "Request time budget is too low for reflection."
+            ],
+            "missing_entities": [],
+            "missing_relationships": [],
+            "coverage_gap_sources": [],
+            "candidate_fix_paths": [
+              "skip_reflection_due_to_budget"
+            ],
+            "preferred_tools": [],
+            "preferred_providers": [],
+            "retry_scope": "tool_escalation",
+            "reasoning": "Skipped LLM reflection because the remaining request time budget was too low.",
+            "failure_type": "insufficient_context",
+            "recommended_action": "stop_due_to_time_budget",
+            "should_retry": true,
+            "should_rewrite_query": false,
+            "should_rerank_again": false,
+            "comparison_to_previous": "Budget guard stop."
+          },
+          {
+            "attempt": 0,
+            "tool_name": "bm25_search",
+            "query_used": "噻托溴铵每日用几次？",
+            "evidence_status": "empty",
+            "gap_type": "off_topic",
+            "action": "retry_vector",
+            "required_tool": "vector_search",
+            "verdict": "retry",
+            "missing_information": [
+              "噻托溴铵的具体每日给药频次"
+            ],
+            "missing_entities": [
+              "噻托溴铵"
+            ],
+            "missing_relationships": [
+              "噻托溴铵-用法用量-每日频次"
+            ],
+            "coverage_gap_sources": [
+              "bm25"
+            ],
+            "candidate_fix_paths": [
+              "retry_vector -> full_document_read"
+            ],
+            "preferred_tools": [
+              "vector_search",
+              "full_document_read"
+            ],
+            "preferred_providers": [
+              "vector"
+            ],
+            "retry_scope": "tool_escalation",
+            "reasoning": "当前检索结果主要是COPD指南和其他药物内容，未检索到与噻托溴铵用药频次直接相关的有效证据。",
+            "failure_type": "no_results",
+            "recommended_action": "expand_recall",
+            "should_retry": true,
+            "should_rewrite_query": false,
+            "should_rerank_again": false,
+            "comparison_to_previous": "无前次反思可比较，本次BM25结果与问题主题不匹配。"
+          }
+        ],
+        "workflow_memory": [
+          {
+            "stage": "budget",
+            "message": "started LLM call: need_resolver",
+            "metadata": {
+              "max_llm_calls": 5,
+              "calls_started": 1,
+              "remaining_llm_calls": 4,
+              "operations": [
+                "need_resolver"
+              ]
+            }
+          },
+          {
+            "stage": "need_resolver",
+            "message": "resolved retrieval evidence needs",
+            "metadata": {
+              "retrieval_needs": [
+                "semantic_passage",
+                "exact_numeric"
+              ],
+              "reason": "问题询问噻托溴铵的每日用药频次，需要语义性用法说明，并需要精确频次等数值证据。"
+            }
+          },
+          {
+            "stage": "route",
+            "message": "router suggested vector_search; retrieval plan starts vector_search",
+            "metadata": {
+              "query_type": "QueryType.SIMPLE",
+              "method": "deterministic",
+              "confidence": 0.5,
+              "primary_tool": "vector_search",
+              "initial_tools": [
+                "vector_search",
+                "bm25_search"
+              ],
+              "retrieval_needs": [
+                "semantic_passage",
+                "exact_numeric"
+              ]
+            }
+          },
+          {
+            "stage": "retrieval",
+            "message": "vector_search returned 4 results",
+            "metadata": {
+              "query": "噻托溴铵每日用几次？",
+              "tool": "vector_search",
+              "executed_sources": [
+                "vector"
+              ]
+            }
+          },
+          {
+            "stage": "reflection",
+            "message": "vector_search classified evidence as insufficient with action stop",
+            "metadata": {
+              "evidence_status": "insufficient",
+              "gap_type": "off_topic",
+              "action": "stop",
+              "verdict": "retry",
+              "failure_type": "insufficient_context",
+              "missing_information": [
+                "Request time budget is too low for reflection."
+              ],
+              "retry_scope": "tool_escalation"
+            }
+          },
+          {
+            "stage": "retry",
+            "message": "request time budget exhausted; returning best known evidence",
+            "metadata": {
+              "tool": "vector_search",
+              "remaining_budget_ms": 0
+            }
+          },
+          {
+            "stage": "budget",
+            "message": "started LLM call: need_resolver",
+            "metadata": {
+              "max_llm_calls": 5,
+              "calls_started": 1,
+              "remaining_llm_calls": 4,
+              "operations": [
+                "need_resolver"
+              ]
+            }
+          },
+          {
+            "stage": "need_resolver",
+            "message": "resolved retrieval evidence needs",
+            "metadata": {
+              "retrieval_needs": [
+                "semantic_passage",
+                "exact_numeric"
+              ],
+              "reason": "问题询问噻托溴铵的每日用药频次，需要语义性用法说明，并需要精确频次等数值证据。"
+            }
+          },
+          {
+            "stage": "route",
+            "message": "router suggested vector_search; retrieval plan starts vector_search",
+            "metadata": {
+              "query_type": "QueryType.SIMPLE",
+              "method": "deterministic",
+              "confidence": 0.5,
+              "primary_tool": "vector_search",
+              "initial_tools": [
+                "vector_search",
+                "bm25_search"
+              ],
+              "retrieval_needs": [
+                "semantic_passage",
+                "exact_numeric"
+              ]
+            }
+          },
+          {
+            "stage": "retrieval",
+            "message": "bm25_search returned 5 results",
+            "metadata": {
+              "query": "噻托溴铵每日用几次？",
+              "tool": "bm25_search",
+              "executed_sources": [
+                "bm25"
+              ]
+            }
+          },
+          {
+            "stage": "reflection",
+            "message": "bm25_search classified evidence as empty with action retry_vector",
+            "metadata": {
+              "evidence_status": "empty",
+              "gap_type": "off_topic",
+              "action": "retry_vector",
+              "verdict": "retry",
+              "failure_type": "no_results",
+              "missing_information": [
+                "噻托溴铵的具体每日给药频次"
+              ],
+              "missing_entities": [
+                "噻托溴铵"
+              ],
+              "retry_scope": "tool_escalation"
+            }
+          },
+          {
+            "stage": "retry",
+            "message": "reflection requested already-covered gap: 噻托溴铵",
+            "metadata": {
+              "tool": "bm25_search",
+              "remaining_budget_ms": 9153
+            }
+          },
+          {
+            "stage": "budget",
+            "message": "started LLM call: generate_answer",
+            "metadata": {
+              "max_llm_calls": 5,
+              "calls_started": 2,
+              "remaining_llm_calls": 3,
+              "operations": [
+                "need_resolver",
+                "generate_answer"
+              ]
+            }
+          },
+          {
+            "stage": "generate",
+            "message": "generated answer from current evidence",
+            "metadata": {
+              "sources": 5,
+              "answer_status": "partial",
+              "retrieval_status": "complete",
+              "verification_status": "skipped",
+              "answer_guard_triggered": true
+            }
+          },
+          {
+            "stage": "budget",
+            "message": "started LLM call: claim_extraction",
+            "metadata": {
+              "max_llm_calls": 5,
+              "calls_started": 3,
+              "remaining_llm_calls": 2,
+              "operations": [
+                "need_resolver",
                 "generate_answer",
                 "claim_extraction"
               ]
@@ -2036,13 +3250,13 @@
         "escalation_steps": [],
         "generator_step": {
           "model": "gpt-5.4",
-          "prompt_tokens": 3386,
-          "completion_tokens": 24,
+          "prompt_tokens": 3958,
+          "completion_tokens": 23,
           "answer_status": "verified",
           "retrieval_status": "complete",
           "verification_status": "passed",
           "completeness_check": null,
-          "duration_ms": 2502
+          "duration_ms": 3332
         },
         "verification_step": {
           "claims_total": 1,
@@ -2075,10 +3289,10 @@
           ],
           "unsupported_claims": [],
           "skipped_reason": "",
-          "duration_ms": 5292,
+          "duration_ms": 2759,
           "status": "passed"
         },
-        "total_duration_ms": 14273
+        "total_duration_ms": 27154
       }
     },
     {
@@ -2087,11 +3301,11 @@
       "query": "噻托溴铵剂量是多少？",
       "status": "ok",
       "error": "",
-      "duration_seconds": 21.27,
+      "duration_seconds": 30.35,
       "answer_status": "verified",
       "retrieval_status": "complete",
       "verification_status": "passed",
-      "source_count": 4,
+      "source_count": 5,
       "retries": 0,
       "signal_extractor_output": {
         "anchors": [
@@ -2106,23 +3320,42 @@
         }
       },
       "initial_tools": [
-        "vector_search"
+        "vector_search",
+        "bm25_search"
       ],
       "retrieval_hits_by_provider": {
         "vector_search": 4,
-        "vector": 4
+        "vector": 4,
+        "bm25_search": 5,
+        "bm25": 5
       },
       "reflection_verdicts": [
         {
-          "verdict": "answer",
-          "gap_type": "none",
-          "failure_type": "acceptable",
+          "verdict": "retry",
+          "gap_type": "off_topic",
+          "failure_type": "insufficient_context",
           "required_tool": "none",
           "preferred_tools": [],
           "preferred_providers": []
+        },
+        {
+          "verdict": "retry",
+          "gap_type": "missing_numeric_threshold",
+          "failure_type": "no_results",
+          "required_tool": "vector_search",
+          "preferred_tools": [
+            "vector_search",
+            "full_document_read"
+          ],
+          "preferred_providers": [
+            "vector"
+          ]
         }
       ],
-      "retry_tools": [],
+      "retry_tools": [
+        "vector_search",
+        "full_document_read"
+      ],
       "claim_roles": {
         "core": 2
       },
@@ -2135,39 +3368,45 @@
         "claims_incorrect": 0,
         "skipped_reason": ""
       },
-      "answer_preview": "噻托溴铵常用剂量为 **18 μg，每日1次**。[Chunk 1][Chunk 4]",
+      "answer_preview": "噻托溴铵常用剂量为 **18 μg，每日1次**。[Chunk 1][Chunk 2][Chunk 5]",
       "source_previews": [
         {
           "rank": 1,
-          "score": 0.7671,
+          "score": 0.7676,
           "source": "vector",
           "content": "ACEI（血管紧张素转换酶抑制剂）可引起刺激性干咳。若患者使用 ACEI 后出现持续干咳，应停用 ACEI，并改用 ARB（血管紧张素 II 受体阻滞剂）。ARB 与 ACEI 同属肾素-血管紧张素系统药物，但 ARB 发生干咳的风险较低。\n\n关键事实：\n\n- ACEI --不良反应--> 干咳\n\n- ACEI --处理措施--> 停用\n\n- 干咳 --替代方案--> ARB\n\n- ARB --优势--> 干咳风险较低\n\n二甲双胍用于 2 型糖尿病治疗时需要根据肾功能调整。eGFR < 30 mL/min/1.73"
         },
         {
           "rank": 2,
-          "score": 0.7664,
+          "score": 0.7671,
           "source": "vector",
           "content": "- CAT评分 --阈值--> ≥10分提示症状负担较重\n\n- 沙丁胺醇 --剂量--> 100-200 μg/次\n\n- 沙丁胺醇 --起效时间--> 5-15分钟\n\n- 沙丁胺醇 --持续时间--> 4-6小时\n\n- 福莫特罗 --剂量--> 12 μg每日2次\n\n- 噻托溴铵 --剂量--> 18 μg每日1次\n\n- 噻托溴铵 --起效时间--> 30-60分钟\n\n- GOLD 1级 --推荐治疗--> SABA按需\n\n- GOLD 2级且嗜酸性粒细胞≥300/μL --推荐治疗--> LABA+ICS\n\n- "
         },
         {
           "rank": 3,
-          "score": 0.7292,
+          "score": 0.7294,
           "source": "vector",
           "content": "- GOLD 1级仅需按需使用SABA\n- 嗜酸性粒细胞≥300/μL时考虑ICS\n- GOLD 3-4级且嗜酸性粒细胞≥100/μL时使用三联方案\n\n- 慢性阻塞性肺疾病 [疾病] aliases: COPD, 慢阻肺\n\n- FEV1 [检查指标] aliases: 第一秒用力呼气容积\n\n- 沙丁胺醇 [药物] aliases: Salbutamol, SABA\n\n- 福莫特罗 [药物] aliases: Formoterol, LABA\n\n- 噻托溴铵 [药物] aliases: Tiotropium, LAM"
         },
         {
           "rank": 4,
-          "score": 0.7228,
+          "score": 0.7241,
           "source": "vector",
           "content": "慢性阻塞性肺疾病（Chronic Obstructive Pulmonary Disease, COPD）是一种以持续气流受限为特征的可预防和可治疗的疾病。诊断依据肺功能检查：使用支气管舒张剂后，FEV1/FVC < 0.70即可确诊。\n\n根据FEV1占预计值百分比分为4级：\n\n- GOLD 1级（轻度）：FEV1 ≥ 80%预计值\n\n- GOLD 2级（中度）：50% ≤ FEV1 < 80%预计值\n\n- GOLD 3级（重度）：30% ≤ FEV1 < 50%预计值\n\n- GOLD 4级（极重度）：FEV1 <"
+        },
+        {
+          "rank": 5,
+          "score": 0.2443,
+          "source": "bm25",
+          "content": "Document summary: 慢性阻塞性肺疾病（Chronic Obstructive Pulmonary Disease, COPD）是一种以持续气流受限为特征的可预防和可治疗的疾病。诊断依据肺功能检查：使用支气管舒张剂后，FEV1/FVC < 0.70即可确诊。 根据FEV1占预计值百分比分为4级： - GOLD 1级（轻度）：FEV1 ≥ 80%预计值 - GOLD 2级（中度）：50% ≤ FEV1 < 80%预计值 - GOLD 3级（重度）：30% ≤ FEV1 < 50%预计值 - GOLD 4"
         }
       ],
       "trace": {
-        "trace_id": "tr_060555fdcee5",
-        "timestamp": "2026-05-11T08:36:08.661581+00:00",
+        "trace_id": "tr_2be23ca0ad12",
+        "timestamp": "2026-05-11T10:59:25.933518+00:00",
         "query": "噻托溴铵剂量是多少？",
         "expanded_query": "",
-        "final_answer": "噻托溴铵常用剂量为 **18 μg，每日1次**。[Chunk 1][Chunk 4]",
+        "final_answer": "噻托溴铵常用剂量为 **18 μg，每日1次**。[Chunk 1][Chunk 2][Chunk 5]",
         "session_id": "trace-eval::numeric_exact_002",
         "router_step": {
           "method": "deterministic",
@@ -2184,8 +3423,8 @@
           {
             "tool_name": "vector_search",
             "results_count": 4,
-            "relevance_score": 0.7671017646789551,
-            "duration_ms": 1344,
+            "relevance_score": 0.7675604820251465,
+            "duration_ms": 16754,
             "query_used": "噻托溴铵剂量是多少？",
             "cache_hit": false,
             "reused_sources": [],
@@ -2196,13 +3435,40 @@
               {
                 "source": "vector",
                 "results_count": 4,
-                "top_score": 0.7671017646789551,
-                "average_score": 0.7463749051094055,
+                "top_score": 0.7675604820251465,
+                "average_score": 0.7470434904098511,
                 "reused": false,
                 "executed": true,
                 "top_chunk_ids": [
                   "28080b21",
                   "a29f33f2",
+                  "7a25e64c"
+                ]
+              }
+            ]
+          },
+          {
+            "tool_name": "bm25_search",
+            "results_count": 5,
+            "relevance_score": 0.5449386365368586,
+            "duration_ms": 101,
+            "query_used": "噻托溴铵剂量是多少？",
+            "cache_hit": false,
+            "reused_sources": [],
+            "executed_sources": [
+              "bm25"
+            ],
+            "provider_diagnostics": [
+              {
+                "source": "bm25",
+                "results_count": 5,
+                "top_score": 1.1975058317184448,
+                "average_score": 0.8466806948184967,
+                "reused": false,
+                "executed": true,
+                "top_chunk_ids": [
+                  "a29f33f2",
+                  "28080b21",
                   "7a25e64c"
                 ]
               }
@@ -2214,29 +3480,96 @@
             "attempt": 0,
             "tool_name": "vector_search",
             "query_used": "噻托溴铵剂量是多少？",
-            "evidence_status": "sufficient",
-            "gap_type": "none",
-            "action": "answer",
+            "evidence_status": "insufficient",
+            "gap_type": "off_topic",
+            "action": "stop",
             "required_tool": "none",
-            "verdict": "answer",
-            "missing_information": [],
+            "verdict": "retry",
+            "missing_information": [
+              "Request time budget is too low for reflection."
+            ],
             "missing_entities": [],
             "missing_relationships": [],
             "coverage_gap_sources": [],
-            "candidate_fix_paths": [],
+            "candidate_fix_paths": [
+              "skip_reflection_due_to_budget"
+            ],
             "preferred_tools": [],
             "preferred_providers": [],
-            "retry_scope": "stop",
-            "reasoning": "检索结果直接包含“噻托溴铵 --剂量--> 18 μg每日1次”，可直接回答查询。",
-            "failure_type": "acceptable",
-            "recommended_action": "answer_ready",
-            "should_retry": false,
+            "retry_scope": "tool_escalation",
+            "reasoning": "Skipped LLM reflection because the remaining request time budget was too low.",
+            "failure_type": "insufficient_context",
+            "recommended_action": "stop_due_to_time_budget",
+            "should_retry": true,
             "should_rewrite_query": false,
             "should_rerank_again": false,
-            "comparison_to_previous": "无前次反思记录。"
+            "comparison_to_previous": "Budget guard stop."
+          },
+          {
+            "attempt": 0,
+            "tool_name": "bm25_search",
+            "query_used": "噻托溴铵剂量是多少？",
+            "evidence_status": "empty",
+            "gap_type": "missing_numeric_threshold",
+            "action": "retry_vector",
+            "required_tool": "vector_search",
+            "verdict": "retry",
+            "missing_information": [
+              "噻托溴铵的具体剂量数值、单位、给药频次或剂型信息"
+            ],
+            "missing_entities": [
+              "噻托溴铵"
+            ],
+            "missing_relationships": [
+              "噻托溴铵-剂量"
+            ],
+            "coverage_gap_sources": [
+              "bm25"
+            ],
+            "candidate_fix_paths": [
+              "retry_vector -> full_document_read"
+            ],
+            "preferred_tools": [
+              "vector_search",
+              "full_document_read"
+            ],
+            "preferred_providers": [
+              "vector"
+            ],
+            "retry_scope": "tool_escalation",
+            "reasoning": "当前检索结果均为COPD或其他药物内容，未检索到与噻托溴铵剂量直接相关的证据，无法回答数值剂量问题。",
+            "failure_type": "no_results",
+            "recommended_action": "expand_recall",
+            "should_retry": true,
+            "should_rewrite_query": false,
+            "should_rerank_again": false,
+            "comparison_to_previous": "无前次反思；本次BM25结果与查询药物不匹配。"
           }
         ],
         "workflow_memory": [
+          {
+            "stage": "budget",
+            "message": "started LLM call: need_resolver",
+            "metadata": {
+              "max_llm_calls": 5,
+              "calls_started": 1,
+              "remaining_llm_calls": 4,
+              "operations": [
+                "need_resolver"
+              ]
+            }
+          },
+          {
+            "stage": "need_resolver",
+            "message": "resolved retrieval evidence needs",
+            "metadata": {
+              "retrieval_needs": [
+                "semantic_passage",
+                "exact_numeric"
+              ],
+              "reason": "问题询问噻托溴铵的剂量，需有说明性文本证据，并需要精确数值、单位或给药频次等数值证据。"
+            }
+          },
           {
             "stage": "route",
             "message": "router suggested vector_search; retrieval plan starts vector_search",
@@ -2246,7 +3579,12 @@
               "confidence": 0.5,
               "primary_tool": "vector_search",
               "initial_tools": [
-                "vector_search"
+                "vector_search",
+                "bm25_search"
+              ],
+              "retrieval_needs": [
+                "semantic_passage",
+                "exact_numeric"
               ]
             }
           },
@@ -2263,24 +3601,114 @@
           },
           {
             "stage": "reflection",
-            "message": "vector_search classified evidence as sufficient with action answer",
+            "message": "vector_search classified evidence as insufficient with action stop",
             "metadata": {
-              "evidence_status": "sufficient",
-              "gap_type": "none",
-              "action": "answer",
-              "verdict": "answer",
-              "failure_type": "acceptable",
-              "retry_scope": "stop"
+              "evidence_status": "insufficient",
+              "gap_type": "off_topic",
+              "action": "stop",
+              "verdict": "retry",
+              "failure_type": "insufficient_context",
+              "missing_information": [
+                "Request time budget is too low for reflection."
+              ],
+              "retry_scope": "tool_escalation"
+            }
+          },
+          {
+            "stage": "retry",
+            "message": "request time budget exhausted; returning best known evidence",
+            "metadata": {
+              "tool": "vector_search",
+              "remaining_budget_ms": 0
+            }
+          },
+          {
+            "stage": "budget",
+            "message": "started LLM call: need_resolver",
+            "metadata": {
+              "max_llm_calls": 5,
+              "calls_started": 1,
+              "remaining_llm_calls": 4,
+              "operations": [
+                "need_resolver"
+              ]
+            }
+          },
+          {
+            "stage": "need_resolver",
+            "message": "resolved retrieval evidence needs",
+            "metadata": {
+              "retrieval_needs": [
+                "semantic_passage",
+                "exact_numeric"
+              ],
+              "reason": "问题询问噻托溴铵的剂量，需有说明性文本证据，并需要精确数值、单位或给药频次等数值证据。"
+            }
+          },
+          {
+            "stage": "route",
+            "message": "router suggested vector_search; retrieval plan starts vector_search",
+            "metadata": {
+              "query_type": "QueryType.SIMPLE",
+              "method": "deterministic",
+              "confidence": 0.5,
+              "primary_tool": "vector_search",
+              "initial_tools": [
+                "vector_search",
+                "bm25_search"
+              ],
+              "retrieval_needs": [
+                "semantic_passage",
+                "exact_numeric"
+              ]
+            }
+          },
+          {
+            "stage": "retrieval",
+            "message": "bm25_search returned 5 results",
+            "metadata": {
+              "query": "噻托溴铵剂量是多少？",
+              "tool": "bm25_search",
+              "executed_sources": [
+                "bm25"
+              ]
+            }
+          },
+          {
+            "stage": "reflection",
+            "message": "bm25_search classified evidence as empty with action retry_vector",
+            "metadata": {
+              "evidence_status": "empty",
+              "gap_type": "missing_numeric_threshold",
+              "action": "retry_vector",
+              "verdict": "retry",
+              "failure_type": "no_results",
+              "missing_information": [
+                "噻托溴铵的具体剂量数值、单位、给药频次或剂型信息"
+              ],
+              "missing_entities": [
+                "噻托溴铵"
+              ],
+              "retry_scope": "tool_escalation"
+            }
+          },
+          {
+            "stage": "retry",
+            "message": "reflection requested already-covered gap: 噻托溴铵",
+            "metadata": {
+              "tool": "bm25_search",
+              "remaining_budget_ms": 8609
             }
           },
           {
             "stage": "budget",
             "message": "started LLM call: generate_answer",
             "metadata": {
-              "max_llm_calls": 4,
-              "calls_started": 1,
+              "max_llm_calls": 5,
+              "calls_started": 2,
               "remaining_llm_calls": 3,
               "operations": [
+                "need_resolver",
                 "generate_answer"
               ]
             }
@@ -2289,21 +3717,22 @@
             "stage": "generate",
             "message": "generated answer from current evidence",
             "metadata": {
-              "sources": 4,
-              "answer_status": "unverified",
+              "sources": 5,
+              "answer_status": "partial",
               "retrieval_status": "complete",
               "verification_status": "skipped",
-              "answer_guard_triggered": false
+              "answer_guard_triggered": true
             }
           },
           {
             "stage": "budget",
             "message": "started LLM call: claim_extraction",
             "metadata": {
-              "max_llm_calls": 4,
-              "calls_started": 2,
+              "max_llm_calls": 5,
+              "calls_started": 3,
               "remaining_llm_calls": 2,
               "operations": [
+                "need_resolver",
                 "generate_answer",
                 "claim_extraction"
               ]
@@ -2325,13 +3754,13 @@
         "escalation_steps": [],
         "generator_step": {
           "model": "gpt-5.4",
-          "prompt_tokens": 3385,
-          "completion_tokens": 34,
+          "prompt_tokens": 3957,
+          "completion_tokens": 38,
           "answer_status": "verified",
           "retrieval_status": "complete",
           "verification_status": "passed",
           "completeness_check": null,
-          "duration_ms": 5566
+          "duration_ms": 3291
         },
         "verification_step": {
           "claims_total": 2,
@@ -2344,7 +3773,7 @@
               "key_terms": [
                 "噻托溴铵",
                 "18 μg",
-                "常用剂量为"
+                "常用剂量"
               ],
               "entities": [
                 "噻托溴铵"
@@ -2353,7 +3782,7 @@
                 "18 μg"
               ],
               "relation_actions": [
-                "常用剂量为"
+                "常用剂量"
               ],
               "claim_role": "core",
               "supported": true,
@@ -2362,11 +3791,11 @@
               "top_chunk_id": "28080b21"
             },
             {
-              "text": "噻托溴铵通常每日1次",
+              "text": "噻托溴铵每日1次",
               "key_terms": [
                 "噻托溴铵",
                 "每日1次",
-                "通常给药频率为"
+                "给药频率"
               ],
               "entities": [
                 "噻托溴铵"
@@ -2375,7 +3804,7 @@
                 "每日1次"
               ],
               "relation_actions": [
-                "通常给药频率为"
+                "给药频率"
               ],
               "claim_role": "core",
               "supported": true,
@@ -2386,10 +3815,10 @@
           ],
           "unsupported_claims": [],
           "skipped_reason": "",
-          "duration_ms": 4078,
+          "duration_ms": 4768,
           "status": "passed"
         },
-        "total_duration_ms": 21230
+        "total_duration_ms": 30304
       }
     },
     {
@@ -2398,12 +3827,12 @@
       "query": "噻托溴铵 18 μg 每日1次是否正确？",
       "status": "ok",
       "error": "",
-      "duration_seconds": 18.0,
-      "answer_status": "verified",
+      "duration_seconds": 20.3,
+      "answer_status": "partial",
       "retrieval_status": "complete",
-      "verification_status": "passed",
+      "verification_status": "partial",
       "source_count": 4,
-      "retries": 0,
+      "retries": 1,
       "signal_extractor_output": {
         "anchors": [
           {
@@ -2444,7 +3873,7 @@
       "retrieval_hits_by_provider": {
         "vector_search": 4,
         "vector": 4,
-        "bm25_search": 4,
+        "bm25_search": 8,
         "bm25": 4
       },
       "reflection_verdicts": [
@@ -2458,37 +3887,35 @@
         },
         {
           "verdict": "retry",
-          "gap_type": "off_topic",
+          "gap_type": "missing_numeric_threshold",
           "failure_type": "no_results",
-          "required_tool": "hybrid_search",
+          "required_tool": "vector_search",
           "preferred_tools": [
-            "hybrid_search",
+            "vector_search",
             "full_document_read"
           ],
           "preferred_providers": [
-            "vector",
-            "bm25",
-            "graph"
+            "vector"
           ]
         }
       ],
       "retry_tools": [
-        "hybrid_search",
+        "vector_search",
         "full_document_read"
       ],
       "claim_roles": {
         "core": 1
       },
-      "regenerated": false,
+      "regenerated": true,
       "verification": {
-        "status": "passed",
-        "claims_total": 1,
+        "status": "partial",
+        "claims_total": 2,
         "claims_supported": 1,
-        "claims_possible": 0,
+        "claims_possible": 1,
         "claims_incorrect": 0,
         "skipped_reason": ""
       },
-      "answer_preview": "是，正确。噻托溴铵常用剂量为 18 μg，每日1次。[Chunk 1][Chunk 2][Chunk 4]",
+      "answer_preview": "是，正确：噻托溴铵常用剂量为 18 μg，每日1次。[Chunk 1][Chunk 2][Chunk 4]",
       "source_previews": [
         {
           "rank": 1,
@@ -2516,11 +3943,11 @@
         }
       ],
       "trace": {
-        "trace_id": "tr_01720b159a4b",
-        "timestamp": "2026-05-11T08:36:09.994152+00:00",
+        "trace_id": "tr_f8e97e649064",
+        "timestamp": "2026-05-11T10:59:52.262674+00:00",
         "query": "噻托溴铵 18 μg 每日1次是否正确？",
         "expanded_query": "",
-        "final_answer": "是，正确。噻托溴铵常用剂量为 18 μg，每日1次。[Chunk 1][Chunk 2][Chunk 4]",
+        "final_answer": "是，正确：噻托溴铵常用剂量为 18 μg，每日1次。[Chunk 1][Chunk 2][Chunk 4]",
         "session_id": "trace-eval::numeric_exact_003",
         "router_step": {
           "method": "deterministic",
@@ -2538,7 +3965,7 @@
             "tool_name": "vector_search",
             "results_count": 4,
             "relevance_score": 0.9375,
-            "duration_ms": 1311,
+            "duration_ms": 1204,
             "query_used": "噻托溴铵 18 μg 每日1次是否正确？",
             "cache_hit": false,
             "reused_sources": [],
@@ -2565,7 +3992,7 @@
             "tool_name": "bm25_search",
             "results_count": 4,
             "relevance_score": 0.588407110639906,
-            "duration_ms": 41,
+            "duration_ms": 69,
             "query_used": "噻托溴铵 18 μg 每日1次是否正确？",
             "cache_hit": false,
             "reused_sources": [],
@@ -2587,6 +4014,17 @@
                 ]
               }
             ]
+          },
+          {
+            "tool_name": "bm25_search",
+            "results_count": 4,
+            "relevance_score": 0.0,
+            "duration_ms": 20,
+            "query_used": "噻托溴铵 18 μg 每日1次 用法 用量",
+            "cache_hit": false,
+            "reused_sources": [],
+            "executed_sources": [],
+            "provider_diagnostics": []
           }
         ],
         "reflection_steps": [
@@ -2622,45 +4060,69 @@
             "tool_name": "bm25_search",
             "query_used": "噻托溴铵 18 μg 每日1次是否正确？",
             "evidence_status": "empty",
-            "gap_type": "off_topic",
-            "action": "retry_hybrid",
-            "required_tool": "hybrid_search",
+            "gap_type": "missing_numeric_threshold",
+            "action": "retry_vector",
+            "required_tool": "vector_search",
             "verdict": "retry",
             "missing_information": [
-              "噻托溴铵18 μg每日1次的标准给药方案或指南依据"
+              "噻托溴铵的标准给药剂量",
+              "噻托溴铵的给药频次",
+              "18 μg 每日1次是否对应特定剂型或适应证"
             ],
             "missing_entities": [
               "噻托溴铵"
             ],
             "missing_relationships": [
-              "噻托溴铵 -> 推荐剂量/给药频次 -> 18 μg 每日1次"
+              "噻托溴铵-推荐剂量-18 μg",
+              "噻托溴铵-推荐频次-每日1次"
             ],
             "coverage_gap_sources": [
               "bm25"
             ],
             "candidate_fix_paths": [
-              "hybrid_search -> full_document_read"
+              "retry_vector -> full_document_read"
             ],
             "preferred_tools": [
-              "hybrid_search",
+              "vector_search",
               "full_document_read"
             ],
             "preferred_providers": [
-              "vector",
-              "bm25",
-              "graph"
+              "vector"
             ],
             "retry_scope": "tool_escalation",
-            "reasoning": "检索结果均为COPD诊断分级或其他药物信息，未提供噻托溴铵剂量与频次的有效证据，当前证据与问题基本不匹配。",
+            "reasoning": "当前检索结果未提供任何关于噻托溴铵剂量或给药频次的有效证据，返回内容主要是COPD诊断分级和其他药物信息，无法判断18 μg每日1次是否正确。",
             "failure_type": "no_results",
-            "recommended_action": "use_comprehensive_search",
+            "recommended_action": "expand_recall",
             "should_retry": true,
-            "should_rewrite_query": true,
+            "should_rewrite_query": false,
             "should_rerank_again": false,
-            "comparison_to_previous": "无前次反思；本次bm25检索未命中目标药物实体，需扩大召回。"
+            "comparison_to_previous": "无前次反思可比较。"
           }
         ],
         "workflow_memory": [
+          {
+            "stage": "budget",
+            "message": "started LLM call: need_resolver",
+            "metadata": {
+              "max_llm_calls": 5,
+              "calls_started": 1,
+              "remaining_llm_calls": 4,
+              "operations": [
+                "need_resolver"
+              ]
+            }
+          },
+          {
+            "stage": "need_resolver",
+            "message": "resolved retrieval evidence needs",
+            "metadata": {
+              "retrieval_needs": [
+                "semantic_passage",
+                "exact_numeric"
+              ],
+              "reason": "问题在核对噻托溴铵的具体剂量与给药频次是否正确，需要语义说明以及精确数值、单位和频次证据。"
+            }
+          },
           {
             "stage": "route",
             "message": "router suggested vector_search; retrieval plan starts vector_search",
@@ -2672,6 +4134,10 @@
               "initial_tools": [
                 "vector_search",
                 "bm25_search"
+              ],
+              "retrieval_needs": [
+                "semantic_passage",
+                "exact_numeric"
               ]
             }
           },
@@ -2695,6 +4161,29 @@
             }
           },
           {
+            "stage": "budget",
+            "message": "started LLM call: need_resolver",
+            "metadata": {
+              "max_llm_calls": 5,
+              "calls_started": 1,
+              "remaining_llm_calls": 4,
+              "operations": [
+                "need_resolver"
+              ]
+            }
+          },
+          {
+            "stage": "need_resolver",
+            "message": "resolved retrieval evidence needs",
+            "metadata": {
+              "retrieval_needs": [
+                "semantic_passage",
+                "exact_numeric"
+              ],
+              "reason": "问题在核对噻托溴铵的具体剂量与给药频次是否正确，需要语义说明以及精确数值、单位和频次证据。"
+            }
+          },
+          {
             "stage": "route",
             "message": "router suggested vector_search; retrieval plan starts vector_search",
             "metadata": {
@@ -2705,6 +4194,10 @@
               "initial_tools": [
                 "vector_search",
                 "bm25_search"
+              ],
+              "retrieval_needs": [
+                "semantic_passage",
+                "exact_numeric"
               ]
             }
           },
@@ -2721,15 +4214,17 @@
           },
           {
             "stage": "reflection",
-            "message": "bm25_search classified evidence as empty with action retry_hybrid",
+            "message": "bm25_search classified evidence as empty with action retry_vector",
             "metadata": {
               "evidence_status": "empty",
-              "gap_type": "off_topic",
-              "action": "retry_hybrid",
+              "gap_type": "missing_numeric_threshold",
+              "action": "retry_vector",
               "verdict": "retry",
               "failure_type": "no_results",
               "missing_information": [
-                "噻托溴铵18 μg每日1次的标准给药方案或指南依据"
+                "噻托溴铵的标准给药剂量",
+                "噻托溴铵的给药频次",
+                "18 μg 每日1次是否对应特定剂型或适应证"
               ],
               "missing_entities": [
                 "噻托溴铵"
@@ -2742,17 +4237,18 @@
             "message": "reflection requested already-covered gap: 噻托溴铵",
             "metadata": {
               "tool": "bm25_search",
-              "remaining_budget_ms": 6349
+              "remaining_budget_ms": 7949
             }
           },
           {
             "stage": "budget",
             "message": "started LLM call: generate_answer",
             "metadata": {
-              "max_llm_calls": 4,
-              "calls_started": 1,
+              "max_llm_calls": 5,
+              "calls_started": 2,
               "remaining_llm_calls": 3,
               "operations": [
+                "need_resolver",
                 "generate_answer"
               ]
             }
@@ -2772,10 +4268,11 @@
             "stage": "budget",
             "message": "started LLM call: claim_extraction",
             "metadata": {
-              "max_llm_calls": 4,
-              "calls_started": 2,
+              "max_llm_calls": 5,
+              "calls_started": 3,
               "remaining_llm_calls": 2,
               "operations": [
+                "need_resolver",
                 "generate_answer",
                 "claim_extraction"
               ]
@@ -2783,36 +4280,83 @@
           },
           {
             "stage": "verify",
-            "message": "claim verification: correct=1, possible=0, incorrect=0 (passed)",
+            "message": "claim verification: correct=1, possible=1, incorrect=0 (partial)",
             "metadata": {
-              "claims_total": 1,
+              "claims_total": 2,
               "claims_supported": 1,
-              "claims_possible": 0,
+              "claims_possible": 1,
               "claims_incorrect": 0,
-              "verification_status": "passed",
-              "answer_status_after": "verified"
+              "verification_status": "partial",
+              "answer_status_after": "partial"
+            }
+          },
+          {
+            "stage": "budget",
+            "message": "started LLM call: correction_planner",
+            "metadata": {
+              "max_llm_calls": 5,
+              "calls_started": 4,
+              "remaining_llm_calls": 1,
+              "operations": [
+                "need_resolver",
+                "generate_answer",
+                "claim_extraction",
+                "correction_planner"
+              ]
+            }
+          },
+          {
+            "stage": "verify_plan",
+            "message": "correction planner selected retry_with_tool",
+            "metadata": {
+              "action": "retry_with_tool",
+              "tool": "bm25_search",
+              "focus_query": "噻托溴铵 18 μg 每日1次 用法 用量",
+              "gap_types": [
+                "missing_numeric_fact"
+              ],
+              "reason": "缺少核心数值与给药频次证据，适合用精确词和数字检索补全。"
+            }
+          },
+          {
+            "stage": "verify_retry",
+            "message": "verification retry appended planner-selected bm25_search evidence",
+            "metadata": {
+              "tool": "bm25_search",
+              "focus_query": "噻托溴铵 18 μg 每日1次 用法 用量",
+              "added_results": 0,
+              "duration_ms": 20
             }
           }
         ],
-        "escalation_steps": [],
+        "escalation_steps": [
+          {
+            "from_tool": "verification",
+            "to_tool": "bm25_search",
+            "reason": "缺少核心数值与给药频次证据，适合用精确词和数字检索补全。",
+            "rephrased_query": "噻托溴铵 18 μg 每日1次 用法 用量",
+            "duration_ms": 20,
+            "cached_sources_reused": []
+          }
+        ],
         "generator_step": {
           "model": "gpt-5.4",
           "prompt_tokens": 3392,
           "completion_tokens": 41,
-          "answer_status": "verified",
+          "answer_status": "partial",
           "retrieval_status": "complete",
-          "verification_status": "passed",
+          "verification_status": "partial",
           "completeness_check": null,
-          "duration_ms": 2775
+          "duration_ms": 2420
         },
         "verification_step": {
-          "claims_total": 1,
+          "claims_total": 2,
           "claims_supported": 1,
-          "claims_possible": 0,
+          "claims_possible": 1,
           "claims_incorrect": 0,
           "verified_claims": [
             {
-              "text": "噻托溴铵常用剂量为18 μg每日1次",
+              "text": "噻托溴铵的常用剂量为18 μg每日1次",
               "key_terms": [
                 "噻托溴铵",
                 "18 μg",
@@ -2836,12 +4380,37 @@
               "top_chunk_id": "28080b21"
             }
           ],
-          "unsupported_claims": [],
+          "unsupported_claims": [
+            {
+              "text": "噻托溴铵18 μg每日1次是正确用法",
+              "key_terms": [
+                "噻托溴铵",
+                "18 μg",
+                "每日1次",
+                "正确用法"
+              ],
+              "entities": [
+                "噻托溴铵"
+              ],
+              "numeric_constraints": [
+                "18 μg",
+                "每日1次"
+              ],
+              "relation_actions": [
+                "正确用法"
+              ],
+              "claim_role": "core",
+              "supported": false,
+              "verification_level": "possible_correct",
+              "failure_type": "soft_fail",
+              "top_chunk_id": "28080b21"
+            }
+          ],
           "skipped_reason": "",
-          "duration_ms": 6518,
-          "status": "passed"
+          "duration_ms": 4305,
+          "status": "partial"
         },
-        "total_duration_ms": 17954
+        "total_duration_ms": 20258
       }
     },
     {
@@ -2850,7 +4419,7 @@
       "query": "eGFR < 30 时二甲双胍怎么处理？",
       "status": "ok",
       "error": "",
-      "duration_seconds": 29.99,
+      "duration_seconds": 38.16,
       "answer_status": "verified",
       "retrieval_status": "complete",
       "verification_status": "passed",
@@ -2892,12 +4461,8 @@
           "gap_type": "none",
           "failure_type": "acceptable",
           "required_tool": "none",
-          "preferred_tools": [
-            "vector_search"
-          ],
-          "preferred_providers": [
-            "vector"
-          ]
+          "preferred_tools": [],
+          "preferred_providers": []
         },
         {
           "verdict": "retry",
@@ -2917,7 +4482,6 @@
         }
       ],
       "retry_tools": [
-        "vector_search",
         "hybrid_search"
       ],
       "claim_roles": {
@@ -2966,8 +4530,8 @@
         }
       ],
       "trace": {
-        "trace_id": "tr_65e099817327",
-        "timestamp": "2026-05-11T08:36:17.165774+00:00",
+        "trace_id": "tr_99b6ae8cd402",
+        "timestamp": "2026-05-11T10:59:56.278100+00:00",
         "query": "eGFR < 30 时二甲双胍怎么处理？",
         "expanded_query": "eGFR < 30 时二甲双胍怎么处理？\n\nMedical aliases: 估算肾小球滤过率, 肾功能指标",
         "final_answer": "eGFR < 30 时，二甲双胍禁用。 [Chunk 1]",
@@ -2988,7 +4552,7 @@
             "tool_name": "vector_search",
             "results_count": 4,
             "relevance_score": 0.7299838066101074,
-            "duration_ms": 1518,
+            "duration_ms": 1355,
             "query_used": "eGFR < 30 时二甲双胍怎么处理？\n\nMedical aliases: 估算肾小球滤过率, 肾功能指标",
             "cache_hit": false,
             "reused_sources": [],
@@ -3015,7 +4579,7 @@
             "tool_name": "bm25_search",
             "results_count": 0,
             "relevance_score": 0.0,
-            "duration_ms": 50,
+            "duration_ms": 70,
             "query_used": "eGFR < 30 时二甲双胍怎么处理？\n\nMedical aliases: 估算肾小球滤过率, 肾功能指标",
             "cache_hit": false,
             "reused_sources": [],
@@ -3038,7 +4602,7 @@
             "tool_name": "hybrid_search",
             "results_count": 5,
             "relevance_score": 1.0,
-            "duration_ms": 21873,
+            "duration_ms": 24610,
             "query_used": "eGFR < 30 时二甲双胍怎么处理？\n\nMedical aliases: 估算肾小球滤过率, 肾功能指标",
             "cache_hit": true,
             "reused_sources": [
@@ -3061,8 +4625,8 @@
               {
                 "source": "vector",
                 "results_count": 4,
-                "top_score": 0.7303977012634277,
-                "average_score": 0.6777400374412537,
+                "top_score": 0.7294173240661621,
+                "average_score": 0.676856517791748,
                 "reused": false,
                 "executed": true,
                 "top_chunk_ids": [
@@ -3102,20 +4666,16 @@
             "missing_relationships": [],
             "coverage_gap_sources": [],
             "candidate_fix_paths": [],
-            "preferred_tools": [
-              "vector_search"
-            ],
-            "preferred_providers": [
-              "vector"
-            ],
+            "preferred_tools": [],
+            "preferred_providers": [],
             "retry_scope": "stop",
-            "reasoning": "Retrieved evidence directly states the management of metformin by eGFR threshold: eGFR < 30 mL/min/1.73m² is contraindicated/should not be used.",
+            "reasoning": "检索结果直接包含明确数值阈值和处理措施：eGFR < 30 mL/min/1.73m² 时禁用二甲双胍，足以回答问题。",
             "failure_type": "acceptable",
             "recommended_action": "answer_ready",
             "should_retry": false,
             "should_rewrite_query": false,
             "should_rerank_again": false,
-            "comparison_to_previous": "No previous reflection history."
+            "comparison_to_previous": "首次反思，无前次结果可比较"
           },
           {
             "attempt": 0,
@@ -3186,6 +4746,30 @@
             }
           },
           {
+            "stage": "budget",
+            "message": "started LLM call: need_resolver",
+            "metadata": {
+              "max_llm_calls": 5,
+              "calls_started": 1,
+              "remaining_llm_calls": 4,
+              "operations": [
+                "need_resolver"
+              ]
+            }
+          },
+          {
+            "stage": "need_resolver",
+            "message": "resolved retrieval evidence needs",
+            "metadata": {
+              "retrieval_needs": [
+                "semantic_passage",
+                "exact_numeric",
+                "graph_relation"
+              ],
+              "reason": "问题询问在特定 eGFR 阈值下如何处理二甲双胍，需要文本说明；包含明确数值阈值“eGFR < 30”，需精确数值证据；且涉及肾功能指标与二甲双胍之间的用药处理/禁忌关系，需关系证据。"
+            }
+          },
+          {
             "stage": "route",
             "message": "router suggested vector_search; retrieval plan starts vector_search",
             "metadata": {
@@ -3196,6 +4780,11 @@
               "initial_tools": [
                 "vector_search",
                 "bm25_search"
+              ],
+              "retrieval_needs": [
+                "semantic_passage",
+                "exact_numeric",
+                "graph_relation"
               ]
             }
           },
@@ -3231,6 +4820,30 @@
             }
           },
           {
+            "stage": "budget",
+            "message": "started LLM call: need_resolver",
+            "metadata": {
+              "max_llm_calls": 5,
+              "calls_started": 1,
+              "remaining_llm_calls": 4,
+              "operations": [
+                "need_resolver"
+              ]
+            }
+          },
+          {
+            "stage": "need_resolver",
+            "message": "resolved retrieval evidence needs",
+            "metadata": {
+              "retrieval_needs": [
+                "semantic_passage",
+                "exact_numeric",
+                "graph_relation"
+              ],
+              "reason": "问题询问在特定 eGFR 阈值下如何处理二甲双胍，需要文本说明；包含明确数值阈值“eGFR < 30”，需精确数值证据；且涉及肾功能指标与二甲双胍之间的用药处理/禁忌关系，需关系证据。"
+            }
+          },
+          {
             "stage": "route",
             "message": "router suggested vector_search; retrieval plan starts vector_search",
             "metadata": {
@@ -3241,6 +4854,11 @@
               "initial_tools": [
                 "vector_search",
                 "bm25_search"
+              ],
+              "retrieval_needs": [
+                "semantic_passage",
+                "exact_numeric",
+                "graph_relation"
               ]
             }
           },
@@ -3320,10 +4938,11 @@
             "stage": "budget",
             "message": "started LLM call: generate_answer",
             "metadata": {
-              "max_llm_calls": 4,
-              "calls_started": 1,
+              "max_llm_calls": 5,
+              "calls_started": 2,
               "remaining_llm_calls": 3,
               "operations": [
+                "need_resolver",
                 "generate_answer"
               ]
             }
@@ -3343,10 +4962,11 @@
             "stage": "budget",
             "message": "started LLM call: claim_extraction",
             "metadata": {
-              "max_llm_calls": 4,
-              "calls_started": 2,
+              "max_llm_calls": 5,
+              "calls_started": 3,
               "remaining_llm_calls": 2,
               "operations": [
+                "need_resolver",
                 "generate_answer",
                 "claim_extraction"
               ]
@@ -3383,7 +5003,7 @@
           "retrieval_status": "complete",
           "verification_status": "passed",
           "completeness_check": null,
-          "duration_ms": 5200
+          "duration_ms": 6551
         },
         "verification_step": {
           "claims_total": 1,
@@ -3418,10 +5038,10 @@
           ],
           "unsupported_claims": [],
           "skipped_reason": "",
-          "duration_ms": 2814,
+          "duration_ms": 2621,
           "status": "passed"
         },
-        "total_duration_ms": 29951
+        "total_duration_ms": 38123
       }
     },
     {
@@ -3430,7 +5050,7 @@
       "query": "eGFR 小于30的患者可以用二甲双胍吗？",
       "status": "ok",
       "error": "",
-      "duration_seconds": 26.07,
+      "duration_seconds": 17.41,
       "answer_status": "verified",
       "retrieval_status": "complete",
       "verification_status": "passed",
@@ -3484,9 +5104,9 @@
           "preferred_providers": []
         },
         {
-          "verdict": "retry",
-          "gap_type": "off_topic",
-          "failure_type": "insufficient_context",
+          "verdict": "answer",
+          "gap_type": "none",
+          "failure_type": "acceptable",
           "required_tool": "none",
           "preferred_tools": [],
           "preferred_providers": []
@@ -3511,25 +5131,25 @@
       "source_previews": [
         {
           "rank": 1,
-          "score": 0.7377,
+          "score": 0.7369,
           "source": "vector",
           "content": "ACEI（血管紧张素转换酶抑制剂）可引起刺激性干咳。若患者使用 ACEI 后出现持续干咳，应停用 ACEI，并改用 ARB（血管紧张素 II 受体阻滞剂）。ARB 与 ACEI 同属肾素-血管紧张素系统药物，但 ARB 发生干咳的风险较低。\n\n关键事实：\n\n- ACEI --不良反应--> 干咳\n\n- ACEI --处理措施--> 停用\n\n- 干咳 --替代方案--> ARB\n\n- ARB --优势--> 干咳风险较低\n\n二甲双胍用于 2 型糖尿病治疗时需要根据肾功能调整。eGFR < 30 mL/min/1.73"
         },
         {
           "rank": 2,
-          "score": 0.6671,
+          "score": 0.6665,
           "source": "vector",
           "content": "- GOLD 1级仅需按需使用SABA\n- 嗜酸性粒细胞≥300/μL时考虑ICS\n- GOLD 3-4级且嗜酸性粒细胞≥100/μL时使用三联方案\n\n- 慢性阻塞性肺疾病 [疾病] aliases: COPD, 慢阻肺\n\n- FEV1 [检查指标] aliases: 第一秒用力呼气容积\n\n- 沙丁胺醇 [药物] aliases: Salbutamol, SABA\n\n- 福莫特罗 [药物] aliases: Formoterol, LABA\n\n- 噻托溴铵 [药物] aliases: Tiotropium, LAM"
         },
         {
           "rank": 3,
-          "score": 0.654,
+          "score": 0.6538,
           "source": "vector",
           "content": "慢性阻塞性肺疾病（Chronic Obstructive Pulmonary Disease, COPD）是一种以持续气流受限为特征的可预防和可治疗的疾病。诊断依据肺功能检查：使用支气管舒张剂后，FEV1/FVC < 0.70即可确诊。\n\n根据FEV1占预计值百分比分为4级：\n\n- GOLD 1级（轻度）：FEV1 ≥ 80%预计值\n\n- GOLD 2级（中度）：50% ≤ FEV1 < 80%预计值\n\n- GOLD 3级（重度）：30% ≤ FEV1 < 50%预计值\n\n- GOLD 4级（极重度）：FEV1 <"
         },
         {
           "rank": 4,
-          "score": 0.6527,
+          "score": 0.6523,
           "source": "vector",
           "content": "- CAT评分 --阈值--> ≥10分提示症状负担较重\n\n- 沙丁胺醇 --剂量--> 100-200 μg/次\n\n- 沙丁胺醇 --起效时间--> 5-15分钟\n\n- 沙丁胺醇 --持续时间--> 4-6小时\n\n- 福莫特罗 --剂量--> 12 μg每日2次\n\n- 噻托溴铵 --剂量--> 18 μg每日1次\n\n- 噻托溴铵 --起效时间--> 30-60分钟\n\n- GOLD 1级 --推荐治疗--> SABA按需\n\n- GOLD 2级且嗜酸性粒细胞≥300/μL --推荐治疗--> LABA+ICS\n\n- "
         },
@@ -3541,8 +5161,8 @@
         }
       ],
       "trace": {
-        "trace_id": "tr_a644cdb45d7b",
-        "timestamp": "2026-05-11T08:36:27.996678+00:00",
+        "trace_id": "tr_3b5f2726b172",
+        "timestamp": "2026-05-11T11:00:10.293380+00:00",
         "query": "eGFR 小于30的患者可以用二甲双胍吗？",
         "expanded_query": "eGFR 小于30的患者可以用二甲双胍吗？\n\nMedical aliases: 估算肾小球滤过率, 肾功能指标",
         "final_answer": "不可以，eGFR < 30 时禁用二甲双胍。[Chunk 1]",
@@ -3562,8 +5182,8 @@
           {
             "tool_name": "vector_search",
             "results_count": 4,
-            "relevance_score": 0.7376770973205566,
-            "duration_ms": 1126,
+            "relevance_score": 0.7369384765625,
+            "duration_ms": 3322,
             "query_used": "eGFR 小于30的患者可以用二甲双胍吗？\n\nMedical aliases: 估算肾小球滤过率, 肾功能指标",
             "cache_hit": false,
             "reused_sources": [],
@@ -3574,8 +5194,8 @@
               {
                 "source": "vector",
                 "results_count": 4,
-                "top_score": 0.7376770973205566,
-                "average_score": 0.6778734922409058,
+                "top_score": 0.7369384765625,
+                "average_score": 0.6773871779441833,
                 "reused": false,
                 "executed": true,
                 "top_chunk_ids": [
@@ -3590,7 +5210,7 @@
             "tool_name": "bm25_search",
             "results_count": 0,
             "relevance_score": 0.0,
-            "duration_ms": 23,
+            "duration_ms": 91,
             "query_used": "eGFR 小于30的患者可以用二甲双胍吗？\n\nMedical aliases: 估算肾小球滤过率, 肾功能指标",
             "cache_hit": false,
             "reused_sources": [],
@@ -3613,7 +5233,7 @@
             "tool_name": "hybrid_search",
             "results_count": 5,
             "relevance_score": 1.0,
-            "duration_ms": 18760,
+            "duration_ms": 1624,
             "query_used": "eGFR 小于30的患者可以用二甲双胍吗？\n\nMedical aliases: 估算肾小球滤过率, 肾功能指标",
             "cache_hit": true,
             "reused_sources": [
@@ -3636,8 +5256,8 @@
               {
                 "source": "vector",
                 "results_count": 4,
-                "top_score": 0.7384119033813477,
-                "average_score": 0.6781349182128906,
+                "top_score": 0.7376770973205566,
+                "average_score": 0.6778734922409058,
                 "reused": false,
                 "executed": true,
                 "top_chunk_ids": [
@@ -3680,13 +5300,13 @@
             "preferred_tools": [],
             "preferred_providers": [],
             "retry_scope": "stop",
-            "reasoning": "检索结果直接包含二甲双胍与eGFR阈值的用药关系：eGFR < 30 mL/min/1.73m² 时禁用二甲双胍，足以直接回答问题。",
+            "reasoning": "检索结果直接包含二甲双胍与eGFR阈值的用药建议：eGFR < 30 mL/min/1.73m² 时禁用二甲双胍，能够直接回答问题。",
             "failure_type": "acceptable",
             "recommended_action": "answer_ready",
             "should_retry": false,
             "should_rewrite_query": false,
             "should_rerank_again": false,
-            "comparison_to_previous": "首次判定，无前次结果可比较"
+            "comparison_to_previous": "无前次反思；当前证据已足够作答。"
           },
           {
             "attempt": 0,
@@ -3721,30 +5341,26 @@
             "attempt": 1,
             "tool_name": "hybrid_search",
             "query_used": "eGFR 小于30的患者可以用二甲双胍吗？\n\nMedical aliases: 估算肾小球滤过率, 肾功能指标",
-            "evidence_status": "insufficient",
-            "gap_type": "off_topic",
-            "action": "stop",
+            "evidence_status": "sufficient",
+            "gap_type": "none",
+            "action": "answer",
             "required_tool": "none",
-            "verdict": "retry",
-            "missing_information": [
-              "Request time budget is too low for reflection."
-            ],
+            "verdict": "answer",
+            "missing_information": [],
             "missing_entities": [],
             "missing_relationships": [],
             "coverage_gap_sources": [],
-            "candidate_fix_paths": [
-              "skip_reflection_due_to_budget"
-            ],
+            "candidate_fix_paths": [],
             "preferred_tools": [],
             "preferred_providers": [],
-            "retry_scope": "tool_escalation",
-            "reasoning": "Skipped LLM reflection because the remaining request time budget was too low.",
-            "failure_type": "insufficient_context",
-            "recommended_action": "stop_due_to_time_budget",
-            "should_retry": true,
+            "retry_scope": "stop",
+            "reasoning": "检索结果中有直接证据：Chunk 1 明确说明“eGFR < 30 mL/min/1.73m² 时禁用二甲双胍”，可直接回答该问题。",
+            "failure_type": "acceptable",
+            "recommended_action": "answer_ready",
+            "should_retry": false,
             "should_rewrite_query": false,
             "should_rerank_again": false,
-            "comparison_to_previous": "Budget guard stop."
+            "comparison_to_previous": "相比前一次 bm25 无结果，hybrid_search 已检索到直接回答问题的证据。"
           }
         ],
         "workflow_memory": [
@@ -3754,6 +5370,30 @@
             "metadata": {
               "original_query": "eGFR 小于30的患者可以用二甲双胍吗？",
               "expanded_query": "eGFR 小于30的患者可以用二甲双胍吗？\n\nMedical aliases: 估算肾小球滤过率, 肾功能指标"
+            }
+          },
+          {
+            "stage": "budget",
+            "message": "started LLM call: need_resolver",
+            "metadata": {
+              "max_llm_calls": 5,
+              "calls_started": 1,
+              "remaining_llm_calls": 4,
+              "operations": [
+                "need_resolver"
+              ]
+            }
+          },
+          {
+            "stage": "need_resolver",
+            "message": "resolved retrieval evidence needs",
+            "metadata": {
+              "retrieval_needs": [
+                "semantic_passage",
+                "exact_numeric",
+                "graph_relation"
+              ],
+              "reason": "问题询问 eGFR<30 时二甲双胍是否可用，需要语义证据说明用药建议，精确阈值证据确认 eGFR<30 的数值界限，以及肾功能指标与二甲双胍之间的禁忌/适用关系证据。"
             }
           },
           {
@@ -3767,6 +5407,11 @@
               "initial_tools": [
                 "vector_search",
                 "bm25_search"
+              ],
+              "retrieval_needs": [
+                "semantic_passage",
+                "exact_numeric",
+                "graph_relation"
               ]
             }
           },
@@ -3802,6 +5447,30 @@
             }
           },
           {
+            "stage": "budget",
+            "message": "started LLM call: need_resolver",
+            "metadata": {
+              "max_llm_calls": 5,
+              "calls_started": 1,
+              "remaining_llm_calls": 4,
+              "operations": [
+                "need_resolver"
+              ]
+            }
+          },
+          {
+            "stage": "need_resolver",
+            "message": "resolved retrieval evidence needs",
+            "metadata": {
+              "retrieval_needs": [
+                "semantic_passage",
+                "exact_numeric",
+                "graph_relation"
+              ],
+              "reason": "问题询问 eGFR<30 时二甲双胍是否可用，需要语义证据说明用药建议，精确阈值证据确认 eGFR<30 的数值界限，以及肾功能指标与二甲双胍之间的禁忌/适用关系证据。"
+            }
+          },
+          {
             "stage": "route",
             "message": "router suggested vector_search; retrieval plan starts vector_search",
             "metadata": {
@@ -3812,6 +5481,11 @@
               "initial_tools": [
                 "vector_search",
                 "bm25_search"
+              ],
+              "retrieval_needs": [
+                "semantic_passage",
+                "exact_numeric",
+                "graph_relation"
               ]
             }
           },
@@ -3866,35 +5540,25 @@
           },
           {
             "stage": "reflection",
-            "message": "hybrid_search classified evidence as insufficient with action stop",
+            "message": "hybrid_search classified evidence as sufficient with action answer",
             "metadata": {
-              "evidence_status": "insufficient",
-              "gap_type": "off_topic",
-              "action": "stop",
-              "verdict": "retry",
-              "failure_type": "insufficient_context",
-              "missing_information": [
-                "Request time budget is too low for reflection."
-              ],
-              "retry_scope": "tool_escalation"
-            }
-          },
-          {
-            "stage": "retry",
-            "message": "request time budget exhausted; returning best known evidence",
-            "metadata": {
-              "tool": "hybrid_search",
-              "remaining_budget_ms": 0
+              "evidence_status": "sufficient",
+              "gap_type": "none",
+              "action": "answer",
+              "verdict": "answer",
+              "failure_type": "acceptable",
+              "retry_scope": "stop"
             }
           },
           {
             "stage": "budget",
             "message": "started LLM call: generate_answer",
             "metadata": {
-              "max_llm_calls": 4,
-              "calls_started": 1,
+              "max_llm_calls": 5,
+              "calls_started": 2,
               "remaining_llm_calls": 3,
               "operations": [
+                "need_resolver",
                 "generate_answer"
               ]
             }
@@ -3904,20 +5568,21 @@
             "message": "generated answer from current evidence",
             "metadata": {
               "sources": 5,
-              "answer_status": "partial",
+              "answer_status": "unverified",
               "retrieval_status": "complete",
               "verification_status": "skipped",
-              "answer_guard_triggered": true
+              "answer_guard_triggered": false
             }
           },
           {
             "stage": "budget",
             "message": "started LLM call: claim_extraction",
             "metadata": {
-              "max_llm_calls": 4,
-              "calls_started": 2,
+              "max_llm_calls": 5,
+              "calls_started": 3,
               "remaining_llm_calls": 2,
               "operations": [
+                "need_resolver",
                 "generate_answer",
                 "claim_extraction"
               ]
@@ -3954,7 +5619,7 @@
           "retrieval_status": "complete",
           "verification_status": "passed",
           "completeness_check": null,
-          "duration_ms": 2725
+          "duration_ms": 2151
         },
         "verification_step": {
           "claims_total": 1,
@@ -3989,10 +5654,10 @@
           ],
           "unsupported_claims": [],
           "skipped_reason": "",
-          "duration_ms": 4508,
+          "duration_ms": 2743,
           "status": "passed"
         },
-        "total_duration_ms": 26027
+        "total_duration_ms": 17362
       }
     }
   ]
