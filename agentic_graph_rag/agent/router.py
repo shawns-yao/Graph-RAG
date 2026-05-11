@@ -109,8 +109,8 @@ def _hard_rule_decision(query: str) -> RouterDecision | None:
         return RouterDecision(
             query_type=QueryType.TEMPORAL,
             confidence=0.94,
-            reasoning="Hard rule: temporal anchor detected, prefer temporal retrieval.",
-            suggested_tool="temporal_query",
+            reasoning="Hard rule: temporal intent detected; retrieval planner may add temporal companion.",
+            suggested_tool=DEFAULT_TOOL_BY_QUERY_TYPE[QueryType.TEMPORAL],
         )
 
     return None

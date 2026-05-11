@@ -23,7 +23,7 @@ DEFAULT_TOOL_BY_QUERY_TYPE: dict[QueryType, str] = {
     QueryType.RELATION: "vector_search",
     QueryType.MULTI_HOP: "vector_search",
     QueryType.GLOBAL: "vector_search",
-    QueryType.TEMPORAL: "temporal_query",
+    QueryType.TEMPORAL: "vector_search",
 }
 
 QUERY_TYPE_BY_TOOL: dict[str, QueryType] = {

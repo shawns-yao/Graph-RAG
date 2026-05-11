@@ -243,11 +243,11 @@ def _initial_tool_plan(query: str, decision: RouterDecision) -> list[str]:
         tools.append("cypher_traverse")
     elif decision.query_type == QueryType.GLOBAL and "comprehensive_search" not in tools:
         tools.append("comprehensive_search")
+    elif decision.query_type == QueryType.TEMPORAL and "temporal_query" not in tools:
+        tools.append("temporal_query")
     elif has_strong_form_anchor(signals):
         if "bm25_search" not in tools:
             tools.append("bm25_search")
-    elif decision.suggested_tool in {"bm25_search", "cypher_traverse"}:
-        tools.append("vector_search")
 
     planned: list[str] = []
     for tool in tools:

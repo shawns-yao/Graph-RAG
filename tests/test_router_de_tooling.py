@@ -51,3 +51,11 @@ def test_global_intent_no_longer_forces_comprehensive_router_tool():
     assert decision.query_type == QueryType.GLOBAL
     assert decision.suggested_tool == "vector_search"
     assert "prefer comprehensive retrieval" not in decision.reasoning
+
+
+def test_temporal_intent_no_longer_forces_temporal_router_tool():
+    decision = classify_query("2024-05 之后有什么变化？", use_llm=False)
+
+    assert decision.query_type == QueryType.TEMPORAL
+    assert decision.suggested_tool == "vector_search"
+    assert "prefer temporal retrieval" not in decision.reasoning
