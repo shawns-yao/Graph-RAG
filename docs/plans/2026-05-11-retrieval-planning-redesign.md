@@ -593,6 +593,11 @@ Workflow LLM BudgetTracker:
   status: completed
   completed_at: 2026-05-11
   commit: 93a41ab Add workflow LLM budget tracker
+
+Budget Enforcement In Agent Nodes:
+  status: completed
+  completed_at: 2026-05-11
+  commit: a0193cc Enforce workflow LLM budget in agent nodes
 ```
 
 ## 落地顺序
