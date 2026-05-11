@@ -28,6 +28,11 @@ _THRESHOLD_RE = re.compile(
 )
 _NUMERIC_WITH_UNIT_RE = re.compile(rf"{_NUMBER}\s*{_UNIT}", re.IGNORECASE)
 _FREQUENCY_RE = re.compile(rf"(?:每日|每周|每月|每年|每天)?\s*{_NUMBER}\s*次")
+_CODE_ANCHOR_RE = re.compile(
+    r"\b(?:[A-Z]{2,}[-_]?\d+[A-Z0-9_-]*|[A-Za-z]+-\d+[A-Za-z0-9_-]*|"
+    r"\d+(?:\.\d+){1,3}|ERR[-_ ]?[A-Za-z0-9_-]+)\b",
+    re.IGNORECASE,
+)
 _QUOTED_RE = re.compile(r"[\"“”'‘’]([^\"“”'‘’]+)[\"“”'‘’]")
 _CJK_RUN_RE = re.compile(r"[\u4e00-\u9fff]{2,}")
 _QUESTION_SUFFIX_RE = re.compile(
@@ -104,6 +109,12 @@ def extract_query_signals(query: str) -> QuerySignals:
             _add_anchor(anchors, seen, match.group(0), "numeric")
             protected_spans.append(match.span())
 
+    for match in _CODE_ANCHOR_RE.finditer(query):
+        if _covered_spans(protected_spans, *match.span()):
+            continue
+        _add_anchor(anchors, seen, match.group(0), "symbolic")
+        protected_spans.append(match.span())
+
     for match in _CJK_RUN_RE.finditer(query):
         if _covered_spans(protected_spans, *match.span()):
             continue
@@ -119,4 +130,3 @@ def has_strong_form_anchor(signals: QuerySignals) -> bool:
         anchor.kind in {"numeric", "threshold", "symbolic", "quoted"}
         for anchor in signals.anchors
     )
-

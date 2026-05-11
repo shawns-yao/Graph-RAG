@@ -20,3 +20,10 @@ def test_long_query_no_longer_forces_global_by_length():
     assert decision.suggested_tool == "vector_search"
     assert "long query detected" not in decision.reasoning
 
+
+def test_lexical_anchor_no_longer_forces_bm25_router_tool():
+    decision = classify_query("ERR-42", use_llm=False)
+
+    assert decision.query_type == QueryType.SIMPLE
+    assert decision.suggested_tool == "vector_search"
+    assert "lexical anchor detected" not in decision.reasoning

@@ -11,9 +11,6 @@ import re
 # TODO: Replace part of these manual keyword lists with a small local semantic
 # router model once we have enough labeled routing traces for safe rollout.
 
-SHORT_QUERY_TOKEN_LIMIT = 4
-LONG_QUERY_TOKEN_LIMIT = 50
-
 RELATION_PATTERNS = [
     r"\brelat\w*\b", r"\bconnect\w*\b", r"\blink\w*\b",
     r"\bbetween\b",
@@ -99,12 +96,6 @@ GLOBAL_QUERY_KEYWORDS = (
     "summarize",
     "list all",
     "show all",
-)
-
-LEXICAL_PRIORITY_PATTERN = re.compile(
-    r"\b(?:[A-Z]{2,}[-_]?\d+[A-Z0-9_-]*|[A-Za-z]+-\d+[A-Za-z0-9_-]*|"
-    r"\d+(?:\.\d+){1,3}|ERR[-_ ]?[A-Za-z0-9_-]+)\b",
-    re.IGNORECASE,
 )
 
 INTERNAL_ALIAS_CONCEPT_PATTERN = re.compile(

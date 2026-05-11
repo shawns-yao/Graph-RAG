@@ -46,10 +46,7 @@ from agentic_graph_rag.agent.router import classify_query
 from agentic_graph_rag.agent.routing_rules import (
     INTERNAL_ALIAS_CONCEPT_PATTERN,
     INTERNAL_ALIAS_GLOBAL_PATTERN,
-    LEXICAL_PRIORITY_PATTERN,
-    LONG_QUERY_TOKEN_LIMIT,
     RELATION_QUERY_KEYWORDS,
-    SHORT_QUERY_TOKEN_LIMIT,
 )
 from agentic_graph_rag.agent.tool_registry import TOOL_NAMES
 from agentic_graph_rag.agent.tools import (
@@ -518,19 +515,10 @@ def _rule_first_tool_preferences(
 
     query = (reflection.query_used or "").strip()
     lowered_query = query.casefold()
-    normalized_tokens = [token for token in re.split(r"\s+", lowered_query) if token]
     tools: list[str] = []
 
     if any(keyword in lowered_query for keyword in RELATION_QUERY_KEYWORDS):
         tools.extend(_GRAPH_FIRST_TOOLS)
-
-    if LEXICAL_PRIORITY_PATTERN.search(query):
-        tools.extend(_LIGHTWEIGHT_RECALL_TOOLS)
-
-    if normalized_tokens and len(normalized_tokens) <= SHORT_QUERY_TOKEN_LIMIT:
-        tools.extend(_LIGHTWEIGHT_RECALL_TOOLS)
-    if len(normalized_tokens) >= LONG_QUERY_TOKEN_LIMIT:
-        tools.extend(_HYBRID_RECALL_TOOLS)
 
     failure_type = (reflection.failure_type or "").strip().lower()
     if failure_type == "relation_missing":

@@ -32,6 +32,13 @@ def test_extracts_egfr_threshold():
     assert has_strong_form_anchor(signals)
 
 
+def test_extracts_code_anchor_as_symbolic():
+    signals = extract_query_signals("ERR-42 应该怎么处理？")
+
+    assert ("ERR-42", "symbolic") in {(a.text, a.kind) for a in signals.anchors}
+    assert has_strong_form_anchor(signals)
+
+
 def test_plain_medical_term_is_phrase_only():
     signals = extract_query_signals("噻托溴铵剂量是多少？")
 
@@ -47,4 +54,3 @@ def test_generic_phrase_does_not_create_strong_anchor():
         ("诊断标准", "phrase")
     ]
     assert not has_strong_form_anchor(signals)
-

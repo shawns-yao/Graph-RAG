@@ -18,11 +18,9 @@ from agentic_graph_rag.agent.routing_rules import (
     GLOBAL_QUERY_KEYWORDS,
     INTERNAL_ALIAS_CONCEPT_PATTERN,
     INTERNAL_ALIAS_GLOBAL_PATTERN,
-    LEXICAL_PRIORITY_PATTERN,
     MULTI_HOP_PATTERNS,
     RELATION_PATTERNS,
     RELATION_QUERY_KEYWORDS,
-    SHORT_QUERY_TOKEN_LIMIT,
     TEMPORAL_PATTERNS,
 )
 from agentic_graph_rag.agent.tool_registry import DEFAULT_TOOL_BY_QUERY_TYPE
@@ -36,11 +34,6 @@ def _match_patterns(query: str, patterns: list[str]) -> int:
         if re.search(pat, query, re.IGNORECASE):
             count += 1
     return count
-
-
-def _normalized_query_tokens(query: str) -> list[str]:
-    """Tokenize user text with a lightweight, deterministic heuristic."""
-    return [token for token in re.split(r"\s+", query.casefold().strip()) if token]
 
 
 def _looks_like_medical_decision_query(query: str) -> bool:
@@ -69,7 +62,6 @@ def _looks_like_medical_decision_query(query: str) -> bool:
 def _hard_rule_decision(query: str) -> RouterDecision | None:
     """Apply deterministic routing rules before LLM/pattern fallback."""
     lowered_query = query.casefold()
-    normalized_tokens = _normalized_query_tokens(query)
     relation_keyword_hit = any(keyword in lowered_query for keyword in RELATION_QUERY_KEYWORDS)
     global_keyword_hit = any(keyword in lowered_query for keyword in GLOBAL_QUERY_KEYWORDS)
     relation_pattern_hits = _match_patterns(query, RELATION_PATTERNS)
@@ -111,14 +103,6 @@ def _hard_rule_decision(query: str) -> RouterDecision | None:
                 else "Hard rule: multi-hop reasoning cue detected, prefer graph traversal."
             ),
             suggested_tool="cypher_traverse",
-        )
-
-    if LEXICAL_PRIORITY_PATTERN.search(query) and len(normalized_tokens) <= SHORT_QUERY_TOKEN_LIMIT:
-        return RouterDecision(
-            query_type=QueryType.SIMPLE,
-            confidence=0.98,
-            reasoning="Hard rule: lexical anchor detected, prefer BM25 retrieval.",
-            suggested_tool="bm25_search",
         )
 
     if _match_patterns(query, TEMPORAL_PATTERNS) > 0:

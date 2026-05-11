@@ -352,6 +352,15 @@ def test_initial_tool_plan_adds_bm25_for_strong_anchor():
     ]
 
 
+def test_initial_tool_plan_adds_bm25_for_code_anchor():
+    decision = RouterDecision(query_type=QueryType.SIMPLE, suggested_tool="vector_search")
+
+    assert _initial_tool_plan("ERR-42 应该怎么处理？", decision) == [
+        "vector_search",
+        "bm25_search",
+    ]
+
+
 def test_initial_tool_plan_does_not_add_bm25_for_phrase_only_query():
     decision = RouterDecision(query_type=QueryType.SIMPLE, suggested_tool="vector_search")
 
