@@ -806,6 +806,17 @@ behavior: 移除 is_cross_language_global workflow callback、_matches_internal_
 verification: 98 focused regression tests passed; ruff passed; alias/full_document_read forced-routing scan returned no code hits.
 ```
 
+### P4 Hard Rule Semantics Removal
+
+```text
+status: completed
+completed_at: 2026-05-11
+commit: c335ba1 Remove hard rule router semantics
+scope: 删除 Router 的 Hard rule 命名/字符串前缀语义和旧墓碑测试文件 tests/test_router_de_tooling.py。
+behavior: _hard_rule_decision 改为 _intent_override_decision；router_method 不再依赖 reasoning.startswith("Hard rule:")，确定性路由统一标记为 deterministic。
+verification: 91 focused regression tests passed; ruff passed; Hard rule/hard_rule/test_router_de_tooling scan returned no code hits.
+```
+
 ## 明确不做
 
 P1 阶段不做：
