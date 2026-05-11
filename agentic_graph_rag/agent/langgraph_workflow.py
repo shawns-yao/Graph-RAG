@@ -98,6 +98,13 @@ InitialRetrievalOutput = tuple[
 
 
 @dataclass(frozen=True)
+class RetrievalPlan:
+    primary_tool: str
+    initial_tools: tuple[str, ...]
+    reason: str = ""
+
+
+@dataclass(frozen=True)
 class SelfCorrectionOps:
     """Callbacks that bind workflow nodes to project-specific retrieval logic."""
 
@@ -242,6 +249,16 @@ def _initial_tool_plan(query: str, decision: RouterDecision) -> list[str]:
         if len(planned) >= _MAX_INITIAL_TOOLS:
             break
     return planned or [decision.suggested_tool]
+
+
+def _build_retrieval_plan(query: str, decision: RouterDecision) -> RetrievalPlan:
+    initial_tools = tuple(_initial_tool_plan(query, decision))
+    primary_tool = initial_tools[0] if initial_tools else decision.suggested_tool
+    return RetrievalPlan(
+        primary_tool=primary_tool,
+        initial_tools=initial_tools,
+        reason="router primary tool with signal-derived companion tools",
+    )
 
 
 def _decision_for_initial_tool(decision: RouterDecision, tool: str) -> RouterDecision:
@@ -1241,6 +1258,7 @@ class AgentWorkflowState(TypedDict, total=False):
     trace: PipelineTrace
     settings: Any
     decision: RouterDecision
+    retrieval_plan: RetrievalPlan
     results: list[SearchResult]
     retries: int
     qa_result: QAResult
@@ -1288,18 +1306,22 @@ def _route_query(state: AgentWorkflowState) -> dict[str, Any]:
         decision=decision,
         duration_ms=router_duration_ms,
     )
+    retrieval_plan = _build_retrieval_plan(state["query"], decision)
     memory = _append_memory_entry(
         state,
         stage="route",
-        message=f"router selected {decision.suggested_tool}",
+        message=f"router suggested {decision.suggested_tool}; retrieval plan starts {retrieval_plan.primary_tool}",
         metadata={
             "query_type": str(decision.query_type),
             "method": router_method,
             "confidence": decision.confidence,
+            "primary_tool": retrieval_plan.primary_tool,
+            "initial_tools": list(retrieval_plan.initial_tools),
         },
     )
     return {
         "decision": decision,
+        "retrieval_plan": retrieval_plan,
         "router_method": router_method,
         "router_duration_ms": router_duration_ms,
         "memory": memory,
@@ -1308,7 +1330,11 @@ def _route_query(state: AgentWorkflowState) -> dict[str, Any]:
 
 def _retrieve_evidence(state: AgentWorkflowState) -> dict[str, Any]:
     """Run the nested self-correction retrieval workflow."""
-    initial_tools = _initial_tool_plan(state["query"], state["decision"])
+    retrieval_plan = state.get("retrieval_plan") or _build_retrieval_plan(
+        state["query"],
+        state["decision"],
+    )
+    initial_tools = list(retrieval_plan.initial_tools)
     outputs: list[
         InitialRetrievalOutput
     ] = []
