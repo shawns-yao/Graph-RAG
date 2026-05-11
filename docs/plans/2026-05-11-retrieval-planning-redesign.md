@@ -795,6 +795,17 @@ behavior: RetrievalPlan 对 temporal query 追加 temporal_query companion；删
 verification: 98 focused regression tests passed; ruff passed.
 ```
 
+### P4 Internal Alias Rule Removal
+
+```text
+status: completed
+completed_at: 2026-05-11
+commit: c320a57 Remove internal alias full document routing
+scope: 删除 internal alias / cross-language global -> full_document_read 的旧 Router 特例和 workflow 二次强制改写。
+behavior: 移除 is_cross_language_global workflow callback、_matches_internal_alias_global、兼容别名常量和测试构造参数；不再保留 full_document_read 隐藏优先级入口。
+verification: 98 focused regression tests passed; ruff passed; alias/full_document_read forced-routing scan returned no code hits.
+```
+
 ## 明确不做
 
 P1 阶段不做：
