@@ -26,6 +26,24 @@ _THRESHOLD_RE = re.compile(
     rf"(?P<left>{_SYMBOLIC_RE.pattern}|{_LATIN_TOKEN})\s*{_COMPARISON}\s*{_NUMBER}",
     re.IGNORECASE,
 )
+_CJK_COMPARISON_RE = re.compile(
+    rf"(?P<left>{_SYMBOLIC_RE.pattern}|{_LATIN_TOKEN})\s*"
+    rf"(?P<operator>小于等于|大于等于|不超过|不低于|至少|小于|低于|大于|高于|超过)\s*"
+    rf"(?P<number>{_NUMBER})",
+    re.IGNORECASE,
+)
+_CJK_COMPARISON_OPERATORS = {
+    "小于等于": "≤",
+    "不超过": "≤",
+    "大于等于": "≥",
+    "不低于": "≥",
+    "至少": "≥",
+    "小于": "<",
+    "低于": "<",
+    "大于": ">",
+    "高于": ">",
+    "超过": ">",
+}
 _NUMERIC_WITH_UNIT_RE = re.compile(rf"{_NUMBER}\s*{_UNIT}", re.IGNORECASE)
 _FREQUENCY_RE = re.compile(rf"(?:每日|每周|每月|每年|每天)?\s*{_NUMBER}\s*次")
 _CODE_ANCHOR_RE = re.compile(
@@ -83,6 +101,11 @@ def _strip_question_suffix(text: str) -> str:
     return current.strip(" ，,。？?:：")
 
 
+def _normalized_cjk_threshold(match: re.Match[str]) -> str:
+    operator = _CJK_COMPARISON_OPERATORS[match.group("operator")]
+    return f"{match.group('left')} {operator} {match.group('number')}"
+
+
 def extract_query_signals(query: str) -> QuerySignals:
     """Extract query-local anchor forms without semantic scoring."""
     anchors: list[LexicalAnchor] = []
@@ -95,6 +118,10 @@ def extract_query_signals(query: str) -> QuerySignals:
 
     for match in _THRESHOLD_RE.finditer(query):
         _add_anchor(anchors, seen, match.group(0), "threshold")
+        protected_spans.append(match.span())
+
+    for match in _CJK_COMPARISON_RE.finditer(query):
+        _add_anchor(anchors, seen, _normalized_cjk_threshold(match), "threshold")
         protected_spans.append(match.span())
 
     for match in _SYMBOLIC_RE.finditer(query):

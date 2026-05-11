@@ -32,6 +32,30 @@ def test_extracts_egfr_threshold():
     assert has_strong_form_anchor(signals)
 
 
+def test_normalizes_chinese_threshold_expression():
+    signals = extract_query_signals("eGFR 小于30的患者可以用二甲双胍吗？")
+    anchors = {(anchor.text, anchor.kind) for anchor in signals.anchors}
+
+    assert ("eGFR < 30", "threshold") in anchors
+    assert has_strong_form_anchor(signals)
+
+
+def test_normalizes_chinese_at_least_threshold_expression():
+    signals = extract_query_signals("eGFR 至少30时怎么处理？")
+    anchors = {(anchor.text, anchor.kind) for anchor in signals.anchors}
+
+    assert ("eGFR ≥ 30", "threshold") in anchors
+    assert has_strong_form_anchor(signals)
+
+
+def test_normalizes_chinese_not_exceeding_threshold_expression():
+    signals = extract_query_signals("eGFR 不超过30时怎么处理？")
+    anchors = {(anchor.text, anchor.kind) for anchor in signals.anchors}
+
+    assert ("eGFR ≤ 30", "threshold") in anchors
+    assert has_strong_form_anchor(signals)
+
+
 def test_extracts_code_anchor_as_symbolic():
     signals = extract_query_signals("ERR-42 应该怎么处理？")
 
