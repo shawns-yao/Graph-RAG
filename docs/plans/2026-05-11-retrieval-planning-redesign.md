@@ -773,6 +773,17 @@ behavior: RetrievalPlan 对 relation/multi-hop query 追加 cypher_traverse comp
 verification: 94 focused regression tests passed; ruff passed.
 ```
 
+### P4 Global Broad Recall Planning
+
+```text
+status: completed
+completed_at: 2026-05-11
+commit: cfee6a4 Plan global retrieval as broad companion
+scope: 将普通 global intent 的默认主通道从 comprehensive_search 降级为 vector_search。
+behavior: RetrievalPlan 对 global query 追加 comprehensive_search companion，保留广召回覆盖但不让 Router 直接绑定 comprehensive 主工具。
+verification: 96 focused regression tests passed; ruff passed.
+```
+
 ## 明确不做
 
 P1 阶段不做：
