@@ -784,6 +784,17 @@ behavior: RetrievalPlan 对 global query 追加 comprehensive_search companion�
 verification: 96 focused regression tests passed; ruff passed.
 ```
 
+### P4 Temporal Companion Planning
+
+```text
+status: completed
+completed_at: 2026-05-11
+commit: bbbb360 Plan temporal retrieval as companion channel
+scope: 将 temporal intent 的默认主通道从 temporal_query 降级为 vector_search。
+behavior: RetrievalPlan 对 temporal query 追加 temporal_query companion；删除 _initial_tool_plan 中旧 bm25/cypher 主工具反向补 vector_search 的兼容分支。
+verification: 98 focused regression tests passed; ruff passed.
+```
+
 ## 明确不做
 
 P1 阶段不做：
