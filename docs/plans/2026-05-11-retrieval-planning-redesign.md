@@ -618,6 +618,11 @@ P5 Gap-Based RetryPlan:
   status: completed
   completed_at: 2026-05-11
   commit: d21dc34 Add gap-based retrieval retry plan
+
+P4 RetrievalPlan Compatibility Layer:
+  status: completed
+  completed_at: 2026-05-11
+  commit: ce8c5a8 Introduce retrieval plan in workflow
 ```
 
 ## 落地顺序
