@@ -613,6 +613,11 @@ P6 Regenerate Gate - Core Claims Only:
   status: completed
   completed_at: 2026-05-11
   commit: eb1d988 Gate verification correction on core claims
+
+P5 Gap-Based RetryPlan:
+  status: completed
+  completed_at: 2026-05-11
+  commit: d21dc34 Add gap-based retrieval retry plan
 ```
 
 ## 落地顺序
