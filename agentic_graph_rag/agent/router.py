@@ -57,8 +57,8 @@ def _looks_like_medical_decision_query(query: str) -> bool:
     return has_decision_intent and has_condition
 
 
-def _hard_rule_decision(query: str) -> RouterDecision | None:
-    """Apply deterministic routing rules before LLM/pattern fallback."""
+def _intent_override_decision(query: str) -> RouterDecision | None:
+    """Detect high-signal intents before the optional LLM/pattern fallback."""
     lowered_query = query.casefold()
     relation_keyword_hit = any(keyword in lowered_query for keyword in RELATION_QUERY_KEYWORDS)
     global_keyword_hit = any(keyword in lowered_query for keyword in GLOBAL_QUERY_KEYWORDS)
@@ -70,7 +70,7 @@ def _hard_rule_decision(query: str) -> RouterDecision | None:
         return RouterDecision(
             query_type=QueryType.GLOBAL,
             confidence=0.9,
-            reasoning="Hard rule: global summary intent detected; retrieval planner may add broad recall.",
+            reasoning="Global summary intent detected; retrieval planner may add broad recall.",
             suggested_tool=DEFAULT_TOOL_BY_QUERY_TYPE[QueryType.GLOBAL],
         )
 
@@ -85,9 +85,9 @@ def _hard_rule_decision(query: str) -> RouterDecision | None:
             query_type=query_type,
             confidence=0.96 if query_type == QueryType.RELATION else 0.94,
             reasoning=(
-                "Hard rule: relation intent detected; retrieval planner may add graph companion."
+                "Relation intent detected; retrieval planner may add graph companion."
                 if query_type == QueryType.RELATION
-                else "Hard rule: multi-hop intent detected; retrieval planner may add graph companion."
+                else "Multi-hop intent detected; retrieval planner may add graph companion."
             ),
             suggested_tool=DEFAULT_TOOL_BY_QUERY_TYPE[query_type],
         )
@@ -96,7 +96,7 @@ def _hard_rule_decision(query: str) -> RouterDecision | None:
         return RouterDecision(
             query_type=QueryType.TEMPORAL,
             confidence=0.94,
-            reasoning="Hard rule: temporal intent detected; retrieval planner may add temporal companion.",
+            reasoning="Temporal intent detected; retrieval planner may add temporal companion.",
             suggested_tool=DEFAULT_TOOL_BY_QUERY_TYPE[QueryType.TEMPORAL],
         )
 
@@ -203,11 +203,11 @@ def classify_query(
 ) -> RouterDecision:
     """Classify query and suggest retrieval tool.
 
-    Hard rules are tried first, followed by the optional LLM router or pattern fallback.
+    High-signal intent checks are tried first, followed by the optional LLM router or pattern fallback.
     """
-    hard_rule_result = _hard_rule_decision(query)
-    if hard_rule_result is not None:
-        return hard_rule_result
+    intent_result = _intent_override_decision(query)
+    if intent_result is not None:
+        return intent_result
 
     if use_llm:
         return classify_query_by_llm(query, openai_client=openai_client)

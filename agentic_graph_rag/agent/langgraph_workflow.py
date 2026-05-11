@@ -1295,11 +1295,7 @@ def _route_query(state: AgentWorkflowState) -> dict[str, Any]:
         openai_client=state["openai_client"],
     )
     router_duration_ms = int((time.perf_counter() - started) * 1000)
-    router_method = (
-        "hard_rule"
-        if decision.reasoning.startswith("Hard rule:")
-        else ("llm" if state["use_llm_router"] else "pattern")
-    )
+    router_method = "llm" if state["use_llm_router"] else "deterministic"
     state["trace"].router_step = RouterStep(
         method=router_method,
         decision=decision,
