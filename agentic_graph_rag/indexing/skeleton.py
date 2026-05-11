@@ -26,7 +26,6 @@ from agentic_graph_rag.indexing.dual_node import (
     _normalize_alias_text as dual_normalize_alias_text,
 )
 from agentic_graph_rag.indexing.phrase_mining import mine_phrase_candidates
-from agentic_graph_rag.text_signals import build_tfidf_profile, text_signal_score
 
 if TYPE_CHECKING:
     from openai import OpenAI
@@ -718,15 +717,10 @@ def filter_low_information_chunks(
     chunks: list[Chunk],
     embeddings: list[list[float]],
 ) -> tuple[list[Chunk], list[list[float]], list[Chunk]]:
-    """Drop low-information chunks before KNN + PageRank graph construction."""
+    """Drop low-information chunks using local, stateless text features."""
     if not chunks or not embeddings or len(chunks) != len(embeddings):
         return chunks, embeddings, []
 
-    cfg = get_settings().indexing
-    profile = build_tfidf_profile([chunk.enriched_content for chunk in chunks])
-    min_idf = _float_setting(cfg, "tfidf_low_idf_threshold", 1.2)
-    score_threshold = _float_setting(cfg, "tfidf_low_info_chunk_score_threshold", 0.6)
-    max_keywords = _int_setting(cfg, "tfidf_max_keywords", 8)
     normalized_text_counts: dict[str, int] = {}
     for chunk in chunks:
         normalized = re.sub(r"\s+", " ", chunk.enriched_content.strip())
@@ -739,28 +733,20 @@ def filter_low_information_chunks(
 
     for chunk, embedding in zip(chunks, embeddings, strict=False):
         normalized = re.sub(r"\s+", " ", chunk.enriched_content.strip())
-        if (
-            normalized
-            and len(normalized) <= 12
-            and normalized_text_counts.get(normalized, 0) >= 2
-        ):
-            chunk.metadata["tfidf_signal_score"] = 0.0
-            chunk.metadata["low_information_chunk"] = True
-            dropped_chunks.append(chunk)
+        score = _local_information_score(normalized)
+        if _has_strong_fact_shape(normalized):
+            chunk.metadata["local_information_score"] = score
+            chunk.metadata["low_information_chunk"] = False
+            kept_chunks.append(chunk)
+            kept_embeddings.append(embedding)
             continue
-        score = text_signal_score(
-            chunk.enriched_content,
-            profile,
-            min_idf=min_idf,
-            max_keywords=max_keywords,
-        )
-        if score < score_threshold:
-            chunk.metadata["tfidf_signal_score"] = score
+        if _is_duplicate_low_information_text(normalized, normalized_text_counts) or score <= 0.0:
+            chunk.metadata["local_information_score"] = score
             chunk.metadata["low_information_chunk"] = True
             dropped_chunks.append(chunk)
             continue
 
-        chunk.metadata["tfidf_signal_score"] = score
+        chunk.metadata["local_information_score"] = score
         chunk.metadata["low_information_chunk"] = False
         kept_chunks.append(chunk)
         kept_embeddings.append(embedding)
@@ -774,6 +760,48 @@ def filter_low_information_chunks(
     )
     return kept_chunks, kept_embeddings, dropped_chunks
 
+
+def _has_strong_fact_shape(text: str) -> bool:
+    if re.search(r"[A-Za-z][A-Za-z0-9/+.-]*\s*(?:<|>|<=|>=|≤|≥|=)\s*\d", text):
+        return True
+    if re.search(r"\d+(?:\.\d+)?\s*(?:μg|ug|mg|g|ml|mL|%|次|/μL|/uL|mL/min|ml/min)", text):
+        return True
+    return bool(re.search(r"(?:每日|每天|每周)\s*\d+\s*次", text))
+
+
+def _is_duplicate_low_information_text(text: str, text_counts: dict[str, int]) -> bool:
+    return bool(text and len(text) <= 12 and text_counts.get(text, 0) >= 2)
+
+
+def _local_information_score(text: str) -> float:
+    if not text:
+        return 0.0
+    chars = [char for char in text if not char.isspace()]
+    if not chars:
+        return 0.0
+    unique_ratio = len(set(chars)) / len(chars)
+    stopword_ratio = _stopword_ratio(text)
+    punctuation_ratio = sum(1 for char in chars if re.match(r"[^\w\u4e00-\u9fff]", char)) / len(chars)
+    alnum_ratio = sum(1 for char in chars if char.isalnum() or "\u4e00" <= char <= "\u9fff") / len(chars)
+    score = 0.0
+    if len(chars) >= 24:
+        score += 1.0
+    if unique_ratio >= 0.35:
+        score += 1.0
+    if stopword_ratio <= 0.65:
+        score += 1.0
+    if punctuation_ratio <= 0.55:
+        score += 1.0
+    if alnum_ratio >= 0.35:
+        score += 1.0
+    return score
+
+
+def _stopword_ratio(text: str) -> float:
+    tokens = re.findall(r"[A-Za-z]+", text.casefold())
+    if not tokens:
+        return 0.0
+    return sum(1 for token in tokens if token in _STOP_WORDS) / len(tokens)
 
 def _rank_chunks_for_skeleton_selection(
     chunks: list[Chunk],
