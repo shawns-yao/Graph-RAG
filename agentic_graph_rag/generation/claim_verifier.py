@@ -427,6 +427,7 @@ def _verification_evidence_text(text: str) -> str:
 _MEASUREMENT_RELATION_CUES = (
     "剂量",
     "用量",
+    "用法",
     "频次",
     "频率",
     "每日",
@@ -459,17 +460,37 @@ def _locally_supports_relation(actions: tuple[str, ...], evidence_text: str) -> 
     """Accept direct relation evidence before asking the LLM soft verifier.
 
     This is intentionally conservative: hard checks already confirmed the
-    entities/numeric values exist in this evidence item, and this helper only
-    promotes the claim when one of the extracted relation/action phrases is
-    also explicitly present. Semantic equivalence remains the LLM's job.
+    entities/numeric values exist in this evidence item. It accepts exact action
+    text and a narrow set of clinically equivalent prohibition verbs.
     """
     content = _normalize_hard_text(_verification_evidence_text(evidence_text))
     if not content:
         return False
     return any(
-        normalized in content
-        for normalized in (_normalize_hard_term(action) for action in actions)
-        if normalized
+        _action_supported_by_text(action, content)
+        for action in actions
+        if _normalize_hard_term(action)
+    )
+
+
+def _action_supported_by_text(action: str, normalized_evidence: str) -> bool:
+    normalized = _normalize_hard_term(action)
+    if normalized in normalized_evidence:
+        return True
+    if _is_prohibition_action(normalized):
+        return any(
+            term in normalized_evidence
+            for term in ("禁用", "不可使用", "不可以用", "不能使用")
+        )
+    if "改用" in normalized:
+        return "改用" in normalized_evidence
+    return False
+
+
+def _is_prohibition_action(normalized_action: str) -> bool:
+    return any(
+        term in normalized_action
+        for term in ("禁用", "不可使用", "不可以用", "不能使用")
     )
 
 

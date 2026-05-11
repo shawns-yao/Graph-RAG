@@ -257,3 +257,69 @@ def test_verification_evidence_text_prefers_evidence_section():
     )
 
     assert _verification_evidence_text(content) == "原文证据句。"
+
+
+def test_prohibition_relation_accepts_equivalent_negative_use_action():
+    claim = ExtractedClaim(
+        text="eGFR小于30时不可以用二甲双胍",
+        entities=("eGFR", "二甲双胍"),
+        numeric_constraints=("<30 mL/min/1.73m²",),
+        relation_actions=("不可以用",),
+    )
+    client = _client("possible_correct")
+
+    step = verify_claims(
+        [claim],
+        cypher_traverse=_cypher_noop,
+        driver=MagicMock(),
+        openai_client=client,
+        existing_evidence=[_result("eGFR < 30 mL/min/1.73m² 时禁用二甲双胍。")],
+    )
+
+    assert step.status == "passed"
+    assert step.claims_supported == 1
+    assert step.claims_possible == 0
+    client.chat.completions.create.assert_not_called()
+
+
+def test_usage_action_does_not_require_extra_relation_when_dose_and_frequency_match():
+    claim = ExtractedClaim(
+        text="噻托溴铵的用法为18 μg每日1次",
+        entities=("噻托溴铵",),
+        numeric_constraints=("18 μg", "每日1次"),
+        relation_actions=("用法",),
+    )
+    client = _client("possible_correct")
+
+    step = verify_claims(
+        [claim],
+        cypher_traverse=_cypher_noop,
+        driver=MagicMock(),
+        openai_client=client,
+        existing_evidence=[_result("噻托溴铵 --剂量--> 18 μg每日1次")],
+    )
+
+    assert step.status == "passed"
+    assert step.claims_supported == 1
+    client.chat.completions.create.assert_not_called()
+
+
+def test_switch_relation_accepts_extracted_action_with_temporal_prefix():
+    claim = ExtractedClaim(
+        text="使用ACEI后出现持续干咳时可改用ARB",
+        entities=("ACEI", "ARB", "持续干咳"),
+        relation_actions=("出现后改用",),
+    )
+    client = _client("possible_correct")
+
+    step = verify_claims(
+        [claim],
+        cypher_traverse=_cypher_noop,
+        driver=MagicMock(),
+        openai_client=client,
+        existing_evidence=[_result("若患者使用 ACEI 后出现持续干咳，应停用 ACEI，并改用 ARB。")],
+    )
+
+    assert step.status == "passed"
+    assert step.claims_supported == 1
+    client.chat.completions.create.assert_not_called()
