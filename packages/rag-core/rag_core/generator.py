@@ -549,6 +549,7 @@ def generate_answer(
             retrieval_status=derive_retrieval_status(selected_results),
             verification_status="skipped",
             query=query,
+            evidence_contract=evidence_contract,
         )
 
 

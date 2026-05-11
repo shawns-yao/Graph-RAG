@@ -65,6 +65,17 @@ class TestGenerateAnswer:
         assert len(qa.sources) == 1
         client.chat.completions.create.assert_called_once()
 
+    def test_preserves_evidence_contract_when_llm_generation_fails(self):
+        client = MagicMock()
+        client.chat.completions.create.side_effect = RuntimeError("gateway down")
+
+        results = [_make_scored_result("噻托溴铵 --剂量--> 18 μg每日1次", 0.9)]
+        qa = generate_answer("噻托溴铵每日用几次？", results, openai_client=client)
+
+        assert qa.answer_status == "failed"
+        assert qa.evidence_contract is not None
+        assert any("18 μg每日1次" in fact.text for fact in qa.evidence_contract.facts)
+
     def test_reflection_verdict_sets_discrete_answer_status(self):
         client = MagicMock()
         client.chat.completions.create.return_value = _mock_openai_response("answer")
