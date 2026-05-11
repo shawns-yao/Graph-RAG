@@ -1,22 +1,20 @@
 # Agentic Graph RAG
 
-**Skeleton Indexing + VectorCypher + Agentic Router with Self-Correction + Mangle Reasoning + Typed API**
+**Skeleton Indexing + VectorCypher + Agentic Router with Self-Correction + Typed API**
 
-A production-ready Graph RAG system combining four cutting-edge techniques from recent research into a unified retrieval pipeline with declarative reasoning, full pipeline provenance, and a typed API contract (FastAPI REST + MCP).
+A production-ready Graph RAG system combining recent retrieval techniques into a unified pipeline with full provenance and a typed API contract (FastAPI REST + MCP).
 
 ## Benchmark Results (v14)
 
-Evaluated on **30 bilingual questions** (15 Doc1 Russian + 15 Doc2 English) across 6 retrieval modes = **180 evaluations**:
+Evaluated on **30 bilingual questions** (15 Doc1 Russian + 15 Doc2 English) across the active retrieval modes:
 
 | Mode | Total | Delta vs v12 | Description |
 |------|-------|-------------|-------------|
 | **Vector** | **30/30 (100%)** | +2 | Embedding similarity search |
 | **Cypher** | **27/30 (90%)** | -1 | Graph traversal via VectorCypher (3-hop) |
-| **Hybrid** | **30/30 (100%)** | +2 | Vector + Graph with cosine re-ranking |
+| **Hybrid** | **30/30 (100%)** | +2 | Vector + Graph with cross-encoder re-ranking |
 | **Agent (pattern)** | **28/30 (93%)** | 0 | Auto-routing via regex patterns + self-correction |
 | **Agent (LLM)** | **29/30 (96%)** | +1 | Auto-routing via GPT-4o-mini |
-| **Agent (Mangle)** | **30/30 (100%)** | +2 | Declarative Datalog rule routing + self-correction |
-| **Overall** | **174/180 (96.7%)** | **+6 (+3.7pp)** | |
 
 Accuracy by query type (across all modes):
 
@@ -28,7 +26,7 @@ Accuracy by query type (across all modes):
 | multi_hop | 34/36 (94%) | +3 (was 86%) |
 | global | 34/36 (94%) | +5 (was 80%) |
 
-**3 modes at 100%** (vector, hybrid, agent_mangle). **Zero persistent failures** — every question passes in at least 4/6 modes.
+Current supported agent modes are `agent_pattern` and `agent_llm`.
 
 <details>
 <summary>Benchmark history (v3 → v14)</summary>
@@ -39,7 +37,7 @@ Accuracy by query type (across all modes):
 | v4 | 15 | 60/90 (67%) | lang=ru, cosine ranking, synthesis prompt, temporal boost |
 | v5 | 15 | 66/90 (73%) | comprehensive_search, completeness check, retry query, max_hops=3 |
 | v7 | 20 | 87/120 (73%) | Dual-document (Doc1 RU + Doc2 EN), RELATED_TO edges |
-| v9 | 20 | 84/120 (70%) | Hybrid cosine re-ranking (replaced RRF) |
+| v9 | 20 | 84/120 (70%) | Hybrid re-ranking |
 | v10 | 30 | 118/180 (65%) | 15 new Doc2 questions, co-occurrence expansion restored |
 | v11 | 30 | 144/180 (80%) | Enumeration prompt, global query detection, judge 2K |
 | v12 | 30 | 168/180 (93%) | Hybrid judge, smart mention routing, cross-doc detection, LiteLLM |
@@ -54,8 +52,7 @@ Accuracy by query type (across all modes):
 | **Skeleton Indexing** | KET-RAG (KDD 2025) | KNN graph -> PageRank -> selective entity extraction (10x cost savings) |
 | **Dual Node Structure** | HippoRAG 2 (ICML 2025) | Phrase nodes + passage nodes + Personalized PageRank |
 | **VectorCypher** | Neo4j / GraphRAG | Vector entry points -> Cypher traversal -> context assembly |
-| **Agentic Router** | Custom | Pattern/LLM/Mangle classification -> tool selection -> self-correction loop |
-| **Mangle Reasoning** | PyMangle (Datalog) | Declarative routing rules with bilingual keyword matching (65 keywords) |
+| **Agentic Router** | Custom | Hard rules + pattern/LLM classification -> tool selection -> self-correction loop |
 
 ## Architecture
 
@@ -68,11 +65,11 @@ Ingestion:
 
 Retrieval:
   Query -> Router (simple/relation/multi_hop/global/temporal)
-           Router cascade: Mangle -> LLM -> Pattern fallback
+           Router cascade: Hard rules -> optional LLM -> Pattern fallback
         -> Tool Selection (vector/cypher/hybrid/comprehensive/full_read/temporal)
         -> Self-Correction Loop (reflect -> rerank or retry with targeted tool/provider upgrades)
         -> Graph Verifier (contradiction detection)
-        -> Generator (GPT-4o synthesis + evidence scoring + confidence level + citations)
+        -> Generator (LLM synthesis + citations)
 ```
 
 ## Project Structure
@@ -89,9 +86,9 @@ agentic-graph-rag/
 │       ├── embedder.py        # text-embedding-3-small batch processing
 │       ├── vector_store.py    # Neo4j Vector Index CRUD
 │       ├── kg_client.py       # Graphiti wrapper + Cypher
-│       ├── generator.py       # LLM answer synthesis + evidence score + confidence level
+│       ├── generator.py       # LLM answer synthesis
 │       ├── reflector.py       # Verdict-based retrieval evaluation + completeness check
-│       └── i18n.py            # RU/EN localization (~50 keys)
+│       └── reranker.py        # Cross-encoder reranking
 │
 ├── agentic_graph_rag/         # Graph RAG components
 │   ├── indexing/
@@ -100,14 +97,11 @@ agentic-graph-rag/
 │   ├── retrieval/
 │   │   └── vector_cypher.py   # Vector entry -> Cypher traversal -> context
 │   ├── agent/
-│   │   ├── router.py          # Query classifier (pattern + LLM + Mangle)
+│   │   ├── router.py          # Query classifier (hard rules + pattern + LLM)
 │   │   ├── retrieval_agent.py # Orchestrator + self-correction loop + provenance
 │   │   └── tools.py           # 7 tools: vector, cypher, community, hybrid, temporal, full_read, comprehensive
 │   ├── generation/
 │   │   └── claim_verifier.py  # Chain-of-Verification: extract claims + graph-based verification
-│   ├── reasoning/
-│   │   ├── reasoning_engine.py # PyMangle Datalog engine wrapper
-│   │   └── rules/             # Mangle rules: routing.mg, access.mg, graph.mg
 │   ├── optimization/
 │   │   ├── cache.py           # LRU SubgraphCache + CommunityCache
 │   │   └── monitor.py         # QueryMonitor + PageRank tuning suggestions
@@ -119,11 +113,9 @@ agentic-graph-rag/
 │   ├── deps.py                # Dependency injection (PipelineService singleton)
 │   └── mcp_server.py          # MCP tools (resolve_intent, search_graph, explain_trace)
 │
-├── pymangle/                  # PyMangle Datalog engine (~5K lines)
-│
 ├── benchmark/
 │   ├── questions.json         # 30 test questions (5 types, EN/RU, 2 documents)
-│   ├── runner.py              # 6-mode benchmark runner
+│   ├── runner.py              # Benchmark runner
 │   └── compare.py             # Comparison table generator
 │
 ├── scripts/
@@ -135,7 +127,7 @@ agentic-graph-rag/
 │
 ├── docker-compose.yml         # Neo4j 5.x (docker compose up -d)
 ├── run_api.py                 # API launcher (uvicorn, port 8507)
-└── tests/                     # 454 unit tests (346 core + 108 pymangle)
+└── tests/                     # Unit tests
 ```
 
 ## Quick Start
@@ -194,14 +186,14 @@ Two sample documents are included for testing (both needed for the full 30-quest
 
 ```bash
 # Ingest both documents (required for benchmark reproducibility)
-PYTHONPATH=.:pymangle python scripts/ingest.py data/
+PYTHONPATH=. python scripts/ingest.py data/
 ```
 
 Or ingest individually:
 
 ```bash
-PYTHONPATH=.:pymangle python scripts/ingest.py data/sample_graph_rag.txt                # Doc1: Graph RAG (RU, Q1-Q15)
-PYTHONPATH=.:pymangle python scripts/ingest.py data/sample_semantic_companion_layer.txt # Doc2: SCL (EN, Q16-Q30)
+PYTHONPATH=. python scripts/ingest.py data/sample_graph_rag.txt                # Doc1: Graph RAG (RU, Q1-Q15)
+PYTHONPATH=. python scripts/ingest.py data/sample_semantic_companion_layer.txt # Doc2: SCL (EN, Q16-Q30)
 ```
 
 This runs the full pipeline: load → chunk → enrich → embed → store → skeleton indexing → dual-node graph.
@@ -214,8 +206,8 @@ Options:
 You can also ingest your own documents (PDF, DOCX, TXT):
 
 ```bash
-PYTHONPATH=.:pymangle python scripts/ingest.py /path/to/your/document.pdf
-PYTHONPATH=.:pymangle python scripts/ingest.py /path/to/documents/  # entire directory
+PYTHONPATH=. python scripts/ingest.py /path/to/your/document.pdf
+PYTHONPATH=. python scripts/ingest.py /path/to/documents/  # entire directory
 ```
 
 ### 5. Run the System
@@ -223,20 +215,19 @@ PYTHONPATH=.:pymangle python scripts/ingest.py /path/to/documents/  # entire dir
 Start the API server:
 
 ```bash
-PYTHONPATH=.:pymangle python run_api.py  # http://localhost:8507
+PYTHONPATH=. python run_api.py  # http://localhost:8507
 ```
 
 The API is the supported runtime for demo and programmatic access.
 Use the HTTP endpoints or MCP mount on port `8507`.
 
-> **Why PYTHONPATH?** The project uses two source roots: the main project directory and
-> `pymangle/` (the Datalog engine). Setting `PYTHONPATH=.:pymangle` makes both importable.
-> Alternatively, you can `export PYTHONPATH=.:pymangle` in your shell profile.
+> **Why PYTHONPATH?** Setting `PYTHONPATH=.` makes the local project packages importable
+> when running scripts directly from the repository.
 
 ### Run Tests
 
 ```bash
-PYTHONPATH=.:pymangle pytest tests/ packages/rag-core/tests/ pymangle/tests/ -x -q  # 586 tests, ~4 seconds
+PYTHONPATH=. pytest tests/ packages/rag-core/tests/ -x -q
 ```
 
 ### API Endpoints
@@ -269,10 +260,9 @@ print(compare_modes(results))
 |------|-------------|----------|
 | **Vector** | Cosine similarity on embeddings | Simple factual queries |
 | **Cypher** | Graph traversal via VectorCypher | Relationship queries |
-| **Hybrid** | Vector + Graph with RRF fusion | Multi-hop queries |
+| **Hybrid** | Vector + BM25 + Graph priority merge, then cross-encoder rerank | Multi-hop queries |
 | **Agent (pattern)** | Auto-routing via regex patterns | General use (fast) |
 | **Agent (LLM)** | Auto-routing via GPT-4o-mini | General use (accurate) |
-| **Agent (Mangle)** | Auto-routing via Datalog rules | General use (deterministic) |
 
 ## Pipeline Provenance (v6)
 
@@ -283,10 +273,10 @@ Every query produces a `PipelineTrace` — a structured record of the full pipel
   "trace_id": "tr_abc123def456",
   "timestamp": "2026-02-17T12:00:00Z",
   "query": "Какие методы используются?",
-  "router_step": {"method": "mangle", "decision": {"query_type": "simple", "suggested_tool": "vector_search"}},
+  "router_step": {"method": "hard_rule", "decision": {"query_type": "simple", "suggested_tool": "vector_search"}},
   "tool_steps": [{"tool_name": "vector_search", "results_count": 10, "relevance_score": 3.2, "duration_ms": 150}],
   "escalation_steps": [],
-  "generator_step": {"model": "gpt-4o-mini", "prompt_tokens": 1200, "completion_tokens": 350, "confidence": 0.82},
+  "generator_step": {"model": "gpt-4o-mini", "prompt_tokens": 1200, "completion_tokens": 350},
   "total_duration_ms": 1800
 }
 ```
@@ -295,7 +285,8 @@ Traces are cached (LRU, 100 entries) and retrievable via `GET /api/v1/trace/{id}
 
 ## Self-Correction Loop
 
-The agent evaluates retrieval quality on a 1-5 scale and then chooses among three actions:
+The agent treats reflection as a policy decision, not a numeric score. Each
+reflection step returns a discrete action:
 
 ``` 
 answer | rerank | retry
@@ -307,16 +298,17 @@ Retries are not a fixed linear escalation chain. The workflow combines:
 - reflection-recommended tools/providers
 - a fallback matrix per current tool
 
-The loop can refresh only part of `hybrid_search`, rewrite the query when broader recall is justified, or stop early when reflection is repeating covered gaps. For `GLOBAL` queries, the top-level workflow may run one additional `comprehensive_search` pass when low-confidence evidence suggests the first answer is incomplete. Cross-language internal alias queries can still route directly to `full_document_read`, but that is a router choice, not the default top-level retry path.
+The loop can refresh only part of `hybrid_search`, rewrite the query when
+broader recall is justified, or stop early when reflection is repeating covered
+gaps. For `GLOBAL` queries, the top-level workflow may run one additional
+`comprehensive_search` pass when evidence status suggests the first answer is
+incomplete. Cross-language internal alias queries can still route directly to
+`full_document_read`, but that is a router choice, not the default top-level
+retry path.
 
-## Mangle Reasoning
-
-Declarative routing via PyMangle (Python Datalog engine):
-
-- **65 bilingual keywords** (Russian + English) in `routing.mg`
-- **Router cascade**: Mangle (confidence 0.7) -> LLM (0.85) -> Pattern (0.5)
-- **UI**: "Mangle Router" checkbox in sidebar, Reasoning tab for rule testing
-- **Rules**: `agentic_graph_rag/reasoning/rules/` — routing, access control, graph traversal
+Hybrid retrieval does not use numeric channel weights. It chooses a channel
+priority by query type, dedupes repeated chunks, appends lower-priority channel
+results as supplements, then reranks the final candidate pool.
 
 ## Configuration
 
@@ -327,25 +319,23 @@ All settings via `.env` or environment variables:
 | `OPENAI_API_KEY` | — | OpenAI API key |
 | `NEO4J_URI` | `bolt://localhost:7687` | Neo4j connection |
 | `INDEXING_SKELETON_BETA` | `0.25` | Fraction of chunks for full extraction |
-| `INDEXING_KNN_K` | `10` | KNN graph neighbors |
+| `INDEXING_KNN_K` | `5` | KNN graph neighbors |
 | `INDEXING_PAGERANK_DAMPING` | `0.85` | PageRank damping factor |
 | `RETRIEVAL_TOP_K_VECTOR` | `10` | Vector search results count |
-| `RETRIEVAL_TOP_K_FINAL` | `10` | Final results after fusion |
+| `RETRIEVAL_TOP_K_FINAL` | `10` | Final results after priority merge/rerank |
 | `RETRIEVAL_VECTOR_THRESHOLD` | `0.5` | Minimum similarity score |
-| `RETRIEVAL_MAX_HOPS` | `3` | Max graph traversal depth |
-| `AGENT_MAX_RETRIES` | `2` | Self-correction retries |
-| `AGENT_RELEVANCE_THRESHOLD` | `2.0` | Minimum relevance score (1-5) |
+| `RETRIEVAL_MAX_HOPS` | `2` | Max graph traversal depth |
+| `AGENT_MAX_RETRIES` | `1` | Self-correction retries |
 
 ## Tech Stack
 
 - **LLM**: OpenAI GPT-4o / GPT-4o-mini
 - **Embeddings**: text-embedding-3-small (1536 dim)
 - **Graph DB**: Neo4j 5.x (Vector Index + Cypher)
-- **Reasoning**: PyMangle (Datalog engine)
 - **Doc Parsing**: Docling (PDF/DOCX/PPTX + GPU)
 - **Graph Algorithms**: NetworkX (PageRank, KNN, PPR)
 - **API**: FastAPI (REST + MCP via FastMCP)
-- **Testing**: pytest (586 tests) + ruff
+- **Testing**: pytest + ruff
 
 ## References
 
@@ -353,8 +343,6 @@ All settings via `.env` or environment variables:
 - [HippoRAG 2: Agentic Retrieval](https://arxiv.org/abs/2502.14802) (ICML 2025)
 - [VectorCypher: Neo4j Graph Retrieval](https://neo4j.com/docs/)
 - [Agentic RAG: Self-Correcting Retrieval](https://arxiv.org/abs/2401.15884)
-- [Mangle: Datalog Dialect](https://github.com/google/mangle) (Google Research)
-
 ## License
 
 MIT

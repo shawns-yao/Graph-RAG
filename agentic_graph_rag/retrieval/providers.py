@@ -24,8 +24,14 @@ _VECTOR_QUERY_STOPWORDS = {
     "medical",
     "什么",
     "是什么",
+    "患者",
+    "应该",
+    "如何",
+    "能否",
+    "多少",
+    "多久",
+    "使用",
 }
-
 _BM25_STOPWORDS = {
     "a", "an", "and", "are", "as", "at", "be", "by", "described", "did", "do",
     "does", "during", "events", "for", "from", "had", "has", "have", "he", "her",
@@ -178,13 +184,19 @@ def graph_context_to_search_results(
             {
                 "chunk_id": ctx.source_ids[index] if index < len(ctx.source_ids) else "",
                 "passage": passage,
+                "evidence_text": _graph_evidence_text(passage),
+                "evidence_snippet": _graph_evidence_snippet(
+                    passage,
+                    ctx,
+                    query_terms=query_terms,
+                ),
                 "base_rank": index + 1,
             }
             for index, passage in enumerate(ctx.passages)
         ]
         passage_rows.sort(
             key=lambda row: _graph_passage_sort_key(
-                row["passage"],
+                str(row["evidence_snippet"] or row["evidence_text"] or row["passage"]),
                 ctx,
                 query_terms=query_terms,
                 base_rank=int(row["base_rank"]),
@@ -195,15 +207,16 @@ def graph_context_to_search_results(
             passage_rows = passage_rows[:top_k]
         for index, row in enumerate(passage_rows):
             passage = str(row["passage"])
+            evidence_snippet = str(row["evidence_snippet"] or passage)
             chunk_id = str(row["chunk_id"])
-            content = passage
+            content = evidence_snippet
             passage_prefix = (
-                _graph_context_prefix_for_passage(ctx, passage)
+                _graph_context_prefix_for_passage(ctx, str(row["evidence_text"] or passage))
                 if include_graph_structure
                 else ""
             )
             if passage_prefix:
-                content = f"{passage_prefix}\n\nEvidence:\n{passage}"
+                content = f"{passage_prefix}\n\nEvidence:\n{evidence_snippet}"
             results.append(
                 SearchResult(
                     chunk=Chunk(id=chunk_id, content=content),
@@ -217,7 +230,6 @@ def graph_context_to_search_results(
                     source=source,
                 )
             )
-        results.sort(key=lambda item: (item.score_normalized or 0.0, item.score), reverse=True)
         return [
             SearchResult(
                 chunk=item.chunk,
@@ -254,7 +266,7 @@ def _graph_passage_sort_key(
     *,
     query_terms: list[str],
     base_rank: int,
-) -> tuple[float, float, float, float]:
+) -> tuple[float, float, float, float, float]:
     """Prioritize graph passages that actually ground the query terms and edges."""
     lowered = passage.casefold()
     coverage = (
@@ -266,20 +278,215 @@ def _graph_passage_sort_key(
         1 for entity in ctx.entities
         if entity.name and entity.name.casefold() in lowered
     )
-    matched_paths = sum(
-        1
-        for triplet in ctx.triplets
-        if triplet.get("source")
-        and triplet.get("target")
-        and triplet["source"].casefold() in lowered
-        and triplet["target"].casefold() in lowered
-    )
+    matched_paths = _graph_triplet_hits(lowered, ctx)
+    matched_weak_paths = _graph_weak_triplet_hits(lowered, ctx)
     signal = _graph_confidence_signal(
         passage,
         query_terms,
         base_score=1.0 / max(base_rank, 1),
     )
-    return (coverage, matched_paths, matched_entities, signal)
+    source_quality = _graph_source_evidence_quality(passage)
+    has_query_signal = 1.0 if coverage > 0 or matched_paths or matched_weak_paths else 0.0
+    return (
+        has_query_signal,
+        coverage,
+        source_quality,
+        matched_paths + matched_weak_paths,
+        matched_entities + signal,
+    )
+
+
+def _graph_sentence_splits(text: str) -> list[str]:
+    parts = re.split(r"(?:\n+|(?<=[。！？!?；;]))", text)
+    return [part.strip() for part in parts if part.strip()]
+
+
+def _graph_evidence_text(passage: str) -> str:
+    """Return the verifiable source text, excluding indexing-only hints."""
+    text = (passage or "").strip()
+    if not text:
+        return ""
+
+    marker_match = re.search(r"\n\s*\n", text)
+    if marker_match:
+        body = text[marker_match.end():].strip()
+        if body:
+            return body
+
+    lines = []
+    skipping_prefix = True
+    for line in text.splitlines():
+        stripped = line.strip()
+        if skipping_prefix and (
+            stripped.startswith("Document summary:")
+            or stripped.startswith("Section:")
+            or stripped.startswith("Chunk position:")
+            or stripped.startswith("Focus:")
+        ):
+            continue
+        skipping_prefix = False
+        if stripped:
+            lines.append(stripped)
+    return "\n".join(lines).strip() or text
+
+
+def _graph_source_evidence_quality(text: str) -> float:
+    """Prefer source prose/list/table evidence over generated index artifacts."""
+    lines = [line.strip() for line in (text or "").splitlines() if line.strip()]
+    if not lines:
+        return 0.0
+
+    relation_dump_lines = sum(1 for line in lines if "--" in line and "-->" in line)
+    alias_catalog_lines = sum(1 for line in lines if "aliases:" in line)
+    list_or_table_lines = sum(
+        1 for line in lines
+        if line.startswith(("-", "*", "•", "|", "**", "#"))
+    )
+    prose_lines = sum(
+        1 for line in lines
+        if not line.startswith(("-", "*", "•", "|")) and "aliases:" not in line
+    )
+    artifact_ratio = (relation_dump_lines + alias_catalog_lines) / len(lines)
+    source_ratio = (list_or_table_lines + prose_lines) / len(lines)
+    return max(0.0, source_ratio - artifact_ratio)
+
+
+def _graph_query_hits(text: str, query_terms: list[str]) -> int:
+    lowered = text.casefold()
+    return sum(1 for term in query_terms if term in lowered)
+
+
+def _graph_sentence_window(sentences: list[str], index: int, query_terms: list[str]) -> str:
+    """Preserve local heading/list context around a selected graph evidence line."""
+    selected = [sentences[index]]
+
+    current_is_list = sentences[index].lstrip().startswith(("-", "•", "*"))
+    if current_is_list:
+        for previous_index in range(index - 1, max(-1, index - 8), -1):
+            previous = sentences[previous_index]
+            if previous.lstrip().startswith(("-", "•", "*")):
+                continue
+            previous_is_heading = previous.endswith(("：", ":"))
+            if previous_is_heading:
+                selected.insert(0, previous)
+                break
+    elif index > 0:
+        previous = sentences[index - 1]
+        previous_is_heading = previous.endswith(("：", ":")) or len(previous) <= 40
+        if previous_is_heading and "：" in previous:
+            selected.insert(0, previous)
+
+    for next_index in range(index + 1, min(len(sentences), index + 4)):
+        candidate = sentences[next_index]
+        if _graph_query_hits(candidate, query_terms) > 0:
+            selected.append(candidate)
+            continue
+        if candidate.lstrip().startswith(("-", "•", "*")) and any(
+            token in candidate for token in ("至少", "禁用", "改用", "目标", "疗程", "剂量")
+        ):
+            selected.append(candidate)
+            continue
+        break
+
+    return " ".join(selected)
+
+
+def _graph_evidence_snippet(
+    passage: str,
+    ctx: GraphContext,
+    *,
+    query_terms: list[str],
+) -> str:
+    evidence_text = _graph_evidence_text(passage)
+    weak_evidence = _weak_evidence_for_passage(ctx, evidence_text)
+    relation_windows = _graph_relation_line_windows(evidence_text, ctx, query_terms)
+    if relation_windows:
+        return _join_unique([*weak_evidence, *relation_windows])
+
+    sentences = _graph_sentence_splits(evidence_text)
+    if len(sentences) <= 1:
+        return _join_unique([*weak_evidence, evidence_text])
+
+    ranked_sentences = []
+    for index, sentence in enumerate(sentences):
+        lowered = sentence.casefold()
+        hit_count = _graph_query_hits(sentence, query_terms)
+        coverage = (hit_count / len(query_terms)) if query_terms else 0.0
+        matched_paths = _graph_triplet_hits(lowered, ctx)
+        matched_weak_paths = _graph_weak_triplet_hits(lowered, ctx)
+        matched_entities = sum(
+            1 for entity in ctx.entities
+            if entity.name and entity.name.casefold() in lowered
+        )
+        ranked_sentences.append(
+            (
+                (matched_paths + matched_weak_paths, coverage, matched_entities, -index),
+                _graph_sentence_window(sentences, index, query_terms),
+            )
+        )
+
+    ranked_sentences.sort(key=lambda item: item[0], reverse=True)
+    selected = [sentence for score, sentence in ranked_sentences[:2] if score[:3] != (0, 0.0, 0)]
+    if not selected:
+        selected = sentences[:2]
+    return _join_unique([*weak_evidence, *selected])
+
+
+def _graph_relation_line_windows(
+    passage: str,
+    ctx: GraphContext,
+    query_terms: list[str],
+) -> list[str]:
+    """Extract local Markdown/list windows around graph endpoints and query hits."""
+    lines = [line.strip() for line in passage.splitlines() if line.strip()]
+    if not lines:
+        return []
+
+    endpoint_terms: list[str] = []
+    for triplet in [*ctx.triplets, *ctx.weak_triplets]:
+        for key in ("source", "target"):
+            value = (triplet.get(key) or "").strip()
+            if value and value not in endpoint_terms:
+                endpoint_terms.append(value)
+    endpoint_terms = endpoint_terms[:16]
+
+    windows: list[tuple[tuple[int, int, int], str]] = []
+    for index, line in enumerate(lines):
+        lowered = line.casefold()
+        endpoint_hits = sum(1 for term in endpoint_terms if term.casefold() in lowered)
+        query_hits = sum(1 for term in query_terms if term in lowered)
+        if endpoint_hits == 0 and query_hits == 0:
+            continue
+
+        start = index
+        for previous in range(index - 1, max(-1, index - 4), -1):
+            candidate = lines[previous]
+            if candidate.startswith("#") or candidate.endswith(("：", ":")) or candidate.startswith("**"):
+                start = previous
+                break
+            if not candidate.startswith(("-", "*", "•")):
+                break
+
+        end = index + 1
+        for nxt in range(index + 1, min(len(lines), index + 5)):
+            candidate = lines[nxt]
+            if candidate.startswith("#") or candidate.startswith("**"):
+                break
+            candidate_lowered = candidate.casefold()
+            sibling_hit = (
+                candidate.startswith(("-", "*", "•"))
+                or any(term.casefold() in candidate_lowered for term in endpoint_terms)
+                or any(term in candidate_lowered for term in query_terms)
+            )
+            if not sibling_hit:
+                break
+            end = nxt + 1
+
+        text = " ".join(lines[start:end])
+        windows.append(((endpoint_hits, query_hits, -index), text))
+
+    windows.sort(key=lambda item: item[0], reverse=True)
+    return [window for _score, window in windows[:3]]
 
 
 def _graph_context_prefix(ctx: GraphContext) -> str:
@@ -291,6 +498,15 @@ def _graph_context_prefix(ctx: GraphContext) -> str:
             for triplet in ctx.triplets[:8]
         ]
         sections.append("Graph paths:\n" + "\n".join(path_lines))
+    elif ctx.weak_triplets:
+        weak_lines = [
+            (
+                f"{triplet.get('source', '')} -[{triplet.get('relation', '')}?]-> "
+                f"{triplet.get('target', '')}"
+            )
+            for triplet in ctx.weak_triplets[:4]
+        ]
+        sections.append("Weak graph hints:\n" + "\n".join(weak_lines))
 
     if ctx.entities:
         entity_lines = []
@@ -319,6 +535,10 @@ def _graph_context_prefix_for_passage(ctx: GraphContext, passage: str) -> str:
     if path_lines:
         sections.append("Graph paths:\n" + "\n".join(path_lines[:8]))
 
+    weak_lines = _weak_lines_for_passage(ctx, lowered)
+    if weak_lines:
+        sections.append("Weak graph hints:\n" + "\n".join(weak_lines[:4]))
+
     entity_lines: list[str] = []
     for entity in ctx.entities:
         if not entity.name or entity.name.casefold() not in lowered:
@@ -326,9 +546,74 @@ def _graph_context_prefix_for_passage(ctx: GraphContext, passage: str) -> str:
         label = entity.entity_type or "Entity"
         entity_lines.append(f"{entity.name} ({label})")
     if entity_lines:
-        sections.append("Entities:\n" + "\n".join(entity_lines[:8]))
+        sections.append("Entities:\n" + "\n".join(entity_lines[:4]))
 
     return "\n\n".join(section for section in sections if section).strip()
+
+
+def _weak_lines_for_passage(ctx: GraphContext, lowered_passage: str) -> list[str]:
+    weak_lines: list[str] = []
+    for triplet in ctx.weak_triplets:
+        evidence = triplet.get("evidence", "")
+        if evidence and evidence.casefold() not in lowered_passage:
+            continue
+        source = triplet.get("source", "")
+        target = triplet.get("target", "")
+        if source and target:
+            weak_lines.append(
+                f"{source} -[{triplet.get('relation', '')}?]-> {target}"
+            )
+    return weak_lines
+
+
+def _weak_evidence_for_passage(ctx: GraphContext, passage: str) -> list[str]:
+    lowered = passage.casefold()
+    evidence_lines: list[str] = []
+    for triplet in ctx.weak_triplets:
+        evidence = (triplet.get("evidence") or "").strip()
+        if not evidence:
+            continue
+        if evidence.casefold() in lowered:
+            evidence_lines.append(evidence)
+    return evidence_lines[:4]
+
+
+def _join_unique(parts: list[str]) -> str:
+    seen: set[str] = set()
+    ordered: list[str] = []
+    for part in parts:
+        normalized = " ".join((part or "").split())
+        if not normalized or normalized in seen:
+            continue
+        seen.add(normalized)
+        ordered.append(normalized)
+    return " ".join(ordered)
+
+
+def _graph_triplet_hits(lowered_text: str, ctx: GraphContext) -> int:
+    hits = 0
+    for triplet in ctx.triplets:
+        source = triplet.get("source", "")
+        target = triplet.get("target", "")
+        if not source or not target:
+            continue
+        if source.casefold() in lowered_text and target.casefold() in lowered_text:
+            hits += 1
+    return hits
+
+
+def _graph_weak_triplet_hits(lowered_text: str, ctx: GraphContext) -> int:
+    hits = 0
+    for triplet in ctx.weak_triplets:
+        evidence = triplet.get("evidence", "")
+        source = triplet.get("source", "")
+        target = triplet.get("target", "")
+        if evidence and evidence.casefold() in lowered_text:
+            hits += 1
+            continue
+        if source and target and source.casefold() in lowered_text and target.casefold() in lowered_text:
+            hits += 1
+    return hits
 
 
 def _graph_confidence_signal(
@@ -337,15 +622,11 @@ def _graph_confidence_signal(
     *,
     base_score: float,
 ) -> float:
-    from agentic_graph_rag.retrieval.domain_signals import apply_domain_boost
-
-    signal = _lexical_confidence_signal(
+    return _lexical_confidence_signal(
         text,
         query_terms,
         base_score=max(0.0, min(0.6, base_score)),
     )
-    signal = apply_domain_boost(text, signal)
-    return min(1.0, signal)
 
 
 class VectorRetrievalProvider:
@@ -411,19 +692,41 @@ def _content_fingerprint(text: str) -> str:
 def _query_terms(query: str) -> list[str]:
     terms: list[str] = []
     for match in _CJK_TOKEN_RE.findall(query.casefold()):
-        token = match.strip()
-        token = token.strip("，,。？?：:")
-        token = token.removeprefix("的").removesuffix("是什么")
-        token = token.removesuffix("是什么").removesuffix("什么")
-        if len(token) < 2 or token in _VECTOR_QUERY_STOPWORDS:
-            continue
-        candidates = [token]
-        if "诊断" in token and "标准" in token:
-            candidates = ["诊断标准"]
-        for candidate in candidates:
-            if candidate not in terms:
-                terms.append(candidate)
+        for token in _query_anchor_tokens(match):
+            if token not in terms:
+                terms.append(token)
     return terms
+
+
+def _query_anchor_tokens(raw: str) -> list[str]:
+    token = raw.strip().strip("，,。？?：:")
+    if not token:
+        return []
+
+    token = token.removeprefix("的").removesuffix("是什么")
+    token = token.removesuffix("是什么").removesuffix("什么")
+    token = re.sub(r"(?:在|于|对|时|后|前)$", "", token)
+
+    if not re.search(r"[\u4e00-\u9fff]", token):
+        return [token] if len(token) >= 2 and token not in _VECTOR_QUERY_STOPWORDS else []
+
+    pieces = re.split(
+        r"(?:为什么|是什么|怎么办|如何|怎么|多少|多久|哪些|什么|因为|所以|而|且|并且|以及|"
+        r"适合|推荐|方案|使用|规律|按需|时候|患者|需要)",
+        token,
+    )
+    anchors: list[str] = []
+    for piece in pieces:
+        piece = piece.strip()
+        piece = re.sub(r"^[的在于对和与及、]+|[的在于对时后前]+$", "", piece)
+        if re.fullmatch(r"(?:时)?(?:推荐)?(?:什么)?(?:方案)?", piece):
+            continue
+        if len(piece) < 2 or piece in _VECTOR_QUERY_STOPWORDS:
+            continue
+        anchors.append(piece)
+    if pieces != [token]:
+        return anchors
+    return anchors or ([token] if len(token) >= 2 and token not in _VECTOR_QUERY_STOPWORDS else [])
 
 
 def _vector_confidence_signal(result: SearchResult, query_terms: list[str]) -> float:
@@ -463,12 +766,14 @@ class GraphRetrievalProvider:
         cfg = get_settings()
         max_hops = int(request.filters.get("max_hops", cfg.retrieval.max_hops))
         entry_top_k = int(request.filters.get("entry_top_k", cfg.retrieval.graph_entry_top_k))
+        query_structure = request.filters.get("query_structure")
         ctx = vector_cypher_search(
             request.query_embedding,
             self._driver,
             top_k=entry_top_k,
             max_hops=max_hops,
             query=request.query,
+            query_structure=query_structure,
         )
         return graph_context_to_search_results(
             ctx,

@@ -6,14 +6,12 @@ Categories: simple, relation, multi_hop, global, temporal.
 
 from __future__ import annotations
 
-import logging
 import re
-from typing import TYPE_CHECKING
 
 from rag_core.config import get_settings, make_openai_client
 from rag_core.models import QueryType, RouterDecision
 
-from agentic_graph_rag.agent.tool_registry import DEFAULT_TOOL_BY_QUERY_TYPE, QUERY_TYPE_BY_TOOL
+from agentic_graph_rag.agent.tool_registry import DEFAULT_TOOL_BY_QUERY_TYPE
 from agentic_graph_rag.agent.routing_rules import (
     GLOBAL_PATTERNS,
     GLOBAL_QUERY_KEYWORDS,
@@ -28,12 +26,7 @@ from agentic_graph_rag.agent.routing_rules import (
     TEMPORAL_PATTERNS,
 )
 
-if TYPE_CHECKING:
-    from openai import OpenAI
-
-    from agentic_graph_rag.reasoning.reasoning_engine import ReasoningEngine
-
-logger = logging.getLogger(__name__)
+from openai import OpenAI
 
 def _match_patterns(query: str, patterns: list[str]) -> int:
     """Count how many patterns match in the query."""
@@ -73,7 +66,7 @@ def _looks_like_medical_decision_query(query: str) -> bool:
 
 
 def _hard_rule_decision(query: str) -> RouterDecision | None:
-    """Apply deterministic routing rules before Mangle/LLM fallback."""
+    """Apply deterministic routing rules before LLM/pattern fallback."""
     lowered_query = query.casefold()
     normalized_tokens = _normalized_query_tokens(query)
     relation_keyword_hit = any(keyword in lowered_query for keyword in RELATION_QUERY_KEYWORDS)
@@ -239,27 +232,6 @@ def classify_query_by_llm(
 
 
 # ---------------------------------------------------------------------------
-# Mangle-based classification
-# ---------------------------------------------------------------------------
-
-def _classify_by_mangle(query: str, reasoning: ReasoningEngine) -> RouterDecision | None:
-    """Attempt classification via Mangle rules. Returns None if no match."""
-    result = reasoning.classify_query(query)
-    if result is None:
-        return None
-
-    tool = result["tool"]
-    query_type = QUERY_TYPE_BY_TOOL.get(tool, QueryType.SIMPLE)
-
-    return RouterDecision(
-        query_type=query_type,
-        confidence=0.7,
-        reasoning=f"Mangle rule matched → {tool}.",
-        suggested_tool=tool,
-    )
-
-
-# ---------------------------------------------------------------------------
 # Main entry point
 # ---------------------------------------------------------------------------
 
@@ -267,22 +239,14 @@ def classify_query(
     query: str,
     use_llm: bool = False,
     openai_client: OpenAI | None = None,
-    reasoning: ReasoningEngine | None = None,
 ) -> RouterDecision:
     """Classify query and suggest retrieval tool.
 
-    When a ReasoningEngine is provided, Mangle rules are tried first.
-    Falls back to patterns (or LLM) if Mangle produces no match.
+    Hard rules are tried first, followed by the optional LLM router or pattern fallback.
     """
     hard_rule_result = _hard_rule_decision(query)
     if hard_rule_result is not None:
         return hard_rule_result
-
-    if reasoning is not None:
-        mangle_result = _classify_by_mangle(query, reasoning)
-        if mangle_result is not None:
-            return mangle_result
-        logger.debug("Mangle produced no match for query, falling back to patterns")
 
     if use_llm:
         return classify_query_by_llm(query, openai_client=openai_client)

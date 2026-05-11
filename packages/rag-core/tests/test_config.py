@@ -92,24 +92,12 @@ def _clear_retrieval_env(monkeypatch):
         "RETRIEVAL_GRAPH_COOCCURRENCE_LIMIT",
         "RETRIEVAL_GRAPH_PASSAGE_LIMIT",
         "RETRIEVAL_PPR_ALPHA",
-        "RETRIEVAL_RRF_K",
         "RETRIEVAL_FANOUT_MAX_WORKERS",
         "RETRIEVAL_FANOUT_TIMEOUT_MS",
         "RETRIEVAL_FULLTEXT_INDEX_NAME",
-        "RETRIEVAL_RERANKER_BACKEND",
         "RETRIEVAL_RERANKER_MODEL",
-        "RETRIEVAL_EMPTY_CHANNEL_PENALTY",
-        "RETRIEVAL_SPARSE_CHANNEL_PENALTY",
-        "RETRIEVAL_WEAK_CHANNEL_MIN_RESULTS",
-        "RETRIEVAL_BM25_LEXICAL_BOOST",
-        "RETRIEVAL_GRAPH_EVIDENCE_BOOST",
-        "RETRIEVAL_LEXICAL_OVERLAP_THRESHOLD",
         "RETRIEVAL_TFIDF_QUERY_MIN_IDF",
         "RETRIEVAL_TFIDF_QUERY_MAX_KEYWORDS",
-        "RETRIEVAL_CONFIDENCE_MIN",
-        "RETRIEVAL_RETRIEVAL_CONFIDENCE_WEIGHT",
-        "RETRIEVAL_REFLECTION_CONFIDENCE_WEIGHT",
-        "RETRIEVAL_REFLECTION_SCORE_SCALE",
     ):
         monkeypatch.delenv(key, raising=False)
 
@@ -254,18 +242,10 @@ class TestRetrievalSettings:
         assert s.graph_cooccurrence_limit == 32
         assert s.graph_passage_limit == 12
         assert s.ppr_alpha == 0.15
-        assert s.rrf_k == 60
         assert s.fanout_max_workers == 3
         assert s.fanout_timeout_ms == 15000
         assert s.fulltext_index_name == "passage_text_index"
-        assert s.reranker_backend == "lexical_semantic"
         assert s.reranker_model == "cross-encoder/ms-marco-MiniLM-L-6-v2"
-        assert s.empty_channel_penalty == 0.35
-        assert s.sparse_channel_penalty == 0.75
-        assert s.weak_channel_min_results == 2
-        assert s.bm25_lexical_boost == 1.2
-        assert s.graph_evidence_boost == 1.1
-        assert s.lexical_overlap_threshold == 0.5
 
 
 class TestAgentSettings:

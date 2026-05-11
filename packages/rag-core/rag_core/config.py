@@ -131,21 +131,12 @@ class RetrievalSettings(BaseSettings):
     graph_cooccurrence_limit: int = 32
     graph_passage_limit: int = 12
     ppr_alpha: float = 0.15
-    rrf_k: int = 60
     fanout_max_workers: int = 3
     fanout_timeout_ms: int = 15000
     fulltext_index_name: str = "passage_text_index"
-    reranker_backend: str = "lexical_semantic"
     reranker_model: str = "cross-encoder/ms-marco-MiniLM-L-6-v2"
-    empty_channel_penalty: float = 0.35
-    sparse_channel_penalty: float = 0.75
-    weak_channel_min_results: int = 2
-    bm25_lexical_boost: float = 1.2
-    graph_evidence_boost: float = 1.1
-    lexical_overlap_threshold: float = 0.5
     tfidf_query_min_idf: float = 1.2
     tfidf_query_max_keywords: int = 6
-    confidence_min: float = 0.1
 
     model_config = {**_ENV_FILE_CONFIG, "env_prefix": "RETRIEVAL_"}
 

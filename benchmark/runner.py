@@ -169,17 +169,12 @@ def _legacy_agent_llm(question: str, driver: Any, client: Any) -> Any:
     return agent_run(question, driver, openai_client=client, use_llm_router=True)
 
 
-def _legacy_agent_mangle(question: str, driver: Any, client: Any) -> Any:
-    return agent_run(question, driver, openai_client=client, use_llm_router=False, reasoning="mangle")
-
-
 MODES = {
     "vector": _legacy_vector,
     "cypher": _legacy_cypher,
     "hybrid": _legacy_hybrid,
     "agent_pattern": _legacy_agent_pattern,
     "agent_llm": _legacy_agent_llm,
-    "agent_mangle": _legacy_agent_mangle,
 }
 
 

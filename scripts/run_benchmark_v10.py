@@ -9,7 +9,6 @@ import sys
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(levelname)s %(message)s")
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
-sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(__file__)), "pymangle"))
 
 from dotenv import load_dotenv
 
@@ -27,7 +26,7 @@ openai_client = make_openai_client(cfg)
 questions = load_questions()
 print(f"Loaded {len(questions)} questions")
 
-modes = ["vector", "cypher", "hybrid", "agent_pattern", "agent_llm", "agent_mangle"]
+modes = ["vector", "cypher", "hybrid", "agent_pattern", "agent_llm"]
 results = run_benchmark(driver, openai_client, modes=modes, questions=questions, lang="ru")
 
 # Print results

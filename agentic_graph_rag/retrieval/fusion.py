@@ -3,115 +3,74 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-import re
-from typing import Any
 
 from rag_core.models import QueryType, SearchResult
 
-_QUERY_TYPE_CHANNEL_WEIGHTS: dict[QueryType, dict[str, float]] = {
-    QueryType.SIMPLE: {"vector": 1.0, "bm25": 0.85, "graph": 0.7},
-    QueryType.RELATION: {"vector": 0.85, "bm25": 0.75, "graph": 1.35},
-    QueryType.MULTI_HOP: {"vector": 0.8, "bm25": 0.7, "graph": 1.5},
-    QueryType.GLOBAL: {"vector": 1.0, "bm25": 1.0, "graph": 0.9},
-    QueryType.TEMPORAL: {"vector": 0.9, "bm25": 1.05, "graph": 0.85},
+_DEFAULT_CHANNEL_PRIORITY = ["vector", "bm25", "graph"]
+_QUERY_TYPE_CHANNEL_PRIORITY: dict[QueryType, list[str]] = {
+    QueryType.SIMPLE: ["vector", "bm25", "graph"],
+    QueryType.RELATION: ["graph", "vector", "bm25"],
+    QueryType.MULTI_HOP: ["graph", "vector", "bm25"],
+    QueryType.GLOBAL: ["vector", "bm25", "graph"],
+    QueryType.TEMPORAL: ["bm25", "vector", "graph"],
 }
 
 
-def resolve_channel_weights(
+def resolve_channel_priority(
     query_type: QueryType | str | None = None,
-    overrides: dict[str, float] | None = None,
-) -> dict[str, float]:
-    """Resolve per-channel fusion weights from query type and optional overrides."""
-    weights = {"vector": 1.0, "bm25": 1.0, "graph": 1.0}
+    enabled_channels: list[str] | None = None,
+) -> list[str]:
+    """Resolve deterministic channel order without numeric fusion weights."""
+    normalized_query_type = _coerce_query_type(query_type)
+    priority = list(
+        _QUERY_TYPE_CHANNEL_PRIORITY.get(
+            normalized_query_type,
+            _DEFAULT_CHANNEL_PRIORITY,
+        )
+    )
+    if enabled_channels is not None:
+        enabled = set(enabled_channels)
+        priority = [channel for channel in priority if channel in enabled]
+        priority.extend(channel for channel in enabled_channels if channel not in priority)
+    return priority
+
+
+def _coerce_query_type(query_type: QueryType | str | None) -> QueryType | None:
+    if isinstance(query_type, QueryType):
+        return query_type
     if isinstance(query_type, str):
         try:
-            query_type = QueryType(query_type)
+            return QueryType(query_type)
         except ValueError:
-            query_type = None
-    if query_type is not None:
-        weights.update(_QUERY_TYPE_CHANNEL_WEIGHTS.get(query_type, {}))
-    if overrides:
-        weights.update(overrides)
-    return weights
+            return None
+    return None
 
 
-def calibrate_channel_weights(
-    query: str,
-    provider_results: dict[str, list[SearchResult]],
-    *,
-    query_type: QueryType | str | None = None,
-    overrides: dict[str, float] | None = None,
-    retrieval_settings: Any | None = None,
-) -> dict[str, float]:
-    """Adjust base channel weights using live provider diagnostics."""
-    weights = resolve_channel_weights(query_type, overrides)
-    if not provider_results:
-        return weights
-
-    cfg = retrieval_settings
-    empty_penalty = getattr(cfg, "empty_channel_penalty", 0.35)
-    sparse_penalty = getattr(cfg, "sparse_channel_penalty", 0.75)
-    weak_min_results = getattr(cfg, "weak_channel_min_results", 2)
-    bm25_lexical_boost = getattr(cfg, "bm25_lexical_boost", 1.2)
-    graph_evidence_boost = getattr(cfg, "graph_evidence_boost", 1.1)
-    lexical_overlap_threshold = getattr(cfg, "lexical_overlap_threshold", 0.5)
-
-    if isinstance(query_type, str):
-        try:
-            query_type = QueryType(query_type)
-        except ValueError:
-            query_type = None
-
-    for source, results in provider_results.items():
-        if source not in weights:
-            continue
-        if not results:
-            weights[source] *= empty_penalty
-            continue
-        if len(results) < weak_min_results:
-            weights[source] *= sparse_penalty
-
-    bm25_results = provider_results.get("bm25", [])
-    if bm25_results and _has_strong_lexical_match(
-        query,
-        bm25_results[0].chunk.content,
-        lexical_overlap_threshold,
-    ):
-        weights["bm25"] = weights.get("bm25", 1.0) * bm25_lexical_boost
-
-    if query_type in {QueryType.RELATION, QueryType.MULTI_HOP} and provider_results.get("graph"):
-        weights["graph"] = weights.get("graph", 1.0) * graph_evidence_boost
-
-    return weights
+def _result_key(result: SearchResult) -> str:
+    if result.chunk.id:
+        return result.chunk.id
+    return " ".join(result.chunk.content.casefold().split())[:240]
 
 
-def _has_strong_lexical_match(
-    query: str,
-    content: str,
-    overlap_threshold: float,
-) -> bool:
-    """Detect exact lexical overlap that should help sparse retrieval."""
-    query_terms = _tokenize_for_overlap(query)
-    if not query_terms:
-        return False
-    content_terms = set(_tokenize_for_overlap(content))
-    matched = sum(1 for term in query_terms if term in content_terms)
-    return (matched / len(query_terms)) >= overlap_threshold
-
-
-def _tokenize_for_overlap(text: str) -> list[str]:
-    """Tokenize mixed English/CJK text for lightweight overlap heuristics."""
-    if not text:
-        return []
-    return [token.lower() for token in re.findall(r"[\u4e00-\u9fff]+|[A-Za-z0-9_-]+", text)]
+def _collect_normalized_scores(
+    result_lists: tuple[list[SearchResult], ...],
+) -> dict[str, list[float]]:
+    normalized_scores: dict[str, list[float]] = {}
+    for results in result_lists:
+        for result in results:
+            if result.score_normalized is None:
+                continue
+            normalized_scores.setdefault(_result_key(result), []).append(
+                result.score_normalized
+            )
+    return normalized_scores
 
 
 @dataclass(frozen=True, slots=True)
 class FusionView:
-    """Read-only fusion scoring view over an upstream SearchResult."""
+    """Read-only fusion view over an upstream SearchResult."""
 
     result: SearchResult
-    fusion_score: float
     fusion_rank: int
     fused_source: str = "hybrid"
     preserved_normalized: float | None = None
@@ -119,41 +78,49 @@ class FusionView:
 
 @dataclass(slots=True)
 class FusionEngine:
-    """Weighted RRF fusion over normalized SearchResult lists."""
-
-    rrf_k: int = 60
+    """Priority-ordered channel merge with deterministic dedupe."""
 
     def build_views(
         self,
         *result_lists: list[SearchResult],
         top_k: int,
-        weights: dict[str, float] | None = None,
+        query_type: QueryType | str | None = None,
+        channel_priority: list[str] | None = None,
     ) -> list[FusionView]:
-        """Build fusion score views without rewriting upstream SearchResult objects."""
-        scores: dict[str, float] = {}
-        normalized_scores: dict[str, list[float]] = {}
-        result_map: dict[str, SearchResult] = {}
-        source_weights = weights or {}
-
+        """Merge channels by priority, preserving each provider's internal order."""
+        by_source: dict[str, list[SearchResult]] = {}
         for results in result_lists:
-            for rank, result in enumerate(results, start=1):
-                key = result.chunk.id or result.chunk.content[:50]
-                weight = source_weights.get(result.source, 1.0)
-                scores[key] = scores.get(key, 0.0) + weight * (1.0 / (self.rrf_k + rank))
-                if result.score_normalized is not None:
-                    normalized_scores.setdefault(key, []).append(result.score_normalized)
-                if key not in result_map:
-                    result_map[key] = result
+            for result in results:
+                by_source.setdefault(result.source, []).append(result)
 
-        sorted_keys = sorted(scores, key=lambda item: scores[item], reverse=True)[:top_k]
+        if channel_priority is None:
+            priority = resolve_channel_priority(query_type)
+            priority.extend(source for source in by_source if source not in priority)
+        else:
+            priority = list(channel_priority)
+
+        normalized_scores = _collect_normalized_scores(result_lists)
+        selected: list[SearchResult] = []
+        seen: set[str] = set()
+        for source in priority:
+            for result in by_source.get(source, []):
+                key = _result_key(result)
+                if not key or key in seen:
+                    continue
+                seen.add(key)
+                selected.append(result)
+                if len(selected) >= top_k:
+                    break
+            if len(selected) >= top_k:
+                break
+
         views: list[FusionView] = []
-        for index, key in enumerate(sorted_keys, start=1):
-            upstream_normalized = normalized_scores.get(key)
+        for index, result in enumerate(selected, start=1):
+            upstream_normalized = normalized_scores.get(_result_key(result))
             preserved = max(upstream_normalized) if upstream_normalized else None
             views.append(
                 FusionView(
-                    result=result_map[key],
-                    fusion_score=scores[key],
+                    result=result,
                     fusion_rank=index,
                     preserved_normalized=preserved,
                 )
@@ -164,13 +131,18 @@ class FusionEngine:
         self,
         *result_lists: list[SearchResult],
         top_k: int,
-        weights: dict[str, float] | None = None,
+        query_type: QueryType | str | None = None,
+        channel_priority: list[str] | None = None,
     ) -> list[SearchResult]:
-        views = self.build_views(*result_lists, top_k=top_k, weights=weights)
+        views = self.build_views(
+            *result_lists,
+            top_k=top_k,
+            query_type=query_type,
+            channel_priority=channel_priority,
+        )
         return [
             view.result.model_copy(
                 update={
-                    "score": view.fusion_score,
                     "score_normalized": view.preserved_normalized,
                     "rank": view.fusion_rank,
                     "source": view.fused_source,

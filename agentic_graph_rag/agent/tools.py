@@ -98,7 +98,14 @@ def cypher_traverse(
     max_hops: int | None = None,
     entry_top_k: int | None = None,
 ) -> list[SearchResult]:
-    """Graph retrieval provider returning serialized path-aware context."""
+    """Graph retrieval with query-structure-aware constrained traversal.
+
+    Parses the query into structured slots (focus entities, constraints,
+    relation intent) and passes them as traversal constraints. This prevents
+    unconstrained BFS from pulling in generic high-frequency clusters.
+    """
+    from agentic_graph_rag.agent.query_parser import parse_query_structure
+
     cfg = get_settings()
     if top_k is None:
         top_k = cfg.retrieval.top_k_vector
@@ -107,11 +114,18 @@ def cypher_traverse(
     if entry_top_k is None:
         entry_top_k = cfg.retrieval.graph_entry_top_k
 
+    # Parse query structure for constrained traversal.
+    query_structure = parse_query_structure(query, openai_client=openai_client)
+
     request = RetrievalRequest(
         query=query,
         query_embedding=_embed_query(query, openai_client),
         top_k=top_k,
-        filters={"max_hops": max_hops, "entry_top_k": entry_top_k},
+        filters={
+            "max_hops": max_hops,
+            "entry_top_k": entry_top_k,
+            "query_structure": query_structure,
+        },
     )
     return GraphRetrievalProvider(driver).retrieve(request)
 
@@ -162,7 +176,6 @@ def hybrid_search(
     openai_client: OpenAI,
     top_k: int | None = None,
     query_type: QueryType | str | None = None,
-    channel_weights: dict[str, float] | None = None,
     seed_results: dict[str, list[SearchResult]] | None = None,
     enabled_providers: list[str] | None = None,
     provider_results: dict[str, list[SearchResult]] | None = None,
@@ -187,7 +200,6 @@ def hybrid_search(
         query_embedding=query_emb,
         top_k=top_k,
         query_type=query_type,
-        channel_weights=channel_weights,
         seed_results=seed_results,
         enabled_providers=enabled_providers,
         provider_results=provider_results,
@@ -203,14 +215,12 @@ def hybrid_search(
     return results
 
 
-def _rrf_merge(
+def _priority_merge(
     *result_lists: list[SearchResult],
     top_k: int = 5,
-    k: int = 60,
-    weights: dict[str, float] | None = None,
 ) -> list[SearchResult]:
-    """Reciprocal Rank Fusion merge of one or more result lists."""
-    return FusionEngine(rrf_k=k).fuse(*result_lists, top_k=top_k, weights=weights)
+    """Priority-merge one or more result lists; kept for older call sites."""
+    return FusionEngine().fuse(*result_lists, top_k=top_k)
 
 
 # ---------------------------------------------------------------------------
@@ -412,7 +422,7 @@ def comprehensive_search(
     top_k: int | None = None,
 ) -> list[SearchResult]:
     """Comprehensive retrieval: LLM generates sub-queries + keyword extraction,
-    each → retrieval, merge via RRF. Also includes full_document_read passages.
+    each → retrieval, merge by priority. Also includes full_document_read passages.
 
     Designed for GLOBAL queries ("list all", "summarize all") where a single
     top-k pass misses components.
@@ -436,17 +446,17 @@ def comprehensive_search(
     full_results = full_document_read(query, driver, openai_client, top_k=full_top_k)
     all_results.append(full_results)
 
-    # Merge all result lists via cascading RRF
+    # Merge all result lists via deterministic priority merge
     if not all_results:
         return vector_search(query, driver, openai_client, top_k=top_k)
 
     merged = all_results[0]
     for i in range(1, len(all_results)):
-        merged = _rrf_merge(merged, all_results[i], top_k=top_k)
+        merged = _priority_merge(merged, all_results[i], top_k=top_k)
 
     # Single final re-rank via cosine over the merged pool
     query_emb = _embed_query(query, openai_client)
-    merged = rerank(query, merged, top_k=top_k, query_embedding=query_emb)
+    merged = rerank(query, merged, top_k=top_k)
 
     logger.info("Comprehensive search: %d results from %d sub-queries + full_read", len(merged), len(sub_queries))
     return merged

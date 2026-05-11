@@ -27,10 +27,6 @@ from rag_core.models import (
 from rag_core.reflector import resolve_reflection_verdict
 
 _ANCHOR_PATTERN = re.compile(r"[A-Za-z0-9_.-]+|[\u4e00-\u9fff]{2,}")
-# When the Answer Guard triggers, the evidence_score is preserved (it still
-# reflects retrieval quality) but confidence_level is forced to "low" so
-# downstream consumers know the answer should not be fully trusted.
-_GLOBAL_COMPLETENESS_EVIDENCE_THRESHOLD = 0.45
 _REFLECTION_MIN_REMAINING_BUDGET_MS = 1000
 _REFLECTION_TRANSPORT_FAILURE_MARKERS = (
     "connection error",
@@ -465,6 +461,33 @@ def _is_reflection_transport_failure(reflection: ReflectionStep) -> bool:
         return False
     reason = (reflection.reasoning or "").casefold()
     return any(marker in reason for marker in _REFLECTION_TRANSPORT_FAILURE_MARKERS)
+
+
+def _answer_guard_status(
+    reason: str,
+    *,
+    has_answer: bool,
+    retrieval_status: str,
+) -> str:
+    """Map guard outcome to answer status without exposing internal details.
+
+    Reflection/verification budget failures should not invalidate an already
+    generated answer grounded in retrieved evidence. They only mean the answer
+    could not be fully policy-checked.
+    """
+    if has_answer and retrieval_status == "complete":
+        return "partial"
+    normalized = (reason or "").casefold()
+    if (
+        "time budget exhausted" in normalized
+        or "request timed out" in normalized
+        or "timed out" in normalized
+        or "budget" in normalized
+    ):
+        return "skipped_timeout"
+    if any(marker in normalized for marker in _REFLECTION_TRANSPORT_FAILURE_MARKERS):
+        return "partial"
+    return "partial"
 
 
 def _relation_query_can_retry_graph(
@@ -1102,6 +1125,7 @@ class AgentWorkflowOps:
     generate_answer: Callable[..., QAResult]
     evaluate_completeness: Callable[..., bool]
     comprehensive_search: Callable[..., list[SearchResult]]
+    targeted_graph_search: Callable[..., list[SearchResult]] | None = None
     # CoVe-inspired claim verification (optional; skip when None).
     extract_claims: Callable[..., Any] | None = None
     verify_claims: Callable[..., Any] | None = None
@@ -1115,7 +1139,6 @@ class AgentWorkflowState(TypedDict, total=False):
     driver: Any
     openai_client: Any
     use_llm_router: bool
-    reasoning: Any
     trace: PipelineTrace
     settings: Any
     decision: RouterDecision
@@ -1133,6 +1156,7 @@ class AgentWorkflowState(TypedDict, total=False):
     memory: list[WorkflowMemoryEntry]
     answer_guard_triggered: bool
     answer_guard_reason: str
+    verification_retry_attempt: int
 
 
 def _route_query(state: AgentWorkflowState) -> dict[str, Any]:
@@ -1142,7 +1166,6 @@ def _route_query(state: AgentWorkflowState) -> dict[str, Any]:
         state["query"],
         use_llm=state["use_llm_router"],
         openai_client=state["openai_client"],
-        reasoning=state["reasoning"],
     )
     router_duration_ms = int((time.perf_counter() - started) * 1000)
     if state["ops"].is_cross_language_global(state["query"]) and decision.suggested_tool != "full_document_read":
@@ -1155,7 +1178,7 @@ def _route_query(state: AgentWorkflowState) -> dict[str, Any]:
     router_method = (
         "hard_rule"
         if decision.reasoning.startswith("Hard rule:")
-        else ("mangle" if state["reasoning"] else ("llm" if state["use_llm_router"] else "pattern"))
+        else ("llm" if state["use_llm_router"] else "pattern")
     )
     state["trace"].router_step = RouterStep(
         method=router_method,
@@ -1231,11 +1254,8 @@ def _retrieve_evidence(state: AgentWorkflowState) -> dict[str, Any]:
 def _generate_answer_node(state: AgentWorkflowState) -> dict[str, Any]:
     """Generate the answer from the current evidence set.
 
-    Wires the latest reflection verdict into `generate_answer` so the
-    resulting `confidence_level` reflects the agent's end-to-end judgment.
-    The answer guard (if triggered) forces `confidence_level` to "low"
-    without touching `evidence_score` — guard signals answer trust, not
-    retrieval quality.
+    Wires the latest reflection verdict into `generate_answer` so the result
+    carries discrete status fields instead of user-facing numeric confidence.
     """
     started = time.perf_counter()
     reflection_history = list(state.get("reflection_history", []))
@@ -1250,22 +1270,16 @@ def _generate_answer_node(state: AgentWorkflowState) -> dict[str, Any]:
         reflection_verdict=reflection_verdict,
     )
     if state.get("answer_guard_triggered"):
-        guard_reason = state.get("answer_guard_reason", "").strip()
-        caveat = (
-            "Available evidence covers part of the question, but the retrieval "
-            "guard blocked further expansion because the remaining evidence is "
-            "not decisive enough."
-        )
-        if guard_reason:
-            caveat = f"{caveat} Guard reason: {guard_reason}"
-        answer_text = qa_result.answer or ""
-        if caveat not in answer_text:
-            answer_text = f"{caveat}\n\n{answer_text}".strip()
+        guard_reason = state.get("answer_guard_reason", "")
+        update_payload: dict[str, Any] = {
+            "answer_status": _answer_guard_status(
+                guard_reason,
+                has_answer=bool((qa_result.answer or "").strip()),
+                retrieval_status=qa_result.retrieval_status,
+            ),
+        }
         qa_result = qa_result.model_copy(
-            update={
-                "answer": answer_text,
-                "confidence_level": "low",
-            }
+            update=update_payload
         )
     settings = state.get("settings")
     model_name = ""
@@ -1275,8 +1289,9 @@ def _generate_answer_node(state: AgentWorkflowState) -> dict[str, Any]:
         model=model_name,
         prompt_tokens=qa_result.prompt_tokens,
         completion_tokens=qa_result.completion_tokens,
-        evidence_score=qa_result.evidence_score,
-        confidence_level=qa_result.confidence_level,
+        answer_status=qa_result.answer_status,
+        retrieval_status=qa_result.retrieval_status,
+        verification_status=qa_result.verification_status,
         duration_ms=int((time.perf_counter() - started) * 1000),
     )
     memory = _append_memory_entry(
@@ -1285,17 +1300,23 @@ def _generate_answer_node(state: AgentWorkflowState) -> dict[str, Any]:
         message="generated answer from current evidence",
         metadata={
             "sources": len(state["results"]),
-            "evidence_score": qa_result.evidence_score,
-            "confidence_level": qa_result.confidence_level,
+            "answer_status": qa_result.answer_status,
+            "retrieval_status": qa_result.retrieval_status,
+            "verification_status": qa_result.verification_status,
             "answer_guard_triggered": state.get("answer_guard_triggered", False),
         },
     )
     return {"qa_result": qa_result, "memory": memory}
 
 
-_MIN_VERIFIABLE_ANSWER_CHARS = 80
+_MIN_COMPOSITE_ANSWER_CHARS = 80
 _FACTUAL_SEPARATORS = ("，", "、", "；", ";", ",", " and ", " or ")
-_NUMERIC_FACT_PATTERN = re.compile(r"\d+(?:\.\d+)?\s*(?:%|mg|ml|mmol|μg|ug|pg|g/L|IU|次|个月|天|年)")
+_NUMERIC_FACT_PATTERN = re.compile(
+    r"(?:[<>]=?|≤|≥|=)\s*\d+(?:\.\d+)?"
+    r"|\d+(?:\.\d+)?\s*(?:%|mg|ml|mmol|μg|ug|pg|g/l|iu|次|个月|天|年|分钟|小时)"
+    r"|\d+(?:\.\d+)?\s*/\s*\d+(?:\.\d+)?",
+    re.IGNORECASE,
+)
 
 
 def _answer_has_verifiable_claims(answer: str) -> bool:
@@ -1308,12 +1329,14 @@ def _answer_has_verifiable_claims(answer: str) -> bool:
     if not answer:
         return False
     text = answer.strip()
-    if len(text) < _MIN_VERIFIABLE_ANSWER_CHARS:
+    has_numeric_fact = bool(_NUMERIC_FACT_PATTERN.search(text))
+    if has_numeric_fact:
+        return True
+    if len(text) < _MIN_COMPOSITE_ANSWER_CHARS:
         return False
     separator_count = sum(text.count(sep) for sep in _FACTUAL_SEPARATORS)
     has_multiple_clauses = separator_count >= 2
-    has_numeric_fact = bool(_NUMERIC_FACT_PATTERN.search(text))
-    return has_multiple_clauses or has_numeric_fact
+    return has_multiple_clauses
 
 
 def _after_generate(state: AgentWorkflowState) -> str:
@@ -1322,8 +1345,7 @@ def _after_generate(state: AgentWorkflowState) -> str:
     Triggering is decoupled from router classification (which is often wrong
     on domain-specific queries). We verify whenever the answer contains
     multiple facts or numeric thresholds — the conditions where claim-level
-    support-check actually adds value. The Answer Guard (if triggered) only
-    forces confidence_level=low — it does NOT skip verification.
+    support-check actually adds value.
     """
     qa_result = state.get("qa_result")
     if qa_result is None or not (qa_result.answer or "").strip():
@@ -1366,14 +1388,14 @@ def _after_generate(state: AgentWorkflowState) -> str:
 def _legacy_after_generate_branch(state: AgentWorkflowState) -> str:
     """Legacy branching used when verification is not applicable.
 
-    Triggers completeness check only for weak global queries.
+    Triggers completeness check only for global queries with partial evidence.
     """
     qa_result = state.get("qa_result")
     if (
         state["decision"].query_type == QueryType.GLOBAL
         and qa_result is not None
         and bool((qa_result.answer or "").strip())
-        and qa_result.evidence_score < _GLOBAL_COMPLETENESS_EVIDENCE_THRESHOLD
+        and qa_result.retrieval_status in {"partial", "empty", "timeout"}
         and len(state.get("results", [])) < 8
     ):
         return "check_completeness"
@@ -1385,9 +1407,8 @@ def _verify_answer_node(state: AgentWorkflowState) -> dict[str, Any]:
 
     This node extracts atomic factual claims from the generated answer (one
     LLM call) and verifies each claim via `cypher_traverse` (no LLM calls).
-    Unsupported claims trigger a caveat and a confidence downgrade, but do
-    NOT trigger retrieval retry — we explicitly avoid amplifying LLM
-    instability here.
+    Possible-correct claims trigger a cautionary partial status. Incorrect
+    claims trigger retry_required.
     """
     started = time.perf_counter()
     ops = state["ops"]
@@ -1397,7 +1418,11 @@ def _verify_answer_node(state: AgentWorkflowState) -> dict[str, Any]:
     if ops.extract_claims is None or ops.verify_claims is None:
         return {}
 
-    extraction = ops.extract_claims(qa_result.answer, openai_client=state["openai_client"])
+    extraction = ops.extract_claims(
+        qa_result.answer,
+        query=state["query"],
+        openai_client=state["openai_client"],
+    )
     claims = getattr(extraction, "claims", [])
 
     if not claims:
@@ -1421,40 +1446,63 @@ def _verify_answer_node(state: AgentWorkflowState) -> dict[str, Any]:
         claims,
         driver=state["driver"],
         openai_client=state["openai_client"],
+        existing_evidence=state.get("results", []),
     )
     verification.duration_ms = int((time.perf_counter() - started) * 1000)
     state["trace"].verification_step = verification
 
     updated_qa = qa_result
+    if verification.skipped_reason:
+        updated_qa = qa_result.model_copy(update={"verification_status": verification.status})
+        if state["trace"].generator_step is not None:
+            state["trace"].generator_step.verification_status = verification.status
+        memory = _append_memory_entry(
+            state,
+            stage="verify",
+            message=f"claim verification skipped: {verification.skipped_reason}",
+            metadata={
+                "claims_total": verification.claims_total,
+                "claims_supported": verification.claims_supported,
+                "claims_possible": verification.claims_possible,
+                "claims_incorrect": verification.claims_incorrect,
+                "skipped_reason": verification.skipped_reason,
+            },
+        )
+        return {"qa_result": updated_qa, "memory": memory}
+
     if verification.unsupported_claims:
-        from agentic_graph_rag.generation.claim_verifier import build_caveat
-        caveat = build_caveat(verification)
-        new_answer = f"{caveat}\n\n{qa_result.answer}".strip() if caveat else qa_result.answer
-        # Downgrade one level when verification is incomplete. Keep
-        # evidence_score untouched — it still reflects retrieval quality.
-        new_level = "medium"
-        if verification.support_rate < 0.5 or qa_result.confidence_level == "medium":
-            new_level = "low"
+        answer_status = (
+            "retry_required" if verification.status == "retry_required" else "partial"
+        )
         updated_qa = qa_result.model_copy(update={
-            "answer": new_answer,
-            "confidence_level": new_level,
+            "answer_status": answer_status,
+            "verification_status": verification.status,
+        })
+    else:
+        updated_qa = qa_result.model_copy(update={
+            "answer_status": "verified",
+            "verification_status": verification.status,
         })
 
     if state["trace"].generator_step is not None:
-        state["trace"].generator_step.confidence_level = updated_qa.confidence_level
+        state["trace"].generator_step.answer_status = updated_qa.answer_status
+        state["trace"].generator_step.verification_status = updated_qa.verification_status
 
     memory = _append_memory_entry(
         state,
         stage="verify",
         message=(
-            f"claim verification: {verification.claims_supported}/{verification.claims_total} "
-            f"supported (support_rate={verification.support_rate:.2f})"
+            f"claim verification: correct={verification.claims_supported}, "
+            f"possible={verification.claims_possible}, "
+            f"incorrect={verification.claims_incorrect} ({verification.status})"
         ),
         metadata={
             "claims_total": verification.claims_total,
             "claims_supported": verification.claims_supported,
-            "support_rate": round(verification.support_rate, 2),
-            "confidence_level_after": updated_qa.confidence_level,
+            "claims_possible": verification.claims_possible,
+            "claims_incorrect": verification.claims_incorrect,
+            "verification_status": verification.status,
+            "answer_status_after": updated_qa.answer_status,
         },
     )
     return {"qa_result": updated_qa, "memory": memory}
@@ -1462,7 +1510,87 @@ def _verify_answer_node(state: AgentWorkflowState) -> dict[str, Any]:
 
 def _after_verify(state: AgentWorkflowState) -> str:
     """Routes from verify_answer to legacy completeness branch or finish."""
+    verification = state.get("trace").verification_step if state.get("trace") else None
+    ops = state.get("ops")
+    if (
+        verification is not None
+        and verification.status == "retry_required"
+        and state.get("verification_retry_attempt", 0) == 0
+        and ops is not None
+        and ops.targeted_graph_search is not None
+    ):
+        return "augment_from_verification"
     return _legacy_after_generate_branch(state)
+
+
+def _claim_focus_query(claim: Any) -> str:
+    parts: list[str] = []
+    for attr in ("text", "entities", "numeric_constraints", "relation_actions", "key_terms"):
+        value = getattr(claim, attr, None)
+        if isinstance(value, str):
+            parts.append(value)
+        elif value:
+            parts.extend(str(item) for item in value if str(item).strip())
+    seen: set[str] = set()
+    unique_parts: list[str] = []
+    for part in parts:
+        normalized = " ".join(str(part).split())
+        if not normalized or normalized in seen:
+            continue
+        seen.add(normalized)
+        unique_parts.append(normalized)
+    return " ".join(unique_parts)
+
+
+def _augment_from_verification_node(state: AgentWorkflowState) -> dict[str, Any]:
+    """Target one retry at claims that CoVe marked incorrect."""
+    ops = state["ops"]
+    verification = state["trace"].verification_step
+    if verification is None or ops.targeted_graph_search is None:
+        return {}
+
+    incorrect_claims = [
+        claim
+        for claim in verification.unsupported_claims
+        if claim.verification_level == "incorrect"
+    ]
+    extra_results: list[SearchResult] = []
+    focus_queries: list[str] = []
+    for claim in incorrect_claims[:2]:
+        focus_query = _claim_focus_query(claim)
+        if not focus_query:
+            continue
+        focus_queries.append(focus_query)
+        extra_results.extend(
+            ops.targeted_graph_search(
+                focus_query,
+                state["driver"],
+                state["openai_client"],
+            )
+        )
+
+    combined, existing_ids = _merge_unique_results(
+        state["results"],
+        extra_results,
+        state.get("existing_ids", []),
+    )
+    memory = _append_memory_entry(
+        state,
+        stage="verify_retry",
+        message="verification retry appended claim-focused graph evidence",
+        metadata={
+            "incorrect_claims": len(incorrect_claims),
+            "focus_queries": focus_queries,
+            "added_results": len(combined) - len(state["results"]),
+        },
+    )
+    return {
+        "results": combined,
+        "existing_ids": existing_ids,
+        "verification_retry_attempt": 1,
+        "total_retries": state.get("total_retries", state.get("retries", 0)) + (1 if extra_results else 0),
+        "memory": memory,
+    }
 
 
 def _check_completeness_node(state: AgentWorkflowState) -> dict[str, Any]:
@@ -1476,7 +1604,7 @@ def _check_completeness_node(state: AgentWorkflowState) -> dict[str, Any]:
     reflection_history = list(state.get("reflection_history", []))
     last_reflection = reflection_history[-1] if reflection_history else None
     forced_incomplete = False
-    if qa_result.evidence_score < _GLOBAL_COMPLETENESS_EVIDENCE_THRESHOLD:
+    if qa_result.retrieval_status in {"empty", "timeout"}:
         forced_incomplete = True
     if last_reflection is not None:
         verdict = (last_reflection.verdict or "").strip().lower()
@@ -1574,6 +1702,7 @@ def _compile_agent_workflow_graph():
     graph.add_node("generate_answer", _generate_answer_node)
     graph.add_node("verify_answer", _verify_answer_node)
     graph.add_node("check_completeness", _check_completeness_node)
+    graph.add_node("augment_from_verification", _augment_from_verification_node)
     graph.add_node("augment_with_comprehensive", _augment_with_comprehensive_node)
 
     graph.add_edge(START, "route_query")
@@ -1592,10 +1721,12 @@ def _compile_agent_workflow_graph():
         "verify_answer",
         _after_verify,
         {
+            "augment_from_verification": "augment_from_verification",
             "check_completeness": "check_completeness",
             "finish": END,
         },
     )
+    graph.add_edge("augment_from_verification", "generate_answer")
     graph.add_conditional_edges(
         "check_completeness",
         _after_completeness,
@@ -1614,7 +1745,6 @@ def run_agent_workflow(
     driver: Any,
     openai_client: Any,
     use_llm_router: bool,
-    reasoning: Any,
     trace: PipelineTrace,
     settings: Any | None = None,
     ops: AgentWorkflowOps,
@@ -1629,7 +1759,6 @@ def run_agent_workflow(
         "driver": driver,
         "openai_client": openai_client,
         "use_llm_router": use_llm_router,
-        "reasoning": reasoning,
         "trace": trace,
         "settings": settings,
         "results": [],
@@ -1639,6 +1768,7 @@ def run_agent_workflow(
         "completeness_complete": True,
         "existing_ids": [],
         "total_retries": 0,
+        "verification_retry_attempt": 0,
         "reflection_history": list(reflection_history_seed or []),
         "memory": list(workflow_memory_seed or []),
     }

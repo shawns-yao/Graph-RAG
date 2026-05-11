@@ -10,7 +10,6 @@ requires-python = ">=3.12"
 dependencies = [
     "rag-core",
     "networkx>=3.0",
-    "lark>=1.1.0",
     "fastapi>=0.115.0",
     "uvicorn>=0.30.0",
     "httpx>=0.27.0",
@@ -35,13 +34,12 @@ where = ["."]
 include = ["agentic_graph_rag*", "benchmark*"]
 
 [tool.pytest.ini_options]
-testpaths = ["tests", "packages/rag-core/tests", "pymangle/tests"]
+testpaths = ["tests", "packages/rag-core/tests"]
 asyncio_mode = "auto"
 
 [tool.ruff]
 line-length = 120
 target-version = "py312"
-exclude = ["pymangle/"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "W"]

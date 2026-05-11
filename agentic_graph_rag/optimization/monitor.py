@@ -18,8 +18,8 @@ logger = logging.getLogger(__name__)
 class QueryMonitor:
     """Lightweight in-memory monitor for retrieval pipeline analytics.
 
-    Thread-safety is *not* guaranteed — suitable for single-process
-    Streamlit or notebook usage.
+    Thread-safety is *not* guaranteed — suitable for single-process API,
+    script, or notebook usage.
     """
 
     def __init__(self) -> None:

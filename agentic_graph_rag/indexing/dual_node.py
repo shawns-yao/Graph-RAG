@@ -451,13 +451,7 @@ def _sorted_aliases(values: list[str]) -> list[str]:
 
 
 def _medical_aliases(entity: Entity) -> list[str]:
-    return _sorted_aliases(
-        [
-            str(alias)
-            for alias in entity.metadata.get("aliases", [])
-            if not _is_cross_language_alias(str(alias), entity.name)
-        ]
-    )
+    return _sorted_aliases([str(alias) for alias in entity.metadata.get("aliases", [])])
 
 
 def _json_dump(payload: dict[str, object]) -> str:

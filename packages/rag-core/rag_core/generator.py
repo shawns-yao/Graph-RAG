@@ -24,12 +24,6 @@ _ENUM_RE = None
 _GRAPH_SECTION_SPLIT_RE = re.compile(r"\n\s*\n(?=(?:Graph paths:|Entities:|Evidence:))")
 
 
-def _retrieval_number(cfg: object, field: str, default: float) -> float:
-    retrieval_cfg = getattr(cfg, "retrieval", None)
-    value = getattr(retrieval_cfg, field, default)
-    return float(value) if isinstance(value, int | float) else default
-
-
 def _is_enumeration_query(query: str) -> bool:
     """Detect enumeration/global queries that need comprehensive listing."""
     global _ENUM_RE  # noqa: PLW0603
@@ -174,84 +168,25 @@ def _compress_results_for_generation(results: list[SearchResult]) -> list[Search
     return compressed
 
 
-def _clamp_evidence_score(value: float) -> float:
-    cfg = get_settings()
-    floor = _retrieval_number(cfg, "confidence_min", 0.1)
-    return round(min(1.0, max(floor, value)), 3)
+def derive_retrieval_status(results: list[SearchResult]) -> str:
+    """Map retrieval output to a discrete status, not a user-facing score."""
+    return "complete" if results else "empty"
 
 
-def _result_evidence_score(result: SearchResult) -> float:
-    """Extract a single evidence strength signal from one search result.
-
-    Prefers `score_normalized` (a per-provider heuristic bounded to 0-1).
-    Falls back to `score` only when it is already in the 0-1 range. Otherwise
-    returns 1.0 as a neutral default — reranker fusion scores can be raw RRF
-    values (0.01-0.05) which are not comparable to other signals and should
-    not be misinterpreted as evidence strength.
-    """
-    if result.score_normalized is not None:
-        return result.score_normalized
-    if 0.0 <= result.score <= 1.0:
-        return result.score
-    return 1.0
-
-
-def calculate_evidence_score(results: list[SearchResult]) -> float:
-    """Compute an evidence strength score from retrieval results.
-
-    This is a retrieval-layer heuristic measuring how well the retrieved
-    chunks lexically/semantically match the query. It does NOT measure
-    answer correctness — use `derive_confidence_level` for that.
-    """
-    if not results:
-        return _clamp_evidence_score(0.0)
-    avg = sum(_result_evidence_score(result) for result in results) / len(results)
-    return _clamp_evidence_score(avg)
-
-
-def derive_confidence_level(
+def derive_answer_status(
     *,
-    evidence_score: float,
+    retrieval_status: str,
     reflection_verdict: str = "",
-    guard_triggered: bool = False,
 ) -> str:
-    """Classify end-to-end answer trust into high/medium/low.
-
-    Rules:
-    - guard_triggered → low (retrieval policy blocked further expansion)
-    - reflection_verdict in {retry, stop} → low (agent thinks evidence insufficient)
-    - evidence_score >= 0.7 and verdict == "answer" → high
-    - otherwise → medium
-    """
-    if guard_triggered:
-        return "low"
+    """Classify answer state with enums only; no numeric confidence proxy."""
+    if retrieval_status == "empty":
+        return "failed"
     verdict = (reflection_verdict or "").strip().lower()
-    if verdict in {"retry", "stop"}:
-        return "low"
-    if evidence_score >= 0.7 and verdict == "answer":
-        return "high"
-    return "medium"
-
-
-# --- Deprecated: kept for backward compatibility with test fixtures -----
-def _calculate_confidence(
-    results: list[SearchResult],
-    *,
-    reflection_score: float | None = None,
-) -> float:
-    """DEPRECATED. Use `calculate_evidence_score` + `derive_confidence_level`."""
-    del reflection_score
-    return calculate_evidence_score(results)
-
-
-def calculate_answer_confidence(
-    results: list[SearchResult],
-    *,
-    reflection_score: float | None = None,
-) -> float:
-    """DEPRECATED. Use `calculate_evidence_score` + `derive_confidence_level`."""
-    del reflection_score
-    return calculate_evidence_score(results)
+    if verdict in {"retry", "rerank"}:
+        return "retry_required"
+    if verdict == "stop":
+        return "partial"
+    return "unverified"
 
 
 def _build_context(results: list[SearchResult]) -> str:
@@ -278,10 +213,11 @@ def _build_system_prompt(query: str) -> str:
             "6. Answer in the same language as the query"
         )
     return (
-        "You are a knowledgeable Q&A assistant. Synthesize information from ALL provided "
-        "context chunks to give a comprehensive answer. Combine facts from different chunks "
-        "when needed. If some details are missing, answer with what IS available rather than "
-        "refusing. Cite chunk numbers used."
+        "You are a precise Q&A assistant. Answer only the fields explicitly asked "
+        "in the query. Use the provided context as evidence, but do not add related "
+        "facts, background, classifications, timing, mechanisms, or caveats unless "
+        "the query asks for them. If evidence contains extra facts, ignore them. "
+        "Cite chunk numbers used."
     )
 
 
@@ -291,7 +227,8 @@ def _build_messages(query: str, results: list[SearchResult]) -> list[dict[str, s
     user_prompt = (
         f"Query: {query}\n\n"
         f"Context:\n{context}\n\n"
-        "Please provide an answer based on the above context."
+        "Answer the query directly. Do not include facts that are not needed to "
+        "answer the exact question."
     )
     return [
         {"role": "system", "content": system_prompt},
@@ -320,7 +257,7 @@ def generate_answer(
     """Generate answer from query and retrieved chunks using LLM.
 
     The `reflection_verdict` parameter (one of "answer"/"retry"/"stop"/"rerank")
-    is used to derive `confidence_level`, not to fuse into a numeric confidence.
+    is used to derive discrete answer status only.
     """
     cfg = get_settings()
     if openai_client is None:
@@ -331,8 +268,9 @@ def generate_answer(
         return QAResult(
             answer="I don't have enough context to answer this question.",
             sources=[],
-            evidence_score=0.0,
-            confidence_level="low",
+            answer_status="failed",
+            retrieval_status="empty",
+            verification_status="skipped",
             query=query,
         )
 
@@ -371,17 +309,17 @@ def generate_answer(
             answer_text[:100],
         )
 
-        evidence_score = calculate_evidence_score(selected_results)
-        confidence_level = derive_confidence_level(
-            evidence_score=evidence_score,
-            reflection_verdict=reflection_verdict,
-        )
+        retrieval_status = derive_retrieval_status(selected_results)
 
         return QAResult(
             answer=answer_text,
             sources=selected_results,
-            evidence_score=evidence_score,
-            confidence_level=confidence_level,
+            answer_status=derive_answer_status(
+                retrieval_status=retrieval_status,
+                reflection_verdict=reflection_verdict,
+            ),
+            retrieval_status=retrieval_status,
+            verification_status="skipped",
             query=query,
             prompt_tokens=prompt_tokens,
             completion_tokens=completion_tokens,
@@ -392,8 +330,9 @@ def generate_answer(
         return QAResult(
             answer=f"Error generating answer: {e}",
             sources=selected_results,
-            evidence_score=0.0,
-            confidence_level="low",
+            answer_status="failed",
+            retrieval_status=derive_retrieval_status(selected_results),
+            verification_status="skipped",
             query=query,
         )
 

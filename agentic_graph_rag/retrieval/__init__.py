@@ -1,6 +1,6 @@
 """Retrieval stack exports."""
 
-from agentic_graph_rag.retrieval.fusion import FusionEngine, resolve_channel_weights
+from agentic_graph_rag.retrieval.fusion import FusionEngine, resolve_channel_priority
 from agentic_graph_rag.retrieval.orchestrator import RetrievalOrchestrator
 from agentic_graph_rag.retrieval.providers import (
     BM25RetrievalProvider,
@@ -16,5 +16,5 @@ __all__ = [
     "RetrievalOrchestrator",
     "RetrievalRequest",
     "VectorRetrievalProvider",
-    "resolve_channel_weights",
+    "resolve_channel_priority",
 ]

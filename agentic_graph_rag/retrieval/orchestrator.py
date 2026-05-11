@@ -8,7 +8,7 @@ from rag_core.config import get_settings
 from rag_core.models import QueryType, SearchResult
 from rag_core.reranker import rerank
 
-from agentic_graph_rag.retrieval.fusion import FusionEngine, calibrate_channel_weights
+from agentic_graph_rag.retrieval.fusion import FusionEngine, resolve_channel_priority
 from agentic_graph_rag.retrieval.providers import (
     RetrievalProvider,
     RetrievalRequest,
@@ -28,7 +28,7 @@ class RetrievalOrchestrator:
         self._driver = driver
         self._providers = providers
         self._cfg = get_settings().retrieval
-        self._fusion_engine = fusion_engine or FusionEngine(rrf_k=self._cfg.rrf_k)
+        self._fusion_engine = fusion_engine or FusionEngine()
 
     def search(
         self,
@@ -36,7 +36,6 @@ class RetrievalOrchestrator:
         query_embedding: list[float],
         top_k: int,
         query_type: QueryType | str | None = None,
-        channel_weights: dict[str, float] | None = None,
         provider_top_k: dict[str, int] | None = None,
         provider_filters: dict[str, dict] | None = None,
         seed_results: dict[str, list[SearchResult]] | None = None,
@@ -44,7 +43,7 @@ class RetrievalOrchestrator:
         provider_results: dict[str, list[SearchResult]] | None = None,
         rerank_enabled: bool = True,
     ) -> list[SearchResult]:
-        """Execute providers in parallel, fuse results, then rerank."""
+        """Execute providers in parallel, merge by channel priority, then rerank."""
         if not self._providers:
             return []
 
@@ -75,24 +74,22 @@ class RetrievalOrchestrator:
                 provider.name: list(fanout_results.get(provider.name, []))
                 for provider in selected_providers
             })
-        weights = calibrate_channel_weights(
-            query,
-            fanout_results,
-            query_type=query_type,
-            overrides=channel_weights,
-            retrieval_settings=self._cfg,
+        channel_priority = resolve_channel_priority(
+            query_type,
+            [provider.name for provider in selected_providers],
         )
         fused = self._fusion_engine.fuse(
             *(fanout_results.get(provider.name, []) for provider in selected_providers),
             top_k=candidate_top_k,
-            weights=weights,
+            query_type=query_type,
+            channel_priority=channel_priority,
         )
         if not fused:
             return []
 
         fused = attach_passage_embeddings(fused, self._driver)
         if rerank_enabled:
-            ranked = rerank(query, fused, top_k=top_k, query_embedding=query_embedding)
+            ranked = rerank(query, fused, top_k=top_k)
         else:
             ranked = fused[:top_k]
         return self._finalize_results(ranked[:top_k])

@@ -5,7 +5,7 @@ from __future__ import annotations
 from enum import Enum
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field, computed_field
+from pydantic import BaseModel, Field
 
 # ---------------------------------------------------------------------------
 # Ingestion models (from RAG 2.0)
@@ -89,10 +89,10 @@ class TemporalEvent(BaseModel):
 class PhraseNode(BaseModel):
     """Entity-level node for graph navigation (HippoRAG 2).
 
-    `pagerank_score` comes from NetworkX PageRank over the KNN graph and has
-    rigorous mathematical meaning. `confidence` inherits from Entity's
-    extraction-time LLM self-report and is treated as a quality filter, not
-    a probability.
+    `pagerank_score` is projected from supporting chunk PageRank during
+    skeleton indexing. It is an indexing centrality signal, not a probability.
+    `confidence` inherits from Entity's extraction-time LLM self-report and is
+    treated as a quality filter, not a probability.
     """
 
     id: str = ""
@@ -117,6 +117,7 @@ class GraphContext(BaseModel):
     """Assembled context from graph traversal."""
 
     triplets: list[dict[str, str]] = Field(default_factory=list)
+    weak_triplets: list[dict[str, str]] = Field(default_factory=list)
     passages: list[str] = Field(default_factory=list)
     entities: list[Entity] = Field(default_factory=list)
     source_ids: list[str] = Field(default_factory=list)
@@ -252,24 +253,33 @@ class RouterStep(BaseModel):
     rules_fired: list[str] = Field(default_factory=list)
 
 
-ConfidenceLevel = Literal["high", "medium", "low"]
+AnswerStatus = Literal[
+    "verified",
+    "partial",
+    "retry_required",
+    "failed",
+    "skipped_timeout",
+    "unverified",
+]
+RetrievalStatus = Literal["complete", "partial", "empty", "timeout"]
+VerificationStatus = Literal["passed", "partial", "retry_required", "failed", "skipped"]
+ClaimFailureType = Literal["none", "hard_fail", "soft_fail"]
+ClaimVerificationLevel = Literal["correct", "possible_correct", "incorrect"]
 
 
 class GeneratorStep(BaseModel):
     """Answer generation metadata.
 
-    `evidence_score` is the retrieval-layer heuristic (avg score_normalized).
-    `confidence_level` is the end-to-end confidence classification derived from
-    evidence_score + reflection verdict + answer guard status. These two
-    signals are intentionally separate: evidence_score measures retrieval
-    quality, confidence_level measures whether the answer can be trusted.
+    Status fields are discrete by design. Retrieval scores remain internal
+    ranking signals and are not exposed as answer confidence.
     """
 
     model: str = ""
     prompt_tokens: int = 0
     completion_tokens: int = 0
-    evidence_score: float = 0.0
-    confidence_level: ConfidenceLevel = "medium"
+    answer_status: AnswerStatus = "unverified"
+    retrieval_status: RetrievalStatus = "partial"
+    verification_status: VerificationStatus = "skipped"
     completeness_check: bool | None = None
     duration_ms: int = 0
 
@@ -279,7 +289,12 @@ class VerifiedClaim(BaseModel):
 
     text: str
     key_terms: list[str] = Field(default_factory=list)
+    entities: list[str] = Field(default_factory=list)
+    numeric_constraints: list[str] = Field(default_factory=list)
+    relation_actions: list[str] = Field(default_factory=list)
     supported: bool
+    verification_level: ClaimVerificationLevel = "possible_correct"
+    failure_type: ClaimFailureType = "none"
     top_chunk_id: str = ""
 
 
@@ -287,24 +302,20 @@ class ClaimVerificationStep(BaseModel):
     """Chain-of-Verification style post-generation verification.
 
     Records the outcome of extracting factual claims from the answer and
-    checking each one against graph retrieval evidence. Failed verification
-    does not trigger retry — it only attaches a caveat and may downgrade
-    the confidence level.
+    checking each one against graph retrieval evidence.
     """
 
     claims_total: int = 0
     claims_supported: int = 0
+    claims_possible: int = 0
+    claims_incorrect: int = 0
     verified_claims: list[VerifiedClaim] = Field(default_factory=list)
+    # Backward-compatible name: includes possible_correct and incorrect claims.
     unsupported_claims: list[VerifiedClaim] = Field(default_factory=list)
     skipped_reason: str = ""
     duration_ms: int = 0
 
-    @property
-    def support_rate(self) -> float:
-        """Fraction of claims that found supporting graph evidence."""
-        if self.claims_total == 0:
-            return 0.0
-        return self.claims_supported / self.claims_total
+    status: VerificationStatus = "skipped"
 
 
 class PipelineTrace(BaseModel):
@@ -327,21 +338,13 @@ class PipelineTrace(BaseModel):
 
 
 class QAResult(BaseModel):
-    """Final Q&A result with answer, sources, and dual confidence signals.
-
-    - `evidence_score`: retrieval evidence strength (0-1), derived from the
-      retrieval layer's score_normalized heuristics. This only measures
-      whether the retrieved chunks match the query well — it does NOT
-      measure whether the final answer is correct.
-    - `confidence_level`: end-to-end answer trust level ("high"/"medium"/"low"),
-      derived from evidence_score + reflection verdict + answer guard status.
-      This is the user-facing trust signal.
-    """
+    """Final Q&A result with answer, sources, and discrete status signals."""
 
     answer: str
     sources: list[SearchResult] = Field(default_factory=list)
-    evidence_score: float = 0.0
-    confidence_level: ConfidenceLevel = "medium"
+    answer_status: AnswerStatus = "unverified"
+    retrieval_status: RetrievalStatus = "partial"
+    verification_status: VerificationStatus = "skipped"
     query: str = ""
     expanded_query: str = ""
     retries: int = 0
@@ -350,12 +353,3 @@ class QAResult(BaseModel):
     prompt_tokens: int = 0
     completion_tokens: int = 0
     trace: PipelineTrace | None = None  # v6 provenance
-
-    @computed_field  # type: ignore[prop-decorator]
-    @property
-    def confidence(self) -> float:
-        """Legacy compatibility: map confidence_level to a single number.
-
-        Deprecated: prefer `evidence_score` and `confidence_level` directly.
-        """
-        return {"high": 0.85, "medium": 0.55, "low": 0.25}[self.confidence_level]

@@ -22,7 +22,6 @@ import signal
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
-sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(__file__)), "pymangle"))
 
 from dotenv import load_dotenv
 
@@ -174,13 +173,22 @@ def ingest_file(
                 for graph_chunk in graph_embed_inputs:
                     graph_chunk_map[graph_chunk.id] = graph_chunk
 
-            graph_ready_chunks = list(graph_chunk_map.values())
-            embeddings = [c.embedding for c in graph_ready_chunks if c.embedding]
+            graph_ready_chunks = [
+                chunk for chunk in graph_chunk_map.values()
+                if chunk.embedding
+            ]
+            embeddings = [chunk.embedding for chunk in graph_ready_chunks]
+            skipped_graph_chunks = len(graph_chunk_map) - len(graph_ready_chunks)
+            if skipped_graph_chunks:
+                logger.warning(
+                    "Skipping %d graph chunks without embeddings before skeleton indexing",
+                    skipped_graph_chunks,
+                )
 
             guard.raise_if_cancelled("skeleton")
             logger.info("Building skeleton index...")
             try:
-                entities, relationships, skeletal, peripheral = build_skeleton_index(
+                entities, relationships, skeletal, peripheral, entity_pagerank_scores = build_skeleton_index(
                     graph_ready_chunks,
                     embeddings,
                     openai_client=openai_client,
@@ -198,7 +206,11 @@ def ingest_file(
                 guard.raise_if_cancelled("dual-graph")
                 logger.info("Building dual-node graph...")
                 phrase_nodes, passage_nodes, link_count = build_dual_graph(
-                    entities, chunks, driver, relationships=relationships,
+                    entities,
+                    chunks,
+                    driver,
+                    pagerank_scores=entity_pagerank_scores,
+                    relationships=relationships,
                 )
                 logger.info(
                     "Dual graph: %d phrase nodes, %d passage nodes, %d links",

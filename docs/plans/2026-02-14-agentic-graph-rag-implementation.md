@@ -79,7 +79,7 @@
 2. `rag_core/reranker.py` — copy from RAG 2.0
 3. `rag_core/generator.py` — copy from RAG 2.0
 4. `rag_core/reflector.py` — copy from RAG 2.0 (relevance eval 1-5, retry if < 3.0)
-5. `rag_core/i18n.py` — copy from TKB (~180 keys)
+5. `rag_core/reranker.py` — cross-encoder reranking
 6. Adapt all imports
 7. Unit tests for each module
 
@@ -144,14 +144,14 @@
    - `vector_search(query, top_k)` — simple vector
    - `cypher_traverse(query, top_k, max_hops)` — VectorCypher
    - `community_search(query)` — Graphiti community search
-   - `hybrid_search(query, top_k)` — vector + KG merge (RRF)
+   - `hybrid_search(query, top_k)` — vector + sparse + KG priority merge
    - `temporal_query(query, valid_at)` — Graphiti temporal
    - `full_document_read(top_k)` — all chunks
 3. `agentic_graph_rag/agent/retrieval_agent.py`:
    - `run(query) -> QAResult` — main entry point
    - `select_tool(decision) -> callable` — tool mapping
    - `self_correction_loop(query, results, max_retries=2)`:
-     - Evaluate relevance (1-5)
+     - Decide answer/rerank/retry from discrete reflection status
      - If < 3.0 → expand depth, retry with different tool
      - Check contradictions across results
    - `generate_answer(query, context) -> QAResult`
@@ -183,27 +183,22 @@
 
 ---
 
-## Phase 10: Streamlit UI + Benchmark + CI (~45 min)
+## Phase 10: API + Benchmark + CI (~45 min)
 
-**Goal**: 6-tab UI, benchmark runner, CI/CD
+**Goal**: API surface, benchmark runner, CI/CD
 
 ### Tasks:
-1. `ui/streamlit_app.py` — 6 tabs:
-   - Ingest: file upload, skeleton indexing progress, entity/node counts
-   - Search & Q&A: mode selector, query input, confidence bar, sources
-   - Graph Explorer: phrase+passage node visualization (st.graphviz or pyvis)
-   - Agent Trace: routing decision display, self-correction steps, tool call log
-   - Benchmark: run all modes, PASS/FAIL table, delta metrics
-   - Settings: config display, cache stats, clear DB
-2. `benchmark/questions.json` — 15+ questions (simple, relation, multi-hop, global, temporal)
-3. `benchmark/runner.py` — run 5 modes, compute accuracy/F1/latency/cost
-4. `benchmark/compare.py` — generate comparison table
-5. `.github/workflows/ci.yml` — pytest + ruff, Python 3.12
-6. `README.md` — installation, usage, architecture, benchmarks
-7. Copy test PDFs from `~/pageindex/data/` to `data/`
-8. Git commit + push to GitHub
+1. `api/routes.py` — query, search, trace, graph stats, metrics endpoints
+2. `api/mcp_server.py` — MCP tools for query resolution and trace explanation
+3. `benchmark/questions.json` — 15+ questions (simple, relation, multi-hop, global, temporal)
+4. `benchmark/runner.py` — run 5 modes, compute accuracy/F1/latency/cost
+5. `benchmark/compare.py` — generate comparison table
+6. `.github/workflows/ci.yml` — pytest + ruff, Python 3.12
+7. `README.md` — installation, usage, architecture, benchmarks
+8. Copy test PDFs from `~/pageindex/data/` to `data/`
+9. Git commit + push to GitHub
 
-**Verification**: Streamlit runs on port 8506, benchmark produces comparison table, CI green
+**Verification**: API health passes, benchmark produces comparison table, CI green
 
 ---
 
@@ -220,9 +215,9 @@
 | 7 | **VectorCypher** | 30 min | **NEW** |
 | 8 | **Agentic Router + Self-Correction** | 45 min | **NEW** |
 | 9 | **Optimization** | 20 min | **NEW** |
-| 10 | UI + Benchmark + CI | 45 min | Mixed |
+| 10 | API + Benchmark + CI | 45 min | Mixed |
 | **Total** | | **~5.5 hours** | |
 
 Phases 1-5: Reuse existing code (~2.5h)
 Phases 6-9: New Graph RAG components (~2.5h)
-Phase 10: UI + Polish (~45min)
+Phase 10: API + Polish (~45min)

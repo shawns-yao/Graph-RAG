@@ -13,7 +13,6 @@ import sys
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(levelname)s %(message)s")
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
-sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(__file__)), "pymangle"))
 
 from dotenv import load_dotenv
 
@@ -35,7 +34,7 @@ print(f"Running global questions only: {len(global_questions)} questions")
 for q in global_questions:
     print(f"  Q{q['id']}: {q.get('question_ru', q['question'])[:60]}...")
 
-modes = ["vector", "cypher", "hybrid", "agent_pattern", "agent_llm", "agent_mangle"]
+modes = ["vector", "cypher", "hybrid", "agent_pattern", "agent_llm"]
 results = run_benchmark(driver, openai_client, modes=modes, questions=global_questions, lang="ru")
 
 # Load v10 for comparison

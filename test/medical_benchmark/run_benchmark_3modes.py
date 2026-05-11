@@ -24,7 +24,6 @@ if sys.stdout.encoding and sys.stdout.encoding.lower() != "utf-8":
 
 _ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(_ROOT))
-sys.path.insert(0, str(_ROOT / "pymangle"))
 
 from dotenv import load_dotenv
 
@@ -120,7 +119,9 @@ def run_single_question(svc, q: dict, mode: str) -> dict:
             "mode": mode,
             "answer": answer,
             "expected": q["answer"],
-            "confidence": round(qa.confidence, 3),
+            "answer_status": qa.answer_status,
+            "retrieval_status": qa.retrieval_status,
+            "verification_status": qa.verification_status,
             "retries": qa.retries,
             "sources": len(qa.sources),
             "elapsed_ms": elapsed_ms,
@@ -157,14 +158,30 @@ def summarize(results: list[dict]) -> dict:
         passed = r.get("kw_pass", False)
         elapsed = r.get("elapsed_ms", 0)
         retries = r.get("retries", 0)
-        conf = r.get("confidence", 0.0)
+        answer_status = r.get("answer_status", "unknown")
+        verification_status = r.get("verification_status", "unknown")
 
-        m = by_mode.setdefault(mode, {"total": 0, "pass": 0, "ms": 0, "retries": 0, "conf": 0.0})
+        m = by_mode.setdefault(
+            mode,
+            {
+                "total": 0,
+                "pass": 0,
+                "ms": 0,
+                "retries": 0,
+                "answer_statuses": {},
+                "verification_statuses": {},
+            },
+        )
         m["total"] += 1
         m["pass"] += int(passed)
         m["ms"] += elapsed
         m["retries"] += retries
-        m["conf"] += conf
+        m["answer_statuses"][answer_status] = (
+            m["answer_statuses"].get(answer_status, 0) + 1
+        )
+        m["verification_statuses"][verification_status] = (
+            m["verification_statuses"].get(verification_status, 0) + 1
+        )
 
         t = by_type.setdefault(qt, {"total": 0, "pass": 0})
         t["total"] += 1
@@ -180,7 +197,6 @@ def summarize(results: list[dict]) -> dict:
         stats["accuracy"] = round(stats["pass"] / n, 3) if n else 0.0
         stats["avg_ms"] = int(stats["ms"] / n) if n else 0
         stats["avg_retries"] = round(stats["retries"] / n, 2) if n else 0.0
-        stats["avg_confidence"] = round(stats["conf"] / n, 3) if n else 0.0
 
     for qt, stats in by_type.items():
         n = stats["total"]
@@ -201,13 +217,17 @@ def format_report(summary: dict, results: list[dict]) -> str:
     lines.append("=" * 80)
 
     lines.append("\n## Accuracy by Mode\n")
-    lines.append(f"{'Mode':<16} {'Pass/Total':<12} {'Accuracy':<10} {'Avg ms':<10} {'Avg Retries':<12} {'Avg Conf':<10}")
+    lines.append(
+        f"{'Mode':<16} {'Pass/Total':<12} {'Accuracy':<10} "
+        f"{'Avg ms':<10} {'Avg Retries':<12} {'Answer Status'}"
+    )
     lines.append("-" * 76)
     for mode, s in summary["by_mode"].items():
         lines.append(
             f"{mode:<16} {s['pass']}/{s['total']:<10} "
             f"{s['accuracy']*100:>6.1f}%   "
-            f"{s['avg_ms']:<10} {s['avg_retries']:<12} {s['avg_confidence']:<10}"
+            f"{s['avg_ms']:<10} {s['avg_retries']:<12} "
+            f"{s.get('answer_statuses', {})}"
         )
 
     lines.append("\n## Accuracy by Query Type (aggregated across all modes)\n")
@@ -258,8 +278,8 @@ def format_report(summary: dict, results: list[dict]) -> str:
                 row += f" {'ERR':<14}"
             else:
                 mark = "PASS" if r.get("kw_pass") else "FAIL"
-                conf = r.get("confidence", 0)
-                row += f" {mark}({conf:.2f})    "
+                status = r.get("answer_status", "unknown")
+                row += f" {mark}:{status:<8} "
         lines.append(row)
 
     return "\n".join(lines)
@@ -295,7 +315,7 @@ def main():
             else:
                 mark = "PASS" if result["kw_pass"] else "FAIL"
                 print(
-                    f"      {mark} | conf={result['confidence']:.2f} | "
+                    f"      {mark} | status={result.get('answer_status', 'unknown')} | "
                     f"retries={result['retries']} | {result['elapsed_ms']}ms | "
                     f"kw={result['kw_hits']}/{result['kw_total']}"
                 )

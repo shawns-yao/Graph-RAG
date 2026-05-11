@@ -188,8 +188,9 @@ class TestQAResult:
         qa = QAResult(
             answer="a",
             query="q",
-            evidence_score=0.8,
-            confidence_level="high",
+            answer_status="verified",
+            retrieval_status="complete",
+            verification_status="passed",
             retries=1,
             sources=[SearchResult(chunk=Chunk(content="c"), score=0.9)],
             router_decision=RouterDecision(query_type=QueryType.GLOBAL),
@@ -199,5 +200,6 @@ class TestQAResult:
         assert qa2.answer == "a"
         assert qa2.sources[0].score == 0.9
         assert qa2.router_decision.query_type == QueryType.GLOBAL
-        assert qa2.evidence_score == 0.8
-        assert qa2.confidence_level == "high"
+        assert qa2.answer_status == "verified"
+        assert qa2.retrieval_status == "complete"
+        assert qa2.verification_status == "passed"

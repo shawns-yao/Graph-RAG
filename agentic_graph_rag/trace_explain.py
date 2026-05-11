@@ -177,8 +177,9 @@ def _explain_generation(trace: PipelineTrace) -> dict[str, Any] | None:
         "model": trace.generator_step.model,
         "prompt_tokens": trace.generator_step.prompt_tokens,
         "completion_tokens": trace.generator_step.completion_tokens,
-        "evidence_score": trace.generator_step.evidence_score,
-        "confidence_level": trace.generator_step.confidence_level,
+        "answer_status": trace.generator_step.answer_status,
+        "retrieval_status": trace.generator_step.retrieval_status,
+        "verification_status": trace.generator_step.verification_status,
         "completeness_check": trace.generator_step.completeness_check,
         "duration_ms": trace.generator_step.duration_ms,
     }
@@ -190,16 +191,35 @@ def _explain_verification(trace: PipelineTrace) -> dict[str, Any] | None:
     if step is None:
         return None
 
+    claims_needing_attention = [
+        {
+            "text": vc.text,
+            "entities": vc.entities,
+            "numeric_constraints": vc.numeric_constraints,
+            "relation_actions": vc.relation_actions,
+            "verification_level": vc.verification_level,
+            "failure_type": vc.failure_type,
+        }
+        for vc in step.unsupported_claims
+    ]
+
     return {
+        "status": step.status,
         "claims_total": step.claims_total,
         "claims_supported": step.claims_supported,
-        "support_rate": round(step.support_rate, 3),
-        "unsupported_claims": [
-            {"text": vc.text, "key_terms": vc.key_terms}
-            for vc in step.unsupported_claims
-        ],
+        "claims_possible": step.claims_possible,
+        "claims_incorrect": step.claims_incorrect,
+        "claims_needing_attention": claims_needing_attention,
+        "unsupported_claims": claims_needing_attention,
         "verified_claims": [
-            {"text": vc.text, "top_chunk_id": vc.top_chunk_id}
+            {
+                "text": vc.text,
+                "top_chunk_id": vc.top_chunk_id,
+                "entities": vc.entities,
+                "numeric_constraints": vc.numeric_constraints,
+                "relation_actions": vc.relation_actions,
+                "verification_level": vc.verification_level,
+            }
             for vc in step.verified_claims
         ],
         "skipped_reason": step.skipped_reason,

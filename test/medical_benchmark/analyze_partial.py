@@ -36,10 +36,22 @@ for mode, rows in modes.items():
     if errors:
         print(f"    IDs: {[r['id'] for r in errors]}")
     
-    # Confidence distribution
-    confs = [r.get("confidence", 0) for r in rows if not r.get("error")]
-    if confs:
-        print(f"  Avg confidence: {sum(confs)/len(confs):.3f}")
+    # Status distribution
+    answer_statuses = {}
+    verification_statuses = {}
+    for r in rows:
+        if r.get("error"):
+            continue
+        answer_status = r.get("answer_status", "unknown")
+        verification_status = r.get("verification_status", "unknown")
+        answer_statuses[answer_status] = answer_statuses.get(answer_status, 0) + 1
+        verification_statuses[verification_status] = (
+            verification_statuses.get(verification_status, 0) + 1
+        )
+    if answer_statuses:
+        print(f"  Answer status: {answer_statuses}")
+    if verification_statuses:
+        print(f"  Verification status: {verification_statuses}")
     
     # Elapsed time
     times = [r.get("elapsed_ms", 0) for r in rows]

@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import logging
 from contextlib import asynccontextmanager
-from pathlib import Path
 from typing import TYPE_CHECKING
 
 from fastapi import FastAPI
@@ -35,16 +34,8 @@ def create_app(service: PipelineService | None = None) -> FastAPI:
             )
             client = make_openai_client(cfg)
 
-            reasoning = None
-            try:
-                from agentic_graph_rag.reasoning.reasoning_engine import ReasoningEngine
-                rules_dir = str(Path(__file__).resolve().parent.parent / "agentic_graph_rag" / "reasoning" / "rules")
-                reasoning = ReasoningEngine(rules_dir)
-            except Exception as e:
-                logger.warning("ReasoningEngine init failed (Mangle routing disabled): %s", e)
-
             from agentic_graph_rag.service import PipelineService
-            svc = PipelineService(driver, client, reasoning)
+            svc = PipelineService(driver, client)
             set_service(svc)
             try:
                 from api.mcp_server import mount_mcp

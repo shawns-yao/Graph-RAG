@@ -65,8 +65,6 @@ if TYPE_CHECKING:
     from neo4j import Driver
     from openai import OpenAI
 
-    from agentic_graph_rag.reasoning.reasoning_engine import ReasoningEngine
-
 logger = logging.getLogger(__name__)
 
 # Tool registry: query_type → tool function
@@ -608,7 +606,6 @@ def run(
     driver: Driver,
     openai_client: OpenAI | None = None,
     use_llm_router: bool = False,
-    reasoning: ReasoningEngine | None = None,
     session_id: str = "",
     workflow_memory_seed: list[WorkflowMemoryEntry] | None = None,
     reflection_history_seed: list[ReflectionStep] | None = None,
@@ -620,7 +617,7 @@ def run(
     2. Execute with self-correction loop
     3. Generate answer from results
 
-    Returns QAResult with answer, sources, confidence, and metadata.
+    Returns QAResult with answer, sources, discrete status fields, and metadata.
     """
     cfg = get_settings()
     if openai_client is None:
@@ -642,12 +639,13 @@ def run(
         verify_claims,
     )
 
-    def _verify_claims_wrapper(claims, *, driver, openai_client):
+    def _verify_claims_wrapper(claims, *, driver, openai_client, existing_evidence=None):
         return verify_claims(
             claims,
             cypher_traverse=cypher_traverse,
             driver=driver,
             openai_client=openai_client,
+            existing_evidence=existing_evidence,
         )
 
     ops = AgentWorkflowOps(
@@ -657,6 +655,7 @@ def run(
         generate_answer=generate_answer,
         evaluate_completeness=evaluate_completeness,
         comprehensive_search=comprehensive_search,
+        targeted_graph_search=cypher_traverse,
         extract_claims=extract_claims,
         verify_claims=_verify_claims_wrapper,
     )
@@ -671,17 +670,17 @@ def run(
 
         forced_decision = RouterDecision(
             query_type=routed_type,
-            confidence=1.0,
             reasoning=f"Benchmark forced initial tool: {forced_tool}.",
             suggested_tool=forced_tool,
         )
         ops = AgentWorkflowOps(
-            classify_query=lambda query, *, use_llm, openai_client, reasoning: forced_decision,
+            classify_query=lambda query, *, use_llm, openai_client: forced_decision,
             is_cross_language_global=_matches_internal_alias_global,
             run_self_correction=self_correction_loop,
             generate_answer=generate_answer,
             evaluate_completeness=evaluate_completeness,
             comprehensive_search=comprehensive_search,
+            targeted_graph_search=cypher_traverse,
             extract_claims=extract_claims,
             verify_claims=_verify_claims_wrapper,
         )
@@ -690,7 +689,6 @@ def run(
         driver=driver,
         openai_client=openai_client,
         use_llm_router=use_llm_router,
-        reasoning=reasoning,
         trace=trace,
         settings=cfg,
         ops=ops,
@@ -700,10 +698,10 @@ def run(
     trace.total_duration_ms = int((time.perf_counter() - t_start) * 1000)
 
     logger.info(
-        "Agent result: %d sources, %d retries, evidence_score=%.2f, confidence_level=%s",
+        "Agent result: %d sources, %d retries, answer_status=%s, retrieval_status=%s",
         len(qa_result.sources),
         qa_result.retries,
-        qa_result.evidence_score,
-        qa_result.confidence_level,
+        qa_result.answer_status,
+        qa_result.retrieval_status,
     )
     return qa_result

@@ -54,7 +54,9 @@ class MedicalBenchmarkRunner:
                         "answer": result.answer,
                         "expected_answer": expected_answer,
                         "sources_count": len(result.sources),
-                        "confidence": result.confidence,
+                        "answer_status": result.answer_status,
+                        "retrieval_status": result.retrieval_status,
+                        "verification_status": result.verification_status,
                         "retries": result.retries,
                         "router_decision": (
                             result.router_decision.model_dump() if result.router_decision else None
@@ -85,7 +87,6 @@ class MedicalBenchmarkRunner:
             "hybrid",
             "agent_pattern",
             "agent_llm",
-            "agent_mangle",
         ]
 
         all_results = {}
@@ -165,15 +166,24 @@ class MedicalBenchmarkRunner:
         for mode, mode_results in evaluated_results.items():
             total = len(mode_results)
             correct = sum(1 for r in mode_results if r.get("is_correct", False))
-            avg_confidence = sum(r.get("confidence", 0) for r in mode_results) / total if total > 0 else 0
             avg_retries = sum(r.get("retries", 0) for r in mode_results) / total if total > 0 else 0
+            answer_statuses = {}
+            verification_statuses = {}
+            for r in mode_results:
+                answer_status = r.get("answer_status", "unknown")
+                verification_status = r.get("verification_status", "unknown")
+                answer_statuses[answer_status] = answer_statuses.get(answer_status, 0) + 1
+                verification_statuses[verification_status] = (
+                    verification_statuses.get(verification_status, 0) + 1
+                )
 
             analysis["by_mode"][mode] = {
                 "total": total,
                 "correct": correct,
                 "accuracy": correct / total if total > 0 else 0,
-                "avg_confidence": avg_confidence,
                 "avg_retries": avg_retries,
+                "answer_statuses": answer_statuses,
+                "verification_statuses": verification_statuses,
             }
 
         # 按问题类型统计
@@ -193,7 +203,7 @@ class MedicalBenchmarkRunner:
                 }
 
         # 路由分析（仅agent模式）
-        agent_modes = ["agent_pattern", "agent_llm", "agent_mangle"]
+        agent_modes = ["agent_pattern", "agent_llm"]
         for mode in agent_modes:
             if mode in evaluated_results:
                 mode_results = evaluated_results[mode]
@@ -254,8 +264,9 @@ class MedicalBenchmarkRunner:
             for mode, stats in analysis["by_mode"].items():
                 f.write(f"### {mode}\n")
                 f.write(f"  准确率: {stats['accuracy']:.2%} ({stats['correct']}/{stats['total']})\n")
-                f.write(f"  平均置信度: {stats['avg_confidence']:.2f}\n")
                 f.write(f"  平均重试次数: {stats['avg_retries']:.2f}\n\n")
+                f.write(f"  答案状态: {stats.get('answer_statuses', {})}\n")
+                f.write(f"  验证状态: {stats.get('verification_statuses', {})}\n\n")
 
             # 按问题类型统计
             f.write("\n## 按问题类型统计\n\n")

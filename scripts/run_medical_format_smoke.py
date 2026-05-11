@@ -15,7 +15,6 @@ from neo4j import GraphDatabase
 ROOT = Path(__file__).resolve().parent.parent
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
-sys.path.insert(0, str(ROOT / "pymangle"))
 
 from agentic_graph_rag.service import PipelineService  # noqa: E402
 from rag_core.config import get_settings, make_openai_client  # noqa: E402

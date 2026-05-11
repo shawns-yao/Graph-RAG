@@ -18,7 +18,7 @@ router = APIRouter(prefix="/api/v1")
 
 VALID_MODES = Literal[
     "vector", "cypher", "hybrid",
-    "agent_pattern", "agent_llm", "agent_mangle",
+    "agent_pattern", "agent_llm",
 ]
 VALID_TOOLS = ToolName
 

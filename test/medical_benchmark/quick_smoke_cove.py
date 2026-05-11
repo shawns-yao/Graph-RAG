@@ -13,7 +13,6 @@ if sys.stdout.encoding and sys.stdout.encoding.lower() != "utf-8":
     sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding="utf-8", errors="replace", line_buffering=True)
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
-sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "pymangle"))
 
 from dotenv import load_dotenv
 
@@ -45,19 +44,23 @@ def main():
             qa = svc.query(query, mode=mode)
             trace = qa.trace
             print(f"Answer preview: {(qa.answer or '')[:200]}")
-            print(f"evidence_score: {qa.evidence_score:.3f}")
-            print(f"confidence_level: {qa.confidence_level}")
+            print(f"answer_status: {qa.answer_status}")
+            print(f"retrieval_status: {qa.retrieval_status}")
+            print(f"verification_status: {qa.verification_status}")
             if trace and trace.router_step:
                 d = trace.router_step.decision
                 print(f"Router: method={trace.router_step.method} type={d.query_type.value} tool={d.suggested_tool}")
             if trace and trace.verification_step:
                 v = trace.verification_step
-                print(f"CoVe: {v.claims_supported}/{v.claims_total} supported "
-                      f"(rate={v.support_rate:.2f}, {v.duration_ms}ms)")
+                print(
+                    f"CoVe: correct={v.claims_supported}, "
+                    f"possible={v.claims_possible}, incorrect={v.claims_incorrect}, "
+                    f"total={v.claims_total} ({v.status}, {v.duration_ms}ms)"
+                )
                 if v.unsupported_claims:
-                    print(f"Unsupported claims:")
+                    print("Claims needing attention:")
                     for c in v.unsupported_claims[:3]:
-                        print(f"  - {c.text}")
+                        print(f"  - [{c.verification_level}] {c.text}")
                 elif v.skipped_reason:
                     print(f"Verification skipped: {v.skipped_reason}")
             else:

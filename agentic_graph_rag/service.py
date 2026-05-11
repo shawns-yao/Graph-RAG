@@ -1,6 +1,6 @@
 """PipelineService — typed contract for Agentic Graph RAG pipeline.
 
-All clients (FastAPI, MCP, Streamlit) use this service.
+All clients (FastAPI, MCP, scripts) use this service.
 """
 
 from __future__ import annotations
@@ -8,7 +8,6 @@ from __future__ import annotations
 import logging
 import time
 from collections.abc import Iterator
-from typing import TYPE_CHECKING
 
 from rag_core.neo4j_utils import open_neo4j_session
 from rag_core.models import PipelineTrace, QAResult, WorkflowMemoryEntry
@@ -22,11 +21,8 @@ from agentic_graph_rag.agent.tool_registry import TOOL_NAMES
 from agentic_graph_rag.medical_aliases import expand_medical_aliases
 from agentic_graph_rag.trace_store import TraceStore, create_trace_store
 
-if TYPE_CHECKING:
-    from neo4j import Driver
-    from openai import OpenAI
-
-    from agentic_graph_rag.reasoning.reasoning_engine import ReasoningEngine
+from neo4j import Driver
+from openai import OpenAI
 
 logger = logging.getLogger(__name__)
 _SESSION_CONTEXT_LIMIT = 5
@@ -71,12 +67,10 @@ class PipelineService:
         self,
         driver: Driver,
         openai_client: OpenAI,
-        reasoning: ReasoningEngine | None = None,
         trace_store: TraceStore | None = None,
     ):
         self._driver = driver
         self._client = openai_client
-        self._reasoning = reasoning
         self._trace_store = trace_store or create_trace_store()
 
     # ------------------------------------------------------------------
@@ -88,9 +82,8 @@ class PipelineService:
         text: str,
         mode: str,
         session_id: str,
-    ) -> tuple[str, bool, object | None, list[WorkflowMemoryEntry], list[ReflectionStep]]:
+    ) -> tuple[str, bool, list[WorkflowMemoryEntry], list[ReflectionStep]]:
         use_llm = mode == "agent_llm"
-        reasoning = self._reasoning if mode == "agent_mangle" else None
         (
             workflow_memory_seed,
             reflection_history_seed,
@@ -112,7 +105,6 @@ class PipelineService:
         return (
             effective_text,
             use_llm,
-            reasoning,
             workflow_memory_seed,
             reflection_history_seed,
         )
@@ -126,7 +118,6 @@ class PipelineService:
         (
             effective_text,
             use_llm,
-            reasoning,
             workflow_memory_seed,
             reflection_history_seed,
         ) = self._prepare_query_request(text, mode, session_id)
@@ -136,7 +127,6 @@ class PipelineService:
             self._driver,
             openai_client=self._client,
             use_llm_router=use_llm,
-            reasoning=reasoning,
             session_id=session_id,
             workflow_memory_seed=workflow_memory_seed,
             reflection_history_seed=reflection_history_seed,
@@ -196,8 +186,9 @@ class PipelineService:
                 "session_id": session_id,
                 "retries": qa.retries,
                 "sources": len(qa.sources),
-                "evidence_score": qa.evidence_score,
-                "confidence_level": qa.confidence_level,
+                "answer_status": qa.answer_status,
+                "retrieval_status": qa.retrieval_status,
+                "verification_status": qa.verification_status,
             },
         }
 

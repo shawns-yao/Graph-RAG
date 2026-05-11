@@ -9,7 +9,6 @@ import sys
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(levelname)s %(message)s")
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
-sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(__file__)), "pymangle"))
 
 from dotenv import load_dotenv
 
@@ -29,7 +28,7 @@ all_questions = load_questions()
 doc2_questions = [q for q in all_questions if q["id"] > 15]
 print(f"Running Doc2 only: {len(doc2_questions)} questions")
 
-modes = ["vector", "cypher", "hybrid", "agent_pattern", "agent_llm", "agent_mangle"]
+modes = ["vector", "cypher", "hybrid", "agent_pattern", "agent_llm"]
 results = run_benchmark(driver, openai_client, modes=modes, questions=doc2_questions, lang="ru")
 
 # Load v7 for comparison

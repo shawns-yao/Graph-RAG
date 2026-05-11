@@ -35,10 +35,9 @@
 │       │   ├── vector_store.py      # ← RAG 2.0 (Neo4j Vector Index)
 │       │   ├── kg_client.py         # ← rag-temporal (Graphiti wrapper + Cypher)
 │       │   ├── query_expander.py    # ← RAG 2.0 (multi-query expansion)
-│       │   ├── reranker.py          # ← RAG 2.0 (cosine reranking)
+│       │   ├── reranker.py          # ← Cross-encoder reranking
 │       │   ├── generator.py         # ← RAG 2.0 (LLM answer generation)
 │       │   ├── reflector.py         # ← RAG 2.0 (relevance eval + retry)
-│       │   └── i18n.py              # ← TKB (~180 keys, RU/EN)
 │       ├── pyproject.toml
 │       └── tests/
 │
@@ -57,10 +56,6 @@
 │   └── optimization/
 │       ├── cache.py                 # Subgraph + community cache
 │       └── monitor.py               # Query type stats + PageRank tuning
-│
-├── ui/
-│   ├── streamlit_app.py             # 6 tabs
-│   └── components/
 │
 ├── benchmark/
 │   ├── questions.json
@@ -94,7 +89,7 @@ Query → Router (classify complexity)
     → multi_hop: Hybrid Pipeline (vector + KG merge)
     → global:    Community Search (graph communities)
     → temporal:  Graphiti temporal query
-    → Self-Correction Loop (eval relevance, expand if < 3.0, check contradictions)
+    → Self-Correction Loop (verdict-based reflection, targeted retry)
     → Graph Verifier (cross-check via traversal)
     → Generator (GPT-4o, citations)
 ```
@@ -144,18 +139,14 @@ Query → Router (classify complexity)
 | Graph DB | Neo4j 5.x (temporal-kb-neo4j) |
 | Temporal KG | graphiti-core >=0.26.0 |
 | Doc parsing | Docling >=2.0.0 + GPU |
-| UI | Streamlit >=1.30.0 |
 | Config | Pydantic Settings v2 |
 | Python | 3.12+ |
 
-## Streamlit UI (6 tabs)
+## API + Benchmark Surface
 
-1. **Ingest** — upload, skeleton indexing progress, stats (chunks/entities/nodes)
-2. **Search & Q&A** — mode selector (Vector/VectorCypher/Agent), confidence, sources
-3. **Graph Explorer** — phrase + passage nodes visualization, relationship browsing
-4. **Agent Trace** — routing decision, self-correction steps, tool calls
-5. **Benchmark** — 5-mode comparison, PASS/FAIL table, delta metrics
-6. **Settings** — config, cache stats, PageRank weights, clear DB
+1. **FastAPI REST** — query, search, trace, graph stats, metrics
+2. **MCP** — intent resolution and trace explanation
+3. **Benchmark CLI** — mode comparison, PASS/FAIL table, latency metrics
 
 ## Benchmark
 
@@ -199,7 +190,6 @@ Metrics: Accuracy, F1, Latency (P50/P95), Cost (tokens)
 | vector_store.py | RAG 2.0 | Neo4j Vector Index |
 | kg_client.py | RAG-Temporal | Graphiti wrapper |
 | query_expander.py | RAG 2.0 | Multi-query expansion |
-| reranker.py | RAG 2.0 | Cosine reranking |
+| reranker.py | Cross-encoder | Candidate reranking |
 | generator.py | RAG 2.0 | LLM answer |
 | reflector.py | RAG 2.0 | Relevance eval + retry |
-| i18n.py | Temporal-KB | ~180 keys, RU/EN |

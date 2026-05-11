@@ -10,7 +10,6 @@ if sys.stdout.encoding and sys.stdout.encoding.lower() != "utf-8":
     sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding="utf-8", errors="replace", line_buffering=True)
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
-sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "pymangle"))
 
 from dotenv import load_dotenv
 
@@ -51,13 +50,21 @@ def main():
             passed = len(hits) >= len(expected_kw) * 0.5  # at least 50% keywords present
 
             print(f"A: {answer[:200]}")
-            print(f"Confidence: {qa.confidence:.3f} | Sources: {len(qa.sources)} | Retries: {qa.retries}")
+            print(
+                f"Status: {qa.answer_status}/{qa.retrieval_status}/{qa.verification_status} "
+                f"| Sources: {len(qa.sources)} | Retries: {qa.retries}"
+            )
             if qa.trace and qa.trace.router_step:
                 d = qa.trace.router_step.decision
                 print(f"Router: {qa.trace.router_step.method} -> {d.suggested_tool} ({d.query_type.value})")
             print(f"Keywords hit: {hits} / {expected_kw}")
             print(f"PASS" if passed else "FAIL")
-            results.append({"id": qid, "passed": passed, "confidence": qa.confidence, "retries": qa.retries})
+            results.append({
+                "id": qid,
+                "passed": passed,
+                "answer_status": qa.answer_status,
+                "retries": qa.retries,
+            })
         except Exception as e:
             print(f"ERROR: {e}")
             results.append({"id": qid, "passed": False, "error": str(e)})
@@ -71,8 +78,8 @@ def main():
     print(f"Passed: {passed}/{total} ({passed/total*100:.0f}%)")
     for r in results:
         status = "PASS" if r["passed"] else "FAIL"
-        conf = f"conf={r.get('confidence', 0):.2f}" if "confidence" in r else r.get("error", "")[:40]
-        print(f"  {r['id']}: {status} ({conf})")
+        detail = f"status={r.get('answer_status', '')}" if "answer_status" in r else r.get("error", "")[:40]
+        print(f"  {r['id']}: {status} ({detail})")
 
     driver.close()
 

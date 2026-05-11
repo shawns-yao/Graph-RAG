@@ -3,7 +3,7 @@
 from collections.abc import Iterator
 from unittest.mock import MagicMock, patch
 
-from rag_core.generator import calculate_answer_confidence, generate_answer, stream_answer
+from rag_core.generator import generate_answer, stream_answer
 from rag_core.models import Chunk, SearchResult
 
 
@@ -44,8 +44,8 @@ class TestGenerateAnswer:
     def test_no_results_returns_fallback(self):
         client = MagicMock()
         result = generate_answer("question?", [], openai_client=client)
-        assert result.confidence_level == "low"
-        assert result.evidence_score == 0.0
+        assert result.answer_status == "failed"
+        assert result.retrieval_status == "empty"
         assert "don't have enough context" in result.answer
         assert result.query == "question?"
         assert result.sources == []
@@ -61,74 +61,32 @@ class TestGenerateAnswer:
         qa = generate_answer("What is X?", results, openai_client=client)
 
         assert qa.answer == "The answer based on Chunk 1 is X."
-        assert qa.evidence_score == 0.8
-        assert qa.confidence_level == "medium"
+        assert qa.answer_status == "unverified"
+        assert qa.retrieval_status == "complete"
         assert qa.query == "What is X?"
         assert len(qa.sources) == 1
         client.chat.completions.create.assert_called_once()
 
-    def test_reflection_verdict_does_not_affect_evidence_score(self):
-        """Reflection is a policy decision (answer/retry/stop), not a numeric signal.
-
-        Evidence score should reflect retrieval quality only. Verdict only
-        affects the derived confidence_level, not the numeric evidence_score.
-        """
+    def test_reflection_verdict_sets_discrete_answer_status(self):
         client = MagicMock()
         client.chat.completions.create.return_value = _mock_openai_response("answer")
 
         results = [_make_scored_result("relevant content", 0.8)]
-        qa_with_verdict = generate_answer(
+        qa_retry = generate_answer(
             "What is X?",
             results,
             openai_client=client,
-            reflection_verdict="answer",
+            reflection_verdict="retry",
         )
-        qa_without_verdict = generate_answer(
-            "What is X?",
-            results,
-            openai_client=client,
-            reflection_verdict="",
-        )
-
-        # Evidence score is driven by retrieval, not reflection
-        assert qa_with_verdict.evidence_score == qa_without_verdict.evidence_score
-        assert qa_with_verdict.evidence_score == 0.8
-
-    def test_public_confidence_helper_matches_generate_answer(self):
-        client = MagicMock()
-        client.chat.completions.create.return_value = _mock_openai_response("answer")
-        results = [_make_scored_result("relevant content", 0.8)]
-
-        qa = generate_answer(
+        qa_answer = generate_answer(
             "What is X?",
             results,
             openai_client=client,
             reflection_verdict="answer",
         )
 
-        # Both helpers should return the same evidence score (reflection is
-        # intentionally ignored at the numeric layer).
-        assert calculate_answer_confidence(results) == qa.evidence_score
-
-    def test_confidence_prefers_normalized_scores(self):
-        results = [
-            SearchResult(
-                chunk=Chunk(content="a"),
-                score=7.5,
-                score_normalized=0.75,
-                rank=1,
-                source="bm25",
-            ),
-            SearchResult(
-                chunk=Chunk(content="b"),
-                score=5.0,
-                score_normalized=0.5,
-                rank=2,
-                source="bm25",
-            ),
-        ]
-
-        assert calculate_answer_confidence(results) == 0.625
+        assert qa_retry.answer_status == "retry_required"
+        assert qa_answer.answer_status == "unverified"
 
     def test_includes_all_chunks_in_context(self):
         client = MagicMock()
@@ -267,6 +225,19 @@ class TestGenerateAnswer:
         assert "enumeration" in system_msg.lower()
         assert "NUMBERED LIST" in system_msg
 
+    def test_non_enumeration_prompt_limits_unasked_facts(self):
+        client = MagicMock()
+        client.chat.completions.create.return_value = _mock_openai_response("answer")
+
+        generate_answer("噻托溴铵每日使用几次？剂量是多少？", [_make_result("text")], openai_client=client)
+
+        call_args = client.chat.completions.create.call_args
+        system_msg = call_args[1]["messages"][0]["content"]
+        user_msg = call_args[1]["messages"][1]["content"]
+        assert "Answer only the fields explicitly asked" in system_msg
+        assert "do not add related facts" in system_msg
+        assert "Do not include facts that are not needed" in user_msg
+
     def test_handles_api_error(self):
         client = MagicMock()
         client.chat.completions.create.side_effect = RuntimeError("API down")
@@ -274,8 +245,8 @@ class TestGenerateAnswer:
         results = [_make_result()]
         qa = generate_answer("q", results, openai_client=client)
 
-        assert qa.confidence_level == "low"
-        assert qa.evidence_score == 0.0
+        assert qa.answer_status == "failed"
+        assert qa.retrieval_status == "complete"
         assert "Error" in qa.answer
         assert len(qa.sources) == 1
 

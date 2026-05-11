@@ -15,7 +15,6 @@ import sys
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(levelname)s %(message)s")
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
-sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(__file__)), "pymangle"))
 
 from dotenv import load_dotenv
 
@@ -35,7 +34,7 @@ doc1 = sum(1 for q in questions if q['id'] <= 15)
 doc2 = sum(1 for q in questions if q['id'] > 15)
 print(f"Loaded {len(questions)} questions (Doc1: {doc1}, Doc2: {doc2})")
 
-modes = ["vector", "cypher", "hybrid", "agent_pattern", "agent_llm", "agent_mangle"]
+modes = ["vector", "cypher", "hybrid", "agent_pattern", "agent_llm"]
 results = run_benchmark(driver, openai_client, modes=modes, questions=questions, lang="ru")
 
 # Load v11 for comparison

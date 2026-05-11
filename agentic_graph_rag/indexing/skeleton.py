@@ -23,6 +23,7 @@ from agentic_graph_rag.indexing.dual_node import (
     _normalize_alias_text as dual_normalize_alias_text,
     persist_entity_alias_metadata,
 )
+from agentic_graph_rag.indexing.phrase_mining import mine_phrase_candidates
 from agentic_graph_rag.text_signals import build_tfidf_profile, text_signal_score
 
 if TYPE_CHECKING:
@@ -63,9 +64,71 @@ _MEDICAL_HINTS = (
 _MEDICAL_ENTITY_TYPES = (
     "Disease", "Symptom", "Drug", "Test", "Biomarker", "Anatomy",
     "Procedure", "RiskFactor", "Pathogen", "Population",
+    "DrugClass", "Therapy", "Device", "Threshold",
 )
 _ALIAS_FUZZY_MATCH_THRESHOLD = 0.88
 _ALIAS_PROMOTION_MIN_COUNT = 2
+_MEDICAL_TERM_PATTERNS: tuple[tuple[re.Pattern[str], str], ...] = (
+    (
+        re.compile(
+            r"[\u4e00-\u9fffA-Za-z0-9+-]{1,20}"
+            r"(?:类药物|类利尿剂|利尿剂|抑制剂|阻滞剂|激动剂|拮抗剂|单抗|药物)"
+        ),
+        "DrugClass",
+    ),
+    (
+        re.compile(
+            r"[\u4e00-\u9fffA-Za-z0-9+-]{1,24}"
+            r"(?:治疗|疗法|方案|双抗|抗凝|抗血小板治疗)"
+        ),
+        "Therapy",
+    ),
+    (
+        re.compile(
+            r"[\u4e00-\u9fffA-Za-z0-9+-]{1,24}"
+            r"(?:支架|植入术|造影|检查)"
+        ),
+        "Device",
+    ),
+)
+_RELATION_PATTERNS: tuple[tuple[str, re.Pattern[str]], ...] = (
+    ("禁忌", re.compile(r"(禁忌|禁用|避免|慎用)")),
+    ("替代", re.compile(r"(改用|换用|替代)")),
+    ("疗程", re.compile(r"(至少|持续|疗程|多久|月|周|天)")),
+    ("剂量", re.compile(r"(剂量|用量|每[日周天]|mg|g|ml|mL|U/)")),
+    ("副作用", re.compile(r"(副作用|不良反应|导致|引起)")),
+    ("推荐", re.compile(r"(首选|推荐|适用|用于)")),
+)
+_THRESHOLD_ENTITY_PATTERNS: tuple[re.Pattern[str], ...] = (
+    re.compile(
+        r"(?:[A-Za-z][A-Za-z0-9/+.-]{1,20}|[\u4e00-\u9fff]{1,12})"
+        r"\s*(?:<|>|<=|>=|=|≤|≥)\s*\d+(?:\.\d+)?"
+        r"(?:\s*[A-Za-z%μ/²\-\.\d]+)?"
+    ),
+    re.compile(
+        r"(?:至少|不低于|不超过|低于|高于)\s*\d+(?:\.\d+)?"
+        r"\s*(?:个月|周|天|年|小时|分钟|mg|g|kg|ml|mL|mmol/L|mmHg|%|次/日)"
+    ),
+)
+_THRESHOLD_ENTITY_RE = re.compile(
+    r"(?:[A-Za-z][A-Za-z0-9/+.-]*\s*)?(?:[<>≤≥]=?\s*\d+(?:\.\d+)?)|(?:至少\s*\d+(?:\.\d+)?\s*(?:个月|周|天|mg|ml|%))"
+)
+_ALIAS_ENTITY_TYPE_OVERRIDES: dict[str, str] = {
+    "ACEI": "DrugClass",
+    "ARB": "DrugClass",
+    "ARNI": "DrugClass",
+    "MRA": "DrugClass",
+    "SGLT-2抑制剂": "DrugClass",
+    "DAPT": "Therapy",
+    "双联抗血小板治疗": "Therapy",
+    "双抗": "Therapy",
+    "DES": "Device",
+    "药物洗脱支架": "Device",
+    "药物支架": "Device",
+    "BMS": "Device",
+    "PCI": "Procedure",
+    "eGFR": "Test",
+}
 
 
 def _normalized_name(text: str) -> str:
@@ -91,6 +154,254 @@ def _contains_cjk(text: str) -> bool:
 
 def _contains_latin(text: str) -> bool:
     return bool(re.search(r"[A-Za-z]", text))
+
+
+def _contains_surface(text: str, surface: str) -> bool:
+    if _contains_cjk(surface):
+        return surface in text
+    return bool(re.search(rf"(?<![0-9A-Za-z_]){re.escape(surface)}(?![0-9A-Za-z_])", text, re.IGNORECASE))
+
+
+def _alias_entity_type(group: tuple[str, ...]) -> str:
+    for alias in group:
+        override = _ALIAS_ENTITY_TYPE_OVERRIDES.get(alias)
+        if override:
+            return override
+    for alias in group:
+        guessed = _guess_medical_entity_type(alias)
+        if guessed != "Procedure":
+            return guessed
+    return "Drug" if any(re.search(r"药|抑制剂|激动剂|拮抗剂", alias) for alias in group) else "Procedure"
+
+
+def _strip_candidate_noise(text: str) -> str:
+    return text.strip(" ,.;:()[]{}，。；：、")
+
+
+def _guess_medical_entity_type(text: str) -> str:
+    for pattern, entity_type in _MEDICAL_TERM_PATTERNS:
+        if pattern.fullmatch(text):
+            return entity_type
+    if any(token in text for token in ("利尿剂", "沙坦", "普利", "列净", "单抗")):
+        return "DrugClass"
+    if any(token in text for token in ("检查", "指标", "水平", "eGFR", "HbA1c")):
+        return "Test"
+    return "Procedure"
+
+
+def _threshold_candidates(text: str) -> list[str]:
+    seen: dict[str, str] = {}
+    for pattern in _THRESHOLD_ENTITY_PATTERNS:
+        for match in pattern.finditer(text):
+            phrase = _strip_candidate_noise(match.group(0))
+            normalized = _normalized_name(phrase)
+            if len(phrase) < 3 or normalized in seen:
+                continue
+            seen[normalized] = phrase
+    return list(seen.values())
+
+
+def _threshold_aliases(phrase: str) -> list[str]:
+    aliases = {phrase}
+    compact = re.sub(r"\s+", "", phrase)
+    if compact:
+        aliases.add(compact)
+    metric = re.match(
+        r"(?P<head>[A-Za-z][A-Za-z0-9/+.-]{1,20}|[\u4e00-\u9fff]{1,12})"
+        r"\s*(?P<cmp><=|>=|<|>|=|≤|≥)\s*(?P<value>\d+(?:\.\d+)?)",
+        phrase,
+    )
+    if metric:
+        aliases.add(f"{metric.group('head')} {metric.group('cmp')}{metric.group('value')}")
+        aliases.add(f"{metric.group('head')}{metric.group('cmp')}{metric.group('value')}")
+    aliases.discard("")
+    aliases.discard(phrase)
+    return sorted(aliases)
+
+
+def _pattern_aliases(phrase: str, entity_type: str) -> list[str]:
+    if entity_type == "Threshold":
+        return _threshold_aliases(phrase)
+    return []
+
+
+def _sentence_splits(text: str) -> list[str]:
+    parts = re.split(r"(?<=[。！？!?；;\n])", text)
+    return [part.strip() for part in parts if part.strip()]
+
+
+def _entity_occurs_in_sentence(entity: Entity, sentence: str) -> bool:
+    surfaces = [entity.name, *entity.metadata.get("aliases", [])]
+    return any(_contains_surface(sentence, str(surface)) for surface in surfaces if str(surface).strip())
+
+
+def _infer_sentence_relations(chunk: Chunk, entities: list[Entity]) -> list[Relationship]:
+    sentence_relations: list[Relationship] = []
+    chunk_entities = [
+        entity for entity in entities
+        if str(entity.metadata.get("source_chunk", "")) == chunk.id
+    ]
+    if len(chunk_entities) < 2:
+        return sentence_relations
+
+    seen_pairs: set[tuple[str, str, str]] = set()
+    for sentence in _sentence_splits(chunk.enriched_content):
+        present = [entity for entity in chunk_entities if _entity_occurs_in_sentence(entity, sentence)]
+        if len(present) < 2:
+            continue
+        relation_type = ""
+        for candidate_type, pattern in _RELATION_PATTERNS:
+            if pattern.search(sentence):
+                relation_type = candidate_type
+                break
+        if not relation_type:
+            continue
+
+        for left in present:
+            for right in present:
+                if left.name == right.name:
+                    continue
+                if relation_type in {"禁忌", "替代", "推荐", "剂量"} and right.entity_type not in {
+                    "Drug", "DrugClass", "Therapy", "Threshold", "Device",
+                }:
+                    continue
+                pair = (left.name, right.name, relation_type)
+                if pair in seen_pairs:
+                    continue
+                seen_pairs.add(pair)
+                sentence_relations.append(Relationship(
+                    id=hashlib.md5(
+                        f"{chunk.id}:{left.name}:{relation_type}:{right.name}".encode()
+                    ).hexdigest()[:8],
+                    source=left.name,
+                    target=right.name,
+                    relation_type=relation_type,
+                    description=sentence,
+                    metadata={"method": "sentence_pattern", "chunk_id": chunk.id},
+                ))
+    return sentence_relations
+
+
+def _pattern_candidates(text: str) -> list[tuple[str, str | None]]:
+    candidates: list[tuple[str, str | None]] = []
+    for pattern, entity_type in _MEDICAL_TERM_PATTERNS:
+        for match in pattern.finditer(text):
+            candidate = _strip_candidate_noise(match.group(0))
+            if len(candidate) >= 2:
+                candidates.append((candidate, entity_type))
+
+    for candidate in _threshold_candidates(text):
+        candidates.append((candidate, "Threshold"))
+
+    return candidates
+
+
+def _inject_medical_phrase_entities(chunk: Chunk) -> list[Entity]:
+    """Promote medically critical phrase patterns into entities."""
+    text = chunk.enriched_content
+    injected: list[Entity] = []
+    seen: set[str] = set()
+
+    for phrase, entity_type in _pattern_candidates(text):
+        normalized = _normalized_name(phrase)
+        if normalized in seen:
+            continue
+        seen.add(normalized)
+        resolved_type = entity_type or _guess_medical_entity_type(phrase)
+        entity_id = hashlib.md5(
+            f"{phrase.lower()}::{resolved_type.lower()}".encode()
+        ).hexdigest()[:8]
+        injected.append(Entity(
+            id=entity_id,
+            name=phrase,
+            entity_type=resolved_type,
+            description="",
+            entity_confidence=0.0,
+            metadata={
+                "source_chunk": chunk.id,
+                "aliases": _pattern_aliases(phrase, resolved_type),
+                "candidate_entities": [phrase],
+                "injected": True,
+                "pattern_injected": True,
+                "candidate_sources": ["pattern"],
+                "decision": "candidate",
+            },
+        ))
+
+    return injected
+
+
+def _collect_injected_entities(chunks: list[Chunk]) -> list[Entity]:
+    """Inject high-value phrase entities from all graph chunks, not only skeletal ones."""
+    injected: list[Entity] = []
+    for chunk in chunks:
+        injected.extend(_inject_medical_phrase_entities(chunk))
+    for candidate in mine_phrase_candidates(chunks):
+        resolved_type = _guess_medical_entity_type(candidate.phrase)
+        entity_id = hashlib.md5(
+            f"{candidate.phrase.lower()}::{resolved_type.lower()}".encode()
+        ).hexdigest()[:8]
+        injected.append(Entity(
+            id=entity_id,
+            name=candidate.phrase,
+            entity_type=resolved_type,
+            description="",
+            entity_confidence=0.0,
+            metadata={
+                "source_chunk": candidate.source_chunk,
+                "aliases": list(candidate.aliases),
+                "candidate_entities": [candidate.phrase],
+                "injected": True,
+                "candidate_sources": list(candidate.sources),
+                "decision": "candidate",
+            },
+        ))
+    return _merge_entities(injected)
+
+
+def _entity_pagerank_scores(
+    entities: list[Entity],
+    chunks: list[Chunk],
+    pagerank_scores: dict[int, float],
+) -> dict[str, float]:
+    """Project chunk PageRank onto entities by strongest supporting chunk."""
+    if not entities or not chunks or not pagerank_scores:
+        return {}
+
+    max_pagerank = max(pagerank_scores.values(), default=0.0) or 1.0
+    normalized_chunk_scores = {
+        index: max(0.0, min(1.0, score / max_pagerank))
+        for index, score in pagerank_scores.items()
+    }
+    chunk_index_by_id = {
+        chunk.id: index
+        for index, chunk in enumerate(chunks)
+        if chunk.id
+    }
+
+    entity_scores: dict[str, float] = {}
+    for entity in entities:
+        entity_id = entity.id or hashlib.md5(entity.name.lower().encode()).hexdigest()[:8]
+        best_score = 0.0
+
+        source_chunk_id = str(entity.metadata.get("source_chunk") or "")
+        if source_chunk_id in chunk_index_by_id:
+            best_score = max(
+                best_score,
+                normalized_chunk_scores.get(chunk_index_by_id[source_chunk_id], 0.0),
+            )
+
+        surface_forms = _entity_surface_forms(entity)
+        if surface_forms:
+            for index, chunk in enumerate(chunks):
+                text = chunk.enriched_content or chunk.content
+                if _chunk_entity_match_score(text, surface_forms) > 0:
+                    best_score = max(best_score, normalized_chunk_scores.get(index, 0.0))
+
+        if best_score > 0:
+            entity_scores[entity_id] = best_score
+
+    return entity_scores
 
 
 def _is_medical_abbreviation_alias(candidate: str, name: str) -> bool:
@@ -266,11 +577,17 @@ def extract_candidate_entities(text: str, max_candidates: int = 12) -> list[str]
     )
     for pattern in patterns:
         for match in re.finditer(pattern, text):
-            candidate = match.group(0).strip(" ,.;:()[]{}")
+            candidate = _strip_candidate_noise(match.group(0))
             norm = _normalized_name(candidate)
             if len(candidate) < 3 or norm in _STOP_WORDS or norm in seen:
                 continue
             seen[norm] = candidate
+
+    for candidate, _ in _pattern_candidates(text):
+        norm = _normalized_name(candidate)
+        if len(candidate) < 2 or norm in _STOP_WORDS or norm in seen:
+            continue
+        seen[norm] = candidate
 
     candidates = list(seen.values())
     candidates.sort(key=lambda value: (-len(value.split()), value.lower()))
@@ -503,6 +820,8 @@ def extract_entities_full(
         "Use only these entity types when possible: "
         + ", ".join(_MEDICAL_ENTITY_TYPES)
         + ".\n"
+        "Prefer concrete drug classes, therapies, devices, and threshold phrases when present.\n"
+        "Examples: ACEI, ARB, DAPT, DES, 药物洗脱支架, 双抗, 噻嗪类利尿剂, 袢利尿剂, eGFR<30, 至少12个月.\n"
         "Keep entity names concise and canonical. Keep only medically meaningful relations.\n"
         "Entity confidence and relationship confidence must be numbers between 0 and 1.\n"
     )
@@ -517,6 +836,10 @@ def extract_entities_full(
                 chunk.enriched_content,
                 max_candidates=_MAX_CANDIDATE_ENTITIES,
             )
+            alias_entities = _inject_medical_phrase_entities(chunk)
+            if alias_entities:
+                all_entities.extend(alias_entities)
+                candidates = list(dict.fromkeys([*candidates, *(entity.name for entity in alias_entities)]))
             batch_candidates[chunk.id] = candidates
             prompt_blocks.append(
                 "\n".join(
@@ -556,9 +879,14 @@ def extract_entities_full(
             logger.error("Entity extraction failed for chunks [%s]: %s", chunk_ids, exc)
 
     entities = _merge_entities(all_entities)
+    chunk_relation_count = 0
+    for chunk in skeletal_chunks:
+        inferred = _infer_sentence_relations(chunk, entities)
+        all_relationships.extend(inferred)
+        chunk_relation_count += len(inferred)
     logger.info(
-        "Extracted %d entities, %d relationships from %d skeletal chunks",
-        len(entities), len(all_relationships), len(skeletal_chunks),
+        "Extracted %d entities, %d relationships from %d skeletal chunks (%d sentence-pattern)",
+        len(entities), len(all_relationships), len(skeletal_chunks), chunk_relation_count,
     )
     return entities, all_relationships
 
@@ -851,10 +1179,15 @@ def build_skeleton_index(
     embeddings: list[list[float]],
     openai_client: OpenAI | None = None,
     driver=None,
-) -> tuple[list[Entity], list[Relationship], list[Chunk], list[Chunk]]:
+) -> tuple[list[Entity], list[Relationship], list[Chunk], list[Chunk], dict[str, float]]:
     """Full KET-RAG skeleton indexing pipeline."""
     if not chunks or not embeddings:
-        return [], [], [], []
+        return [], [], [], [], {}
+    if len(chunks) != len(embeddings):
+        raise ValueError(
+            "Skeleton indexing requires one embedding per chunk "
+            f"(chunks={len(chunks)}, embeddings={len(embeddings)})"
+        )
 
     doc_type = infer_document_type(chunks)
     damping = resolve_pagerank_damping(chunks)
@@ -869,7 +1202,11 @@ def build_skeleton_index(
     pagerank_scores = compute_pagerank(knn_graph, damping=damping)
     skeletal, peripheral = select_skeletal_chunks(graph_chunks, pagerank_scores, beta=beta)
     peripheral.extend(low_information_chunks)
+    injected_entities = _collect_injected_entities(graph_chunks)
     entities, relationships = extract_entities_full(skeletal, openai_client)
+    if injected_entities:
+        entities = _merge_entities([*entities, *injected_entities])
+    entity_pagerank_scores = _entity_pagerank_scores(entities, graph_chunks, pagerank_scores)
     relationships.extend(link_peripheral_keywords(peripheral, entities))
     if driver is not None:
         persist_entity_alias_metadata(entities, driver)
@@ -879,4 +1216,4 @@ def build_skeleton_index(
         "(%d skeletal + %d peripheral, doc_type=%s, beta=%.2f, damping=%.2f)",
         len(entities), len(relationships), len(skeletal), len(peripheral), doc_type, beta, damping,
     )
-    return entities, relationships, skeletal, peripheral
+    return entities, relationships, skeletal, peripheral, entity_pagerank_scores
