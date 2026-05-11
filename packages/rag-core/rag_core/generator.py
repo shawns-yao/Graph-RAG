@@ -23,6 +23,10 @@ logger = logging.getLogger(__name__)
 
 _ENUM_RE = None
 _GRAPH_SECTION_SPLIT_RE = re.compile(r"\n\s*\n(?=(?:Graph paths:|Entities:|Evidence:))")
+_PHRASE_ANCHOR_CLEAN_RE = re.compile(
+    r"^(?:时|当|如果|若|患者|的患者|对于|关于|有关|在|对|和|与|及|、)+|"
+    r"(?:怎么处理|如何处理|怎么办|是否正确|是否|可以用|需要注意|有哪些|是什么|是多少|吗|呢)$"
+)
 
 
 def _is_enumeration_query(query: str) -> bool:
@@ -69,7 +73,35 @@ def _strong_anchor_texts(query: str) -> list[str]:
     return anchors
 
 
+def _phrase_anchor_texts(query: str) -> list[str]:
+    signals = extract_query_signals(query)
+    anchors: list[str] = []
+    for anchor in signals.anchors:
+        if anchor.kind != "phrase":
+            continue
+        candidates = [anchor.text]
+        cleaned = anchor.text
+        previous = ""
+        while cleaned != previous:
+            previous = cleaned
+            cleaned = _PHRASE_ANCHOR_CLEAN_RE.sub("", cleaned).strip(" ，,。？?:：")
+        if cleaned and cleaned != anchor.text:
+            candidates.append(cleaned)
+        for candidate in candidates:
+            text = candidate.casefold()
+            if text and text not in anchors:
+                anchors.append(text)
+    return anchors
+
+
 def _contains_strong_anchor(result: SearchResult, anchors: list[str]) -> bool:
+    if not anchors:
+        return False
+    content = (result.chunk.enriched_content or result.chunk.content or "").casefold()
+    return any(anchor in content for anchor in anchors)
+
+
+def _contains_phrase_anchor(result: SearchResult, anchors: list[str]) -> bool:
     if not anchors:
         return False
     content = (result.chunk.enriched_content or result.chunk.content or "").casefold()
@@ -87,9 +119,11 @@ def _limit_results_for_generation(query: str, results: list[SearchResult]) -> li
         max_chars = min(max_chars, 8_000)
 
     anchors = _strong_anchor_texts(query)
+    phrase_anchors = _phrase_anchor_texts(query)
     ranked = sorted(
         results,
         key=lambda item: (
+            not _contains_phrase_anchor(item, phrase_anchors),
             not _contains_strong_anchor(item, anchors),
             -item.score,
             item.rank if item.rank > 0 else 10**9,

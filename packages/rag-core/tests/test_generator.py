@@ -149,6 +149,33 @@ class TestGenerateAnswer:
         assert len(qa.sources) == 4
 
     @patch("rag_core.generator.get_settings")
+    def test_phrase_anchor_orders_subject_evidence_before_generic_threshold_chunks(
+        self, mock_settings
+    ):
+        cfg = MagicMock()
+        cfg.retrieval.prompt_max_chunks = 2
+        cfg.retrieval.prompt_max_chars = 10_000
+        cfg.openai.llm_model = "test-model"
+        cfg.openai.llm_temperature = 0.0
+        mock_settings.return_value = cfg
+
+        client = MagicMock()
+        client.chat.completions.create.return_value = _mock_openai_response("answer")
+        results = [
+            _make_scored_result("COPD eGFR < 30 unrelated high score", 0.99),
+            _make_scored_result("噻托溴铵 eGFR < 30 unrelated high score", 0.98),
+            _make_scored_result("二甲双胍 eGFR < 30 时禁用", 0.20),
+        ]
+
+        qa = generate_answer("eGFR < 30 时二甲双胍怎么处理？", results, openai_client=client)
+
+        user_msg = client.chat.completions.create.call_args[1]["messages"][1]["content"]
+        assert "二甲双胍 eGFR < 30 时禁用" in user_msg
+        assert "COPD eGFR < 30 unrelated high score" in user_msg
+        assert "噻托溴铵 eGFR < 30 unrelated high score" not in user_msg
+        assert qa.sources[0].chunk.content == "二甲双胍 eGFR < 30 时禁用"
+
+    @patch("rag_core.generator.get_settings")
     def test_caps_enumeration_queries_more_aggressively(self, mock_settings):
         cfg = MagicMock()
         cfg.retrieval.prompt_max_chunks = 10
