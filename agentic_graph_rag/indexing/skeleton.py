@@ -6,8 +6,8 @@ import hashlib
 import json
 import logging
 import re
-from functools import lru_cache
 from difflib import SequenceMatcher
+from functools import lru_cache
 from typing import TYPE_CHECKING
 
 import networkx as nx
@@ -20,8 +20,10 @@ from rag_core.models import Chunk, Entity, Relationship
 from agentic_graph_rag.indexing.dual_node import (
     _chunk_entity_match_score,
     _entity_surface_forms,
-    _normalize_alias_text as dual_normalize_alias_text,
     persist_entity_alias_metadata,
+)
+from agentic_graph_rag.indexing.dual_node import (
+    _normalize_alias_text as dual_normalize_alias_text,
 )
 from agentic_graph_rag.indexing.phrase_mining import mine_phrase_candidates
 from agentic_graph_rag.text_signals import build_tfidf_profile, text_signal_score
@@ -625,18 +627,35 @@ def build_knn_graph(
     for i in range(n):
         sims = sim_matrix[i].copy()
         sims[i] = -1.0
-        if effective_k > 0:
-            top_indices = np.argsort(sims)[-effective_k:][::-1]
-            for j_idx in top_indices:
-                j = int(j_idx)
-                similarity = float(sims[j])
-                if similarity <= _MIN_KNN_SIMILARITY:
-                    continue
-                graph.add_edge(i, j, weight=similarity)
+        if effective_k <= 0:
+            continue
+        top_indices = np.argsort(sims)[-effective_k:][::-1]
+        top_scores = np.array([float(sims[int(idx)]) for idx in top_indices])
+        threshold = _adaptive_knn_threshold(top_scores)
+        for j_idx in top_indices:
+            j = int(j_idx)
+            similarity = float(sims[j])
+            if similarity < threshold:
+                continue
+            graph.add_edge(i, j, weight=similarity)
 
-    logger.info("Built KNN graph: %d nodes, %d edges (k=%d)", n, graph.number_of_edges(), effective_k)
+    logger.info(
+        "Built KNN graph: %d nodes, %d edges (k=%d, adaptive per-node threshold)",
+        n,
+        graph.number_of_edges(),
+        effective_k,
+    )
     return graph
 
+
+def _adaptive_knn_threshold(top_scores: np.ndarray) -> float:
+    """Return a local threshold from one node's nearest-neighbor scores."""
+    positive = top_scores[top_scores > 0]
+    if positive.size <= 1:
+        return float(positive[0]) if positive.size == 1 else 1.0
+    percentile_cut = float(np.percentile(positive, 50))
+    statistical_cut = float(np.mean(positive) + np.std(positive))
+    return min(max(percentile_cut, statistical_cut), float(np.max(positive)))
 
 # ---------------------------------------------------------------------------
 # 2. PageRank computation
