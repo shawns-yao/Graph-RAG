@@ -362,14 +362,6 @@ def test_initial_tool_plan_does_not_add_bm25_for_phrase_only_query():
     assert _initial_tool_plan("噻托溴铵剂量是多少？", decision) == ["vector_search"]
 
 
-def test_initial_tool_plan_adds_graph_companion_for_relation_intent():
-    decision = RouterDecision(query_type=QueryType.RELATION, suggested_tool="vector_search")
-
-    assert _initial_tool_plan("ACEI 和 ARB 有什么区别？", decision) == [
-        "vector_search",
-        "cypher_traverse",
-    ]
-
 
 def test_initial_tool_plan_adds_graph_companion_for_resolved_need():
     decision = RouterDecision(query_type=QueryType.SIMPLE, suggested_tool="vector_search")
@@ -389,23 +381,6 @@ def test_initial_tool_plan_adds_bm25_companion_for_threshold_relation_query():
         "bm25_search",
     ]
 
-
-def test_initial_tool_plan_adds_comprehensive_companion_for_global_intent():
-    decision = RouterDecision(query_type=QueryType.GLOBAL, suggested_tool="vector_search")
-
-    assert _initial_tool_plan("列出 COPD 的所有诊断指标", decision) == [
-        "vector_search",
-        "comprehensive_search",
-    ]
-
-
-def test_initial_tool_plan_adds_temporal_companion_for_temporal_intent():
-    decision = RouterDecision(query_type=QueryType.TEMPORAL, suggested_tool="vector_search")
-
-    assert _initial_tool_plan("2024-05 之后有什么变化？", decision) == [
-        "vector_search",
-        "temporal_query",
-    ]
 
 
 def test_route_query_builds_retrieval_plan_from_router_and_signals():

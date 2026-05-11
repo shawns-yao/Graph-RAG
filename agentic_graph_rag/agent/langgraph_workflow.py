@@ -286,18 +286,8 @@ def _initial_tool_plan(
         if need_tool not in tools:
             tools.append(need_tool)
 
-    if (
-        decision.query_type in {QueryType.RELATION, QueryType.MULTI_HOP}
-        and "cypher_traverse" not in tools
-    ):
-        tools.append("cypher_traverse")
-    elif decision.query_type == QueryType.GLOBAL and "comprehensive_search" not in tools:
-        tools.append("comprehensive_search")
-    elif decision.query_type == QueryType.TEMPORAL and "temporal_query" not in tools:
-        tools.append("temporal_query")
-    elif has_strong_form_anchor(signals):
-        if "bm25_search" not in tools:
-            tools.append("bm25_search")
+    if has_strong_form_anchor(signals) and "bm25_search" not in tools:
+        tools.append("bm25_search")
 
     planned: list[str] = []
     for tool in tools:
@@ -667,56 +657,6 @@ def _answer_guard_status(
     return "partial"
 
 
-def _relation_query_can_retry_graph(
-    state: SelfCorrectionState,
-    reflection: ReflectionStep,
-) -> bool:
-    """Use deterministic graph fallback when the reflection judge is unavailable."""
-    decision = state.get("decision")
-    if decision is None:
-        return False
-    return (
-        _is_reflection_transport_failure(reflection)
-        and decision.query_type in {QueryType.RELATION, QueryType.MULTI_HOP}
-        and state["current_tool"] != "cypher_traverse"
-        and "cypher_traverse" not in set(state.get("tried_tools", []))
-        and state["attempt"] < state["max_retries"]
-        and bool(state.get("results"))
-    )
-
-
-def _build_graph_retry_after_reflection_failure(
-    state: SelfCorrectionState,
-    reflection: ReflectionStep,
-) -> ReflectionStep:
-    """Preserve the transport failure while routing relation queries to graph."""
-    candidate_fix_paths = list(reflection.candidate_fix_paths)
-    if "reflection_transport_failure_graph_fallback" not in candidate_fix_paths:
-        candidate_fix_paths.append("reflection_transport_failure_graph_fallback")
-    return reflection.model_copy(
-        update={
-            "evidence_status": "partial",
-            "gap_type": "missing_relation",
-            "action": "retry_graph",
-            "required_tool": "cypher_traverse",
-            "verdict": "retry",
-            "failure_type": "relation_missing",
-            "recommended_action": "use_graph_traversal",
-            "preferred_tools": ["cypher_traverse"],
-            "preferred_providers": ["graph"],
-            "retry_scope": "tool_escalation",
-            "reasoning": (
-                "Reflection LLM transport failed; relation query is falling back "
-                f"deterministically to graph traversal. Original reason: {reflection.reasoning}"
-            ),
-            "should_retry": True,
-            "should_rewrite_query": False,
-            "should_rerank_again": False,
-            "candidate_fix_paths": candidate_fix_paths,
-        }
-    )
-
-
 def _reflection_rank(
     reflection: ReflectionStep,
     *,
@@ -959,8 +899,6 @@ def _interpret_verdict_node(state: SelfCorrectionState) -> dict[str, Any]:
     if reflection is None:
         return {"next_step": "finish"}
 
-    if _relation_query_can_retry_graph(state, reflection):
-        reflection = _build_graph_retry_after_reflection_failure(state, reflection)
 
     reflection.verdict = resolve_reflection_verdict(reflection)
 
@@ -1627,18 +1565,14 @@ def _after_generate(state: AgentWorkflowState) -> str:
     if ops is None or ops.extract_claims is None or ops.verify_claims is None:
         return _legacy_after_generate_branch(state)
 
-    # Primary trigger: router thinks this needs cross-fact consistency.
-    query_type = state["decision"].query_type
-    if query_type in {QueryType.RELATION, QueryType.MULTI_HOP, QueryType.GLOBAL}:
-        return "verify_answer"
 
-    # Secondary trigger: the answer itself contains multiple verifiable facts,
+    # Primary trigger: the answer itself contains multiple verifiable facts,
     # regardless of how the router classified the query. This covers cases
     # where the router misclassified a compound / relation query as simple.
     if _answer_has_verifiable_claims(qa_result.answer):
         return "verify_answer"
 
-    # Tertiary trigger: the agent actually invoked a graph/hybrid retrieval
+    # Secondary trigger: the agent actually invoked a graph/hybrid retrieval
     # tool, meaning the system itself judged cross-fact evidence relevant.
     trace = state.get("trace")
     graph_tools_used = {
