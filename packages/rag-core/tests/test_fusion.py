@@ -19,9 +19,9 @@ def _result(
     )
 
 
-def test_resolve_channel_priority_uses_query_type_order_without_weights():
-    assert resolve_channel_priority(QueryType.RELATION) == ["graph", "vector", "bm25"]
-    assert resolve_channel_priority(QueryType.TEMPORAL) == ["bm25", "vector", "graph"]
+def test_resolve_channel_priority_ignores_query_type_without_weights():
+    assert resolve_channel_priority(QueryType.RELATION) == ["vector", "bm25", "graph"]
+    assert resolve_channel_priority(QueryType.TEMPORAL) == ["vector", "bm25", "graph"]
 
 
 def test_priority_fusion_keeps_primary_channel_order_and_appends_deduped_supplements():
@@ -35,9 +35,9 @@ def test_priority_fusion_keeps_primary_channel_order_and_appends_deduped_supplem
         query_type=QueryType.RELATION,
     )
 
-    assert [result.chunk.id for result in fused] == ["g1", "g2", "v1", "shared", "b1"]
+    assert [result.chunk.id for result in fused] == ["v1", "shared", "b1", "g1", "g2"]
     assert [result.rank for result in fused] == [1, 2, 3, 4, 5]
-    assert [result.score for result in fused] == [1.0, 0.5, 1.0, 0.5, 1.0]
+    assert [result.score for result in fused] == [1.0, 0.5, 1.0, 1.0, 0.5]
     assert all(result.source == "hybrid" for result in fused)
 
 

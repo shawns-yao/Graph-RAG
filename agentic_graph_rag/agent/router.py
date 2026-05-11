@@ -12,14 +12,13 @@ from openai import OpenAI
 from rag_core.config import get_settings, make_openai_client
 from rag_core.models import QueryType, RouterDecision
 
-from agentic_graph_rag.agent.tool_registry import DEFAULT_TOOL_BY_QUERY_TYPE
-
 logger = logging.getLogger(__name__)
 
 
 # ---------------------------------------------------------------------------
 # Deterministic fallback (fast, no LLM)
 # ---------------------------------------------------------------------------
+
 
 def classify_query_by_patterns(query: str) -> RouterDecision:
     """Return a conservative default when the optional LLM router is disabled."""
@@ -29,7 +28,7 @@ def classify_query_by_patterns(query: str) -> RouterDecision:
         query_type=query_type,
         confidence=0.5,
         reasoning="Deterministic default; retrieval planner handles companion channels.",
-        suggested_tool=DEFAULT_TOOL_BY_QUERY_TYPE[query_type],
+        suggested_tool="vector_search",
     )
 
 
@@ -50,7 +49,8 @@ Respond with ONLY the category name (simple/relation/multi_hop/global/temporal):
 
 
 def classify_query_by_llm(
-    query: str, openai_client: OpenAI | None = None,
+    query: str,
+    openai_client: OpenAI | None = None,
 ) -> RouterDecision:
     """Classify query using LLM for higher accuracy."""
     cfg = get_settings()
@@ -78,7 +78,7 @@ def classify_query_by_llm(
             query_type=query_type,
             confidence=0.85,
             reasoning=f"LLM classified as '{raw}'.",
-            suggested_tool=DEFAULT_TOOL_BY_QUERY_TYPE[query_type],
+            suggested_tool="vector_search",
         )
 
     except Exception as e:
@@ -89,6 +89,7 @@ def classify_query_by_llm(
 # ---------------------------------------------------------------------------
 # Main entry point
 # ---------------------------------------------------------------------------
+
 
 def classify_query(
     query: str,

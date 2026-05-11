@@ -44,9 +44,7 @@ from agentic_graph_rag.agent.query_signals import (
 )
 
 _ANCHOR_PATTERN = re.compile(r"[A-Za-z0-9_.-]+|[\u4e00-\u9fff]{2,}")
-_RELATION_FALLBACK_RE = re.compile(
-    r"\S+\s*(?:和|与|相比)\s*\S+|\S+\s*(?:会不会|是否会|导致|引发|改用)\s*\S+"
-)
+_RELATION_FALLBACK_RE = re.compile(r"\S+\s*(?:和|与|相比)\s*\S+|\S+\s*(?:会不会|是否会|导致|引发|改用)\s*\S+")
 _REFLECTION_MIN_REMAINING_BUDGET_MS = 1000
 _REFLECTION_TRANSPORT_FAILURE_MARKERS = (
     "connection error",
@@ -208,7 +206,7 @@ def _select_best_results(
     best_results = state.get("best_results", [])
     best_score = state.get("best_score", 0.0)
     best_attempt = state.get("best_attempt", 0)
-    best_rank = state.get("best_rank", (-1, -1, -1, -10**9))
+    best_rank = state.get("best_rank", (-1, -1, -1, -(10**9)))
     candidate_rank = _reflection_rank(
         reflection,
         query=state["current_query"],
@@ -432,10 +430,7 @@ def _build_skip_reflection(
         preferred_tools=[],
         preferred_providers=[],
         retry_scope="",
-        reasoning=(
-            f"Skipped LLM reflection because top normalized vector score "
-            f"{top_signal:.3f} >= {threshold:.3f}."
-        ),
+        reasoning=(f"Skipped LLM reflection because top normalized vector score {top_signal:.3f} >= {threshold:.3f}."),
         failure_type="",
         recommended_action="answer",
         should_retry=False,
@@ -534,11 +529,7 @@ def _next_step_after_reflection(
         return "finish"
     if _budget_exhausted(state):
         return "prepare_retry"
-    if (
-        verdict == "rerank"
-        and state.get("results")
-        and state.get("total_reranks", 0) < state.get("max_reranks", 1)
-    ):
+    if verdict == "rerank" and state.get("results") and state.get("total_reranks", 0) < state.get("max_reranks", 1):
         return "rerank_results"
     if state["attempt"] >= state["max_retries"]:
         return "finish"
@@ -622,14 +613,6 @@ def _reflection_budget_too_low(state: SelfCorrectionState) -> bool:
     return _remaining_budget_ms(state) < _REFLECTION_MIN_REMAINING_BUDGET_MS
 
 
-def _is_reflection_transport_failure(reflection: ReflectionStep) -> bool:
-    """Identify policy stops caused by retryable transport failures, not bad JSON."""
-    if (reflection.recommended_action or "") != "stop_due_to_invalid_reflection":
-        return False
-    reason = (reflection.reasoning or "").casefold()
-    return any(marker in reason for marker in _REFLECTION_TRANSPORT_FAILURE_MARKERS)
-
-
 def _answer_guard_status(
     reason: str,
     *,
@@ -687,16 +670,10 @@ def _current_missing_claims(reflection: ReflectionStep) -> list[str]:
 
 def _missing_claim_covered_by_results(claim: str, results: list[SearchResult]) -> bool:
     """Reject retries when the claimed gap already appears in retrieved evidence."""
-    claim_terms = [
-        token for token in _ANCHOR_PATTERN.findall(claim)
-        if token and token not in _ANCHOR_STOPWORDS
-    ]
+    claim_terms = [token for token in _ANCHOR_PATTERN.findall(claim) if token and token not in _ANCHOR_STOPWORDS]
     if not claim_terms:
         return False
-    corpus = "\n".join(
-        (result.chunk.enriched_content or result.chunk.content or "").casefold()
-        for result in results
-    )
+    corpus = "\n".join((result.chunk.enriched_content or result.chunk.content or "").casefold() for result in results)
     return all(term.casefold() in corpus for term in claim_terms)
 
 
@@ -715,11 +692,7 @@ def _should_block_reflection_retry(state: SelfCorrectionState) -> tuple[bool, st
             return True, f"reflection requested already-covered gap: {claim}"
 
     history = list(state.get("reflection_history", []))
-    previous_claim_sets = [
-        set(_current_missing_claims(step))
-        for step in history[:-1]
-        if _current_missing_claims(step)
-    ]
+    previous_claim_sets = [set(_current_missing_claims(step)) for step in history[:-1] if _current_missing_claims(step)]
     current_claim_set = set(current_claims)
     if previous_claim_sets and current_claim_set == previous_claim_sets[-1]:
         return True, "reflection repeated the same missing claims consecutively"
@@ -762,11 +735,7 @@ def _append_memory_entry(
 ) -> list[WorkflowMemoryEntry]:
     """Append one structured memory entry and sync it into the trace."""
     memory = list(state.get("memory", []))
-    normalized_metadata = {
-        key: value
-        for key, value in (metadata or {}).items()
-        if value not in (None, "", [], {}, ())
-    }
+    normalized_metadata = {key: value for key, value in (metadata or {}).items() if value not in (None, "", [], {}, ())}
     memory.append(
         WorkflowMemoryEntry(
             stage=stage,
@@ -899,14 +868,12 @@ def _interpret_verdict_node(state: SelfCorrectionState) -> dict[str, Any]:
     if reflection is None:
         return {"next_step": "finish"}
 
-
     reflection.verdict = resolve_reflection_verdict(reflection)
 
     pending_signal = state.get("pending_reflection_signal")
     if "skip_reflection" in reflection.candidate_fix_paths:
         memory_message = (
-            f"{state['current_tool']} skipped LLM reflection with "
-            f"top vector signal {pending_signal:.2f}"
+            f"{state['current_tool']} skipped LLM reflection with top vector signal {pending_signal:.2f}"
             if pending_signal is not None
             else f"{state['current_tool']} skipped LLM reflection"
         )
@@ -1066,17 +1033,13 @@ def _prepare_retry(state: SelfCorrectionState) -> dict[str, Any]:
     trace = state.get("trace")
     if trace is not None:
         fallback_reason = (
-            f"reflection verdict={reflection.verdict or 'unknown'}, "
-            f"evidence={reflection.evidence_status or 'unknown'}"
+            f"reflection verdict={reflection.verdict or 'unknown'}, evidence={reflection.evidence_status or 'unknown'}"
         )
         trace.escalation_steps.append(
             EscalationStep(
                 from_tool=current_tool,
                 to_tool=next_tool,
-                reason=(
-                    f"{reflection.failure_type or 'low_score'}: "
-                    f"{reflection.reasoning or fallback_reason}"
-                ),
+                reason=(f"{reflection.failure_type or 'low_score'}: {reflection.reasoning or fallback_reason}"),
                 rephrased_query=next_query,
                 cached_sources_reused=cached_sources_reused,
             )
@@ -1186,7 +1149,7 @@ def run_self_correction_workflow(
         "best_results": [],
         "best_score": 0.0,
         "best_attempt": 0,
-        "best_rank": (-1, -1, -1, -10**9),
+        "best_rank": (-1, -1, -1, -(10**9)),
         "retries_used": max_retries,
         "reused_sources": [],
         "executed_sources": [],
@@ -1365,9 +1328,7 @@ def _retrieve_evidence(state: AgentWorkflowState) -> dict[str, Any]:
         state["decision"],
     )
     initial_tools = list(retrieval_plan.initial_tools)
-    outputs: list[
-        InitialRetrievalOutput
-    ] = []
+    outputs: list[InitialRetrievalOutput] = []
 
     def run_one(tool: str):
         tool_memory = list(state.get("memory", []))
@@ -1394,10 +1355,7 @@ def _retrieve_evidence(state: AgentWorkflowState) -> dict[str, Any]:
         outputs.append(run_one(initial_tools[0]))
     else:
         with ThreadPoolExecutor(max_workers=len(initial_tools)) as executor:
-            futures = {
-                executor.submit(run_one, tool): index
-                for index, tool in enumerate(initial_tools)
-            }
+            futures = {executor.submit(run_one, tool): index for index, tool in enumerate(initial_tools)}
             completed: list[
                 tuple[
                     int,
@@ -1456,9 +1414,7 @@ def _generate_answer_node(state: AgentWorkflowState) -> dict[str, Any]:
     started = time.perf_counter()
     reflection_history = list(state.get("reflection_history", []))
     last_reflection = reflection_history[-1] if reflection_history else None
-    reflection_verdict = (
-        resolve_reflection_verdict(last_reflection) if last_reflection is not None else ""
-    )
+    reflection_verdict = resolve_reflection_verdict(last_reflection) if last_reflection is not None else ""
     can_start, budget_memory = _start_llm_call_or_skip(state, "generate_answer")
     if not can_start:
         qa_result = QAResult(
@@ -1486,9 +1442,7 @@ def _generate_answer_node(state: AgentWorkflowState) -> dict[str, Any]:
                 retrieval_status=qa_result.retrieval_status,
             ),
         }
-        qa_result = qa_result.model_copy(
-            update=update_payload
-        )
+        qa_result = qa_result.model_copy(update=update_payload)
     settings = state.get("settings")
     model_name = ""
     if settings is not None:
@@ -1565,7 +1519,6 @@ def _after_generate(state: AgentWorkflowState) -> str:
     if ops is None or ops.extract_claims is None or ops.verify_claims is None:
         return _legacy_after_generate_branch(state)
 
-
     # Primary trigger: the answer itself contains multiple verifiable facts,
     # regardless of how the router classified the query. This covers cases
     # where the router misclassified a compound / relation query as simple.
@@ -1581,9 +1534,7 @@ def _after_generate(state: AgentWorkflowState) -> str:
         "comprehensive_search",
         "full_document_read",
     }
-    if trace is not None and any(
-        step.tool_name in graph_tools_used for step in trace.tool_steps
-    ):
+    if trace is not None and any(step.tool_name in graph_tools_used for step in trace.tool_steps):
         return "verify_answer"
 
     return _legacy_after_generate_branch(state)
@@ -1690,18 +1641,20 @@ def _verify_answer_node(state: AgentWorkflowState) -> dict[str, Any]:
         return {"qa_result": updated_qa, "memory": memory}
 
     if verification.unsupported_claims:
-        answer_status = (
-            "retry_required" if verification.status == "retry_required" else "partial"
+        answer_status = "retry_required" if verification.status == "retry_required" else "partial"
+        updated_qa = qa_result.model_copy(
+            update={
+                "answer_status": answer_status,
+                "verification_status": verification.status,
+            }
         )
-        updated_qa = qa_result.model_copy(update={
-            "answer_status": answer_status,
-            "verification_status": verification.status,
-        })
     else:
-        updated_qa = qa_result.model_copy(update={
-            "answer_status": "verified",
-            "verification_status": verification.status,
-        })
+        updated_qa = qa_result.model_copy(
+            update={
+                "answer_status": "verified",
+                "verification_status": verification.status,
+            }
+        )
 
     if state["trace"].generator_step is not None:
         state["trace"].generator_step.answer_status = updated_qa.answer_status
@@ -1738,11 +1691,7 @@ def _after_verify(state: AgentWorkflowState) -> str:
     retryable_partial = (
         verification is not None
         and verification.status == "partial"
-        and any(
-            gap.claim_role == "core"
-            and gap.gap_type in {"missing_numeric_fact", "missing_entity"}
-            for gap in gaps
-        )
+        and any(gap.claim_role == "core" and gap.gap_type in {"missing_numeric_fact", "missing_entity"} for gap in gaps)
     )
     if (
         verification is not None

@@ -4,46 +4,23 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from rag_core.models import QueryType, SearchResult
+from rag_core.models import SearchResult
 
 _DEFAULT_CHANNEL_PRIORITY = ["vector", "bm25", "graph"]
-_QUERY_TYPE_CHANNEL_PRIORITY: dict[QueryType, list[str]] = {
-    QueryType.SIMPLE: ["vector", "bm25", "graph"],
-    QueryType.RELATION: ["graph", "vector", "bm25"],
-    QueryType.MULTI_HOP: ["graph", "vector", "bm25"],
-    QueryType.GLOBAL: ["vector", "bm25", "graph"],
-    QueryType.TEMPORAL: ["bm25", "vector", "graph"],
-}
 
 
 def resolve_channel_priority(
-    query_type: QueryType | str | None = None,
+    query_type: object | None = None,
     enabled_channels: list[str] | None = None,
 ) -> list[str]:
     """Resolve deterministic channel order without numeric fusion weights."""
-    normalized_query_type = _coerce_query_type(query_type)
-    priority = list(
-        _QUERY_TYPE_CHANNEL_PRIORITY.get(
-            normalized_query_type,
-            _DEFAULT_CHANNEL_PRIORITY,
-        )
-    )
+    del query_type
+    priority = list(_DEFAULT_CHANNEL_PRIORITY)
     if enabled_channels is not None:
         enabled = set(enabled_channels)
         priority = [channel for channel in priority if channel in enabled]
         priority.extend(channel for channel in enabled_channels if channel not in priority)
     return priority
-
-
-def _coerce_query_type(query_type: QueryType | str | None) -> QueryType | None:
-    if isinstance(query_type, QueryType):
-        return query_type
-    if isinstance(query_type, str):
-        try:
-            return QueryType(query_type)
-        except ValueError:
-            return None
-    return None
 
 
 def _result_key(result: SearchResult) -> str:
@@ -60,9 +37,7 @@ def _collect_normalized_scores(
         for result in results:
             if result.score_normalized is None:
                 continue
-            normalized_scores.setdefault(_result_key(result), []).append(
-                result.score_normalized
-            )
+            normalized_scores.setdefault(_result_key(result), []).append(result.score_normalized)
     return normalized_scores
 
 
@@ -84,7 +59,7 @@ class FusionEngine:
         self,
         *result_lists: list[SearchResult],
         top_k: int,
-        query_type: QueryType | str | None = None,
+        query_type: object | None = None,
         channel_priority: list[str] | None = None,
     ) -> list[FusionView]:
         """Merge channels by priority, preserving each provider's internal order."""
@@ -131,7 +106,7 @@ class FusionEngine:
         self,
         *result_lists: list[SearchResult],
         top_k: int,
-        query_type: QueryType | str | None = None,
+        query_type: object | None = None,
         channel_priority: list[str] | None = None,
     ) -> list[SearchResult]:
         views = self.build_views(
