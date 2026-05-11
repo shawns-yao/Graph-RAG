@@ -1137,6 +1137,8 @@ def _merge_entities(entities: list[Entity]) -> list[Entity]:
     """Merge duplicate entities and accumulate aliases / provenance."""
     merged: list[Entity] = []
     for entity in entities:
+        if _is_noisy_entity_candidate(entity.name):
+            continue
         norm = f"{_normalized_name(entity.name)}::{entity.entity_type.strip().casefold()}"
         target: Entity | None = None
         for candidate in merged:

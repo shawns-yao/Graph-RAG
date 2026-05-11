@@ -5,6 +5,7 @@ from rag_core.models import Chunk, Entity
 from agentic_graph_rag.indexing.skeleton import (
     _infer_sentence_relations,
     _inject_medical_phrase_entities,
+    _merge_entities,
     _parse_extraction_response,
     _strip_candidate_noise,
     build_knn_graph,
@@ -109,3 +110,12 @@ def test_relation_fragment_candidate_is_not_injected_as_entity():
 
     assert all(entity.name != "替代方案" for entity in entities)
     assert all(not entity.name.startswith("--") for entity in entities)
+
+
+def test_merge_entities_drops_low_value_heading_fragments():
+    noisy = Entity(id="noise", name="关键事实", entity_type="Procedure")
+    useful = Entity(id="acei", name="ACEI", entity_type="DrugClass")
+
+    merged = _merge_entities([noisy, useful])
+
+    assert [entity.name for entity in merged] == ["ACEI"]
