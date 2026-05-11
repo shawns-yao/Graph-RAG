@@ -129,6 +129,17 @@ _NEGATION_TRIGGERS = (
     "denies",
 )
 _NEGATION_SCOPE_CHARS = 18
+_RELATION_FRAGMENT_TERMS = {
+    "不良反应",
+    "处理措施",
+    "替代方案",
+    "关键事实",
+    "优势",
+    "剂量",
+    "起效时间",
+    "持续时间",
+    "推荐治疗",
+}
 _ALIAS_ENTITY_TYPE_OVERRIDES: dict[str, str] = {
     "ACEI": "DrugClass",
     "ARB": "DrugClass",
@@ -220,7 +231,27 @@ def _alias_entity_type(group: tuple[str, ...]) -> str:
 
 
 def _strip_candidate_noise(text: str) -> str:
-    return text.strip(" ,.;:()[]{}，。；：、")
+    cleaned = re.sub(r"\s+", " ", str(text or ""))
+    cleaned = cleaned.strip(" ,.;:()[]{}，。；：、")
+    cleaned = re.sub(r"^(?:[-*•]+|[—–]+|>)+\s*", "", cleaned)
+    cleaned = re.sub(r"\s*(?:[-*•]+|[—–]+|>)+$", "", cleaned)
+    cleaned = re.sub(r"^(?:--+|[-=]+>)\s*", "", cleaned)
+    cleaned = re.sub(r"\s*(?:--+|[-=]+>)$", "", cleaned)
+    return cleaned.strip(" ,.;:()[]{}，。；：、")
+
+
+def _is_noisy_entity_candidate(text: str) -> bool:
+    normalized = _normalized_name(text)
+    compact = re.sub(r"\s+", "", text)
+    if not normalized or normalized in {"-", "--", "->", "-->"}:
+        return True
+    if text.startswith(("--", "->", "-->", "- ")) or text.endswith(("--", "->", "-->", " -")):
+        return True
+    if compact in _RELATION_FRAGMENT_TERMS:
+        return True
+    if re.fullmatch(r"[-*•>\s]+", text):
+        return True
+    return False
 
 
 def _guess_medical_entity_type(text: str) -> str:
@@ -240,7 +271,7 @@ def _threshold_candidates(text: str) -> list[str]:
         for match in pattern.finditer(text):
             phrase = _strip_candidate_noise(match.group(0))
             normalized = _normalized_name(phrase)
-            if len(phrase) < 3 or normalized in seen:
+            if len(phrase) < 3 or _is_noisy_entity_candidate(phrase) or normalized in seen:
                 continue
             seen[normalized] = phrase
     return list(seen.values())
@@ -336,7 +367,11 @@ def _pattern_candidates(text: str) -> list[tuple[str, str | None]]:
     for pattern, entity_type in _MEDICAL_TERM_PATTERNS:
         for match in pattern.finditer(text):
             candidate = _strip_candidate_noise(match.group(0))
-            if len(candidate) >= 2 and not _is_negated_surface(text, candidate):
+            if (
+                len(candidate) >= 2
+                and not _is_noisy_entity_candidate(candidate)
+                and not _is_negated_surface(text, candidate)
+            ):
                 candidates.append((candidate, entity_type))
 
     for candidate in _threshold_candidates(text):
@@ -614,7 +649,7 @@ def extract_candidate_entities(text: str, max_candidates: int = 12) -> list[str]
             for ent in doc.ents:
                 candidate = ent.text.strip()
                 norm = _normalized_name(candidate)
-                if len(candidate) >= 3 and norm not in seen:
+                if len(candidate) >= 3 and not _is_noisy_entity_candidate(candidate) and norm not in seen:
                     seen[norm] = candidate
         except Exception as exc:
             logger.debug("spaCy candidate extraction failed: %s", exc)
@@ -629,13 +664,13 @@ def extract_candidate_entities(text: str, max_candidates: int = 12) -> list[str]
         for match in re.finditer(pattern, text):
             candidate = _strip_candidate_noise(match.group(0))
             norm = _normalized_name(candidate)
-            if len(candidate) < 3 or norm in _STOP_WORDS or norm in seen:
+            if len(candidate) < 3 or _is_noisy_entity_candidate(candidate) or norm in _STOP_WORDS or norm in seen:
                 continue
             seen[norm] = candidate
 
     for candidate, _ in _pattern_candidates(text):
         norm = _normalized_name(candidate)
-        if len(candidate) < 2 or norm in _STOP_WORDS or norm in seen:
+        if len(candidate) < 2 or _is_noisy_entity_candidate(candidate) or norm in _STOP_WORDS or norm in seen:
             continue
         seen[norm] = candidate
 

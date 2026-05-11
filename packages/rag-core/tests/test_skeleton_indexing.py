@@ -6,6 +6,7 @@ from agentic_graph_rag.indexing.skeleton import (
     _infer_sentence_relations,
     _inject_medical_phrase_entities,
     _parse_extraction_response,
+    _strip_candidate_noise,
     build_knn_graph,
     filter_low_information_chunks,
     link_peripheral_keywords,
@@ -94,3 +95,17 @@ def test_negated_peripheral_mention_does_not_link_entity():
     relationships = link_peripheral_keywords([chunk], [entity])
 
     assert relationships == []
+
+
+def test_candidate_noise_cleanup_removes_markdown_relation_fragments():
+    assert _strip_candidate_noise("--替代方案") == "替代方案"
+    assert _strip_candidate_noise("eGFR < 30\n-") == "eGFR < 30"
+
+
+def test_relation_fragment_candidate_is_not_injected_as_entity():
+    chunk = Chunk(id="c_noise", content="- 干咳 --替代方案--> ARB")
+
+    entities = _inject_medical_phrase_entities(chunk)
+
+    assert all(entity.name != "替代方案" for entity in entities)
+    assert all(not entity.name.startswith("--") for entity in entities)

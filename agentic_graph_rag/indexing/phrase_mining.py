@@ -110,15 +110,21 @@ def _paren_aliases(text: str) -> list[tuple[str, str]]:
 
 def _clean_phrase(text: str) -> str:
     cleaned = re.sub(r"\s+", " ", str(text or "")).strip(" ,.;:()[]{}，。；：、")
+    cleaned = re.sub(r"^(?:[-*•]+|[—–]+|>)+\s*", "", cleaned)
+    cleaned = re.sub(r"\s*(?:[-*•]+|[—–]+|>)+$", "", cleaned)
+    cleaned = re.sub(r"^(?:--+|[-=]+>)\s*", "", cleaned)
+    cleaned = re.sub(r"\s*(?:--+|[-=]+>)$", "", cleaned)
     cleaned = re.sub(r"^(?:和|与|及|或|在|对|为|是|应|需)+", "", cleaned)
     cleaned = re.sub(r"(?:的|时|后|前|中|者)$", "", cleaned)
-    return cleaned.strip()
+    return cleaned.strip(" ,.;:()[]{}，。；：、")
 
 
 def _valid_candidate(phrase: str) -> bool:
     if len(phrase) < 2 or len(phrase) > 40:
         return False
     if phrase.casefold() in _LOW_VALUE_TERMS:
+        return False
+    if phrase.startswith(("--", "->", "-->", "- ")) or phrase.endswith(("--", "->", "-->", " -")):
         return False
     if re.fullmatch(r"\d+(?:\.\d+)?", phrase):
         return False
