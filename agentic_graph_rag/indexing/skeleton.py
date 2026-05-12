@@ -258,6 +258,8 @@ def _guess_medical_entity_type(text: str) -> str:
     for pattern, entity_type in _MEDICAL_TERM_PATTERNS:
         if pattern.fullmatch(text):
             return entity_type
+    if any(token in text for token in ("疾病", "病", "COPD")):
+        return "Disease"
     if any(token in text for token in ("利尿剂", "沙坦", "普利", "列净", "单抗")):
         return "DrugClass"
     if any(token in text for token in ("检查", "指标", "水平", "eGFR", "HbA1c")):

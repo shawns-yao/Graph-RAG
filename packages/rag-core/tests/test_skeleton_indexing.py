@@ -3,7 +3,9 @@
 from rag_core.models import Chunk, Entity, Relationship
 
 from agentic_graph_rag.indexing.dual_node import _canonicalize_relationships
+from agentic_graph_rag.indexing.phrase_mining import mine_phrase_candidates
 from agentic_graph_rag.indexing.skeleton import (
+    _guess_medical_entity_type,
     _infer_sentence_relations,
     _inject_medical_phrase_entities,
     _merge_entities,
@@ -162,3 +164,18 @@ def test_relationship_canonicalize_uses_merged_aliases():
 
     assert canonicalized[0].source == "慢性阻塞性肺疾病"
     assert canonicalized[0].target == "SABA"
+
+
+def test_phrase_mining_extracts_cjk_parenthetical_alias():
+    chunk = Chunk(id="c_alias", content="ACEI（血管紧张素转换酶抑制剂）可引起干咳。")
+
+    candidates = mine_phrase_candidates([chunk])
+
+    assert any(
+        candidate.phrase == "ACEI" and "血管紧张素转换酶抑制剂" in candidate.aliases
+        for candidate in candidates
+    )
+
+
+def test_guess_medical_entity_type_keeps_disease_names_as_disease():
+    assert _guess_medical_entity_type("慢性阻塞性肺疾病") == "Disease"

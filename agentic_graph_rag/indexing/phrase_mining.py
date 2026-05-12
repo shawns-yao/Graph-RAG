@@ -15,7 +15,7 @@ from agentic_graph_rag.text_signals import build_tfidf_profile, rank_keywords
 
 _PAREN_ALIAS_RE = re.compile(
     r"(?P<label>[\u4e00-\u9fffA-Za-z][\u4e00-\u9fffA-Za-z0-9+\-/. ]{1,40})"
-    r"[（(](?P<alias>[A-Za-z][A-Za-z0-9+\-/.]{1,30})(?:[，,、][^）)]*)?[）)]"
+    r"[（(](?P<alias>[\u4e00-\u9fffA-Za-z][\u4e00-\u9fffA-Za-z0-9+\-/. ]{1,30})(?:[，,、][^）)]*)?[）)]"
 )
 _HEADING_LINE_RE = re.compile(r"^(?P<label>[^：:\n]{2,40})[：:]$")
 _LIST_HEAD_RE = re.compile(r"^[-*•]\s*(?P<label>[^：:\n]{2,40})[：:]")
