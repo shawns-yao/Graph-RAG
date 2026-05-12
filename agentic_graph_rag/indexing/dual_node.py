@@ -96,6 +96,7 @@ def create_phrase_nodes(
     if not entities:
         return []
 
+    entities = _merge_entities_by_explicit_aliases(entities)
     entities = _canonicalize_entities_against_existing_nodes(entities, driver)
     phrase_nodes: list[PhraseNode] = []
     scores = pagerank_scores or {}
@@ -143,6 +144,61 @@ def create_phrase_nodes(
 
     logger.info("Created %d PhraseNodes in Neo4j", len(phrase_nodes))
     return phrase_nodes
+
+
+def _merge_entities_by_explicit_aliases(entities: list[Entity]) -> list[Entity]:
+    """Merge same-type entities when explicit name/alias surfaces overlap."""
+    merged: list[Entity] = []
+    for entity in entities:
+        target: Entity | None = None
+        entity_type = entity.entity_type.strip().casefold()
+        entity_signatures = _entity_alias_signatures(entity)
+        for candidate in merged:
+            if candidate.entity_type.strip().casefold() != entity_type:
+                continue
+            if _entity_alias_signatures(candidate) & entity_signatures:
+                target = candidate
+                break
+        if target is None:
+            merged.append(entity.model_copy(deep=True))
+            continue
+
+        aliases = _sorted_aliases([
+            target.name,
+            *(str(alias) for alias in target.metadata.get("aliases", [])),
+            entity.name,
+            *(str(alias) for alias in entity.metadata.get("aliases", [])),
+        ])
+        metadata = dict(target.metadata)
+        metadata["aliases"] = aliases
+        merged[merged.index(target)] = target.model_copy(
+            update={
+                "name": _preferred_canonical_name(target.name, entity.name),
+                "description": target.description or entity.description,
+                "metadata": metadata,
+                "entity_confidence": max(target.entity_confidence, entity.entity_confidence),
+            }
+        )
+    return merged
+
+
+def _entity_alias_signatures(entity: Entity) -> set[str]:
+    signatures: set[str] = set()
+    for surface in [entity.name, *entity.metadata.get("aliases", [])]:
+        for signature in _relationship_alias_signatures(str(surface)):
+            signatures.add(signature)
+    return signatures
+
+
+def _preferred_canonical_name(left: str, right: str) -> str:
+    return max([left, right], key=_canonical_name_rank)
+
+
+def _canonical_name_rank(name: str) -> tuple[int, int, int]:
+    text = name.strip()
+    acronym = 1 if re.fullmatch(r"[A-Z0-9]{2,10}", text) else 0
+    cjk = 1 if _CJK_RE.search(text) else 0
+    return (cjk, -acronym, len(text))
 
 
 def _canonicalize_entities_against_existing_nodes(
