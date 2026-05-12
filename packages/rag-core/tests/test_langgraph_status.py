@@ -6,6 +6,7 @@ from rag_core.models import (
     PipelineTrace,
     QAResult,
     QueryType,
+    ReflectionStep,
     RouterDecision,
     SearchResult,
     ToolStep,
@@ -25,9 +26,11 @@ from agentic_graph_rag.agent.langgraph_workflow import (
     _execute_correction_tool_node,
     _generate_answer_node,
     _initial_tool_plan,
+    _next_step_after_reflection,
     _plan_correction_node,
     _retrieve_evidence,
     _route_query,
+    _should_block_reflection_retry,
     _verify_answer_node,
 )
 from agentic_graph_rag.agent.need_resolver import NeedResolution
@@ -61,6 +64,60 @@ def test_answer_guard_transport_failure_is_partial():
     )
 
     assert status == "partial"
+
+
+def test_reflection_retry_blocks_missing_entity_already_in_evidence():
+    reflection = ReflectionStep(
+        verdict="retry",
+        evidence_status="insufficient",
+        required_tool="bm25_search",
+        missing_entities=["噻托溴铵"],
+    )
+    state = {
+        "last_reflection": reflection,
+        "reflection_history": [reflection],
+        "results": [
+            SearchResult(
+                chunk=Chunk(content="噻托溴铵 --剂量--> 18 μg每日1次"),
+                score=1.0,
+            )
+        ],
+    }
+
+    should_block, reason = _should_block_reflection_retry(state)
+
+    assert should_block
+    assert "already-covered gap" in reason
+
+
+def test_reflection_retry_blocks_already_attempted_required_tool():
+    reflection = ReflectionStep(
+        verdict="retry",
+        evidence_status="insufficient",
+        required_tool="bm25_search",
+        missing_information=["更多剂量证据"],
+    )
+    state = {
+        "last_reflection": reflection,
+        "reflection_history": [reflection],
+        "results": [SearchResult(chunk=Chunk(content="旧证据"), score=1.0)],
+        "tried_tools": ["vector_search", "bm25_search"],
+    }
+
+    should_block, reason = _should_block_reflection_retry(state)
+
+    assert should_block
+    assert "already attempted required tool" in reason
+
+
+def test_answer_verdict_on_empty_evidence_does_not_finish_when_retry_available():
+    reflection = ReflectionStep(verdict="answer", evidence_status="empty")
+    state = {
+        "attempt": 0,
+        "max_retries": 1,
+    }
+
+    assert _next_step_after_reflection(state, reflection) == "prepare_retry"
 
 
 def test_short_numeric_threshold_answer_is_verifiable():

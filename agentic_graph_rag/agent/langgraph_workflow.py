@@ -503,7 +503,7 @@ def _should_retry_after_answer_verdict(
     evidence_status = (reflection.evidence_status or "").strip().lower()
     if evidence_status not in {"partial", "insufficient", "empty"}:
         return False
-    return state["attempt"] < state["max_retries"]
+    return state.get("attempt", 0) < state.get("max_retries", 0)
 
 
 def _next_step_after_reflection(
@@ -654,6 +654,11 @@ def _should_block_reflection_retry(state: SelfCorrectionState) -> tuple[bool, st
     reflection = state.get("last_reflection")
     if reflection is None:
         return False, ""
+
+    required_tool = (reflection.required_tool or "").strip()
+    tried_tools = {str(tool).strip() for tool in state.get("tried_tools", []) if str(tool).strip()}
+    if required_tool and required_tool in tried_tools:
+        return True, f"reflection requested already attempted required tool: {required_tool}"
 
     current_claims = _current_missing_claims(reflection)
     if not current_claims:
