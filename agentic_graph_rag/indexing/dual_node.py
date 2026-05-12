@@ -96,6 +96,7 @@ def create_phrase_nodes(
     if not entities:
         return []
 
+    entities = _canonicalize_entities_against_existing_nodes(entities, driver)
     phrase_nodes: list[PhraseNode] = []
     scores = pagerank_scores or {}
 
@@ -142,6 +143,78 @@ def create_phrase_nodes(
 
     logger.info("Created %d PhraseNodes in Neo4j", len(phrase_nodes))
     return phrase_nodes
+
+
+def _canonicalize_entities_against_existing_nodes(
+    entities: list[Entity],
+    driver: Driver,
+) -> list[Entity]:
+    """Reuse existing PhraseNodes when explicit aliases identify the same type."""
+    if not entities:
+        return []
+
+    with open_neo4j_session(driver) as session:
+        rows = session.run(
+            f"""
+            MATCH (p:{PHRASE_LABEL})
+            RETURN p.id AS id,
+                   p.name AS name,
+                   p.entity_type AS entity_type,
+                   p.description AS description,
+                   p.aliases AS aliases
+            """
+        ).data()
+
+    if not rows:
+        return entities
+
+    by_type_signature: dict[tuple[str, str], dict] = {}
+    for row in rows:
+        entity_type = str(row.get("entity_type") or "").strip().casefold()
+        surfaces = [
+            str(row.get("name") or ""),
+            *(str(alias) for alias in (row.get("aliases") or [])),
+        ]
+        for surface in surfaces:
+            for signature in _relationship_alias_signatures(surface):
+                by_type_signature[(entity_type, signature)] = row
+
+    canonicalized: list[Entity] = []
+    for entity in entities:
+        entity_type = entity.entity_type.strip().casefold()
+        surfaces = [entity.name, *entity.metadata.get("aliases", [])]
+        match: dict | None = None
+        for surface in surfaces:
+            for signature in _relationship_alias_signatures(str(surface)):
+                match = by_type_signature.get((entity_type, signature))
+                if match:
+                    break
+            if match:
+                break
+        if match is None:
+            canonicalized.append(entity)
+            continue
+
+        aliases = _sorted_aliases([
+            str(match.get("name") or ""),
+            *(str(alias) for alias in (match.get("aliases") or [])),
+            entity.name,
+            *(str(alias) for alias in entity.metadata.get("aliases", [])),
+        ])
+        metadata = dict(entity.metadata)
+        metadata["aliases"] = aliases
+        canonicalized.append(
+            entity.model_copy(
+                update={
+                    "id": str(match.get("id") or entity.id),
+                    "name": str(match.get("name") or entity.name),
+                    "entity_type": str(match.get("entity_type") or entity.entity_type),
+                    "description": entity.description or str(match.get("description") or ""),
+                    "metadata": metadata,
+                }
+            )
+        )
+    return canonicalized
 
 
 def persist_entity_alias_metadata(
