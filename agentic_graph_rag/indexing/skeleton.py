@@ -1139,20 +1139,25 @@ def _merge_entities(entities: list[Entity]) -> list[Entity]:
     for entity in entities:
         if _is_noisy_entity_candidate(entity.name):
             continue
-        norm = f"{_normalized_name(entity.name)}::{entity.entity_type.strip().casefold()}"
+        entity_type_key = entity.entity_type.strip().casefold()
+        entity_signatures = _entity_alias_signatures(entity)
         target: Entity | None = None
         for candidate in merged:
-            candidate_norm = (
-                f"{_normalized_name(candidate.name)}::"
-                f"{candidate.entity_type.strip().casefold()}"
-            )
-            if candidate_norm == norm:
+            if candidate.entity_type.strip().casefold() != entity_type_key:
+                continue
+            if _entity_alias_signatures(candidate) & entity_signatures:
                 target = candidate
                 break
         if target is None:
             target = entity.model_copy(deep=True)
             target.metadata.setdefault("aliases", [])
             target.metadata.setdefault("source_chunks", [])
+            source_chunk = entity.metadata.get("source_chunk")
+            if source_chunk:
+                target.metadata["source_chunks"] = sorted({
+                    *target.metadata.get("source_chunks", []),
+                    source_chunk,
+                })
             target.metadata["confidence"] = target.entity_confidence
             merged.append(target)
             continue
@@ -1177,6 +1182,23 @@ def _merge_entities(entities: list[Entity]) -> list[Entity]:
             target.entity_confidence = entity.entity_confidence
             target.metadata["confidence"] = entity.entity_confidence
     return merged
+
+
+def _entity_alias_signatures(entity: Entity) -> set[str]:
+    """Return deterministic signatures for explicit entity names and aliases."""
+    values = [entity.name, *entity.metadata.get("aliases", [])]
+    signatures: set[str] = set()
+    for value in values:
+        text = str(value).strip()
+        if not text:
+            continue
+        normalized = _normalized_name(text)
+        if normalized:
+            signatures.add(normalized)
+        compact = dual_normalize_alias_text(text)
+        if compact:
+            signatures.add(compact)
+    return signatures
 
 
 # ---------------------------------------------------------------------------

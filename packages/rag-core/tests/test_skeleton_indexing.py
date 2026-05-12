@@ -1,7 +1,8 @@
 """Tests for skeleton indexing safeguards."""
 
-from rag_core.models import Chunk, Entity
+from rag_core.models import Chunk, Entity, Relationship
 
+from agentic_graph_rag.indexing.dual_node import _canonicalize_relationships
 from agentic_graph_rag.indexing.skeleton import (
     _infer_sentence_relations,
     _inject_medical_phrase_entities,
@@ -119,3 +120,45 @@ def test_merge_entities_drops_low_value_heading_fragments():
     merged = _merge_entities([noisy, useful])
 
     assert [entity.name for entity in merged] == ["ACEI"]
+
+
+def test_merge_entities_merges_explicit_alias_surfaces():
+    canonical = Entity(
+        id="copd",
+        name="慢性阻塞性肺疾病",
+        entity_type="Disease",
+        metadata={"aliases": ["COPD", "慢阻肺"], "source_chunk": "c1"},
+    )
+    alias_surface = Entity(
+        id="alias",
+        name="COPD",
+        entity_type="Disease",
+        metadata={"source_chunk": "c2"},
+    )
+
+    merged = _merge_entities([canonical, alias_surface])
+
+    assert len(merged) == 1
+    assert merged[0].name == "慢性阻塞性肺疾病"
+    assert set(merged[0].metadata["aliases"]) >= {"COPD", "慢阻肺"}
+    assert set(merged[0].metadata["source_chunks"]) == {"c1", "c2"}
+
+
+def test_relationship_canonicalize_uses_merged_aliases():
+    entities = [
+        Entity(
+            id="copd",
+            name="慢性阻塞性肺疾病",
+            entity_type="Disease",
+            metadata={"aliases": ["COPD", "慢阻肺"]},
+        ),
+        Entity(id="saba", name="SABA", entity_type="DrugClass"),
+    ]
+    relationships = [
+        Relationship(source="COPD", target="SABA", relation_type="推荐治疗")
+    ]
+
+    canonicalized = _canonicalize_relationships(relationships, entities)
+
+    assert canonicalized[0].source == "慢性阻塞性肺疾病"
+    assert canonicalized[0].target == "SABA"
