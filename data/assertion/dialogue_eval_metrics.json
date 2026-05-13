@@ -1,0 +1,81 @@
+{
+  "total": 1200,
+  "accuracy": 0.9017,
+  "per_label": {
+    "affirmed": {
+      "precision": 0.8298,
+      "recall": 0.975,
+      "f1": 0.8966,
+      "support": 200
+    },
+    "negated": {
+      "precision": 0.8586,
+      "recall": 0.82,
+      "f1": 0.8389,
+      "support": 200
+    },
+    "speculated": {
+      "precision": 0.8646,
+      "recall": 0.99,
+      "f1": 0.9231,
+      "support": 200
+    },
+    "conditional": {
+      "precision": 0.898,
+      "recall": 0.88,
+      "f1": 0.8889,
+      "support": 200
+    },
+    "historical": {
+      "precision": 1.0,
+      "recall": 0.935,
+      "f1": 0.9664,
+      "support": 200
+    },
+    "family_history": {
+      "precision": 1.0,
+      "recall": 0.81,
+      "f1": 0.895,
+      "support": 200
+    }
+  },
+  "confusion": {
+    "affirmed": {
+      "affirmed": 195,
+      "conditional": 2,
+      "negated": 1,
+      "speculated": 2
+    },
+    "negated": {
+      "affirmed": 26,
+      "negated": 164,
+      "conditional": 7,
+      "speculated": 3
+    },
+    "speculated": {
+      "speculated": 198,
+      "affirmed": 1,
+      "negated": 1
+    },
+    "conditional": {
+      "conditional": 176,
+      "affirmed": 10,
+      "negated": 2,
+      "speculated": 12
+    },
+    "historical": {
+      "historical": 187,
+      "negated": 3,
+      "conditional": 4,
+      "speculated": 5,
+      "affirmed": 1
+    },
+    "family_history": {
+      "family_history": 162,
+      "conditional": 7,
+      "speculated": 9,
+      "affirmed": 2,
+      "negated": 20
+    }
+  }
+}

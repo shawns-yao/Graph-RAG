@@ -1,0 +1,24 @@
+{
+  "total": 1200,
+  "labels": {
+    "affirmed": 200,
+    "negated": 200,
+    "speculated": 200,
+    "conditional": 200,
+    "historical": 200,
+    "family_history": 200
+  },
+  "agreements": {
+    "weak_model": 0.9958,
+    "weak_rule": 1.0,
+    "model_rule": 0.9958,
+    "needs_review": 0.0042
+  },
+  "counts": {
+    "weak_model": 1195,
+    "weak_rule": 1200,
+    "model_rule": 1195,
+    "needs_review": 5
+  },
+  "label_source": "silver_prelabeled"
+}

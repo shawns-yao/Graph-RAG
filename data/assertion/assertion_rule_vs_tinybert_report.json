@@ -1,0 +1,470 @@
+{
+  "silver": {
+    "rule_only": {
+      "total": 1200,
+      "accuracy": 1.0,
+      "elapsed_sec": 0.011,
+      "rows_per_sec": 112788.3,
+      "per_label": {
+        "affirmed": {
+          "precision": 1.0,
+          "recall": 1.0,
+          "f1": 1.0,
+          "support": 200
+        },
+        "negated": {
+          "precision": 1.0,
+          "recall": 1.0,
+          "f1": 1.0,
+          "support": 200
+        },
+        "speculated": {
+          "precision": 1.0,
+          "recall": 1.0,
+          "f1": 1.0,
+          "support": 200
+        },
+        "conditional": {
+          "precision": 1.0,
+          "recall": 1.0,
+          "f1": 1.0,
+          "support": 200
+        },
+        "historical": {
+          "precision": 1.0,
+          "recall": 1.0,
+          "f1": 1.0,
+          "support": 200
+        },
+        "family_history": {
+          "precision": 1.0,
+          "recall": 1.0,
+          "f1": 1.0,
+          "support": 200
+        }
+      },
+      "confusion": {
+        "affirmed": {
+          "affirmed": 200
+        },
+        "negated": {
+          "negated": 200
+        },
+        "speculated": {
+          "speculated": 200
+        },
+        "conditional": {
+          "conditional": 200
+        },
+        "historical": {
+          "historical": 200
+        },
+        "family_history": {
+          "family_history": 200
+        }
+      },
+      "first_errors": []
+    },
+    "tinybert_rule_guard": {
+      "total": 1200,
+      "accuracy": 0.9958,
+      "elapsed_sec": 0.472,
+      "rows_per_sec": 2544.7,
+      "per_label": {
+        "affirmed": {
+          "precision": 1.0,
+          "recall": 0.975,
+          "f1": 0.9873,
+          "support": 200
+        },
+        "negated": {
+          "precision": 0.995,
+          "recall": 1.0,
+          "f1": 0.9975,
+          "support": 200
+        },
+        "speculated": {
+          "precision": 0.9901,
+          "recall": 1.0,
+          "f1": 0.995,
+          "support": 200
+        },
+        "conditional": {
+          "precision": 0.9901,
+          "recall": 1.0,
+          "f1": 0.995,
+          "support": 200
+        },
+        "historical": {
+          "precision": 1.0,
+          "recall": 1.0,
+          "f1": 1.0,
+          "support": 200
+        },
+        "family_history": {
+          "precision": 1.0,
+          "recall": 1.0,
+          "f1": 1.0,
+          "support": 200
+        }
+      },
+      "confusion": {
+        "affirmed": {
+          "affirmed": 195,
+          "conditional": 2,
+          "negated": 1,
+          "speculated": 2
+        },
+        "negated": {
+          "negated": 200
+        },
+        "speculated": {
+          "speculated": 200
+        },
+        "conditional": {
+          "conditional": 200
+        },
+        "historical": {
+          "historical": 200
+        },
+        "family_history": {
+          "family_history": 200
+        }
+      },
+      "first_errors": [
+        {
+          "idx": 56,
+          "gold": "affirmed",
+          "pred": "conditional",
+          "entity": "糖尿病",
+          "text": "诱发早泄的因素，和很多方面都有关系，目前看来男性心理问题占大部分，比如在过去的性生活中有过不好的体验，亦或是夫妻感情不合等，其次，像一些对性知识并不了解的男性，长期手淫都会导致早泄，当然，除了以上几点，男性如果得病了也会容易发生早泄，常见的疾病主要是前列腺和泌尿系，或是糖尿病，心脑血管病变等，所以导致早泄发生的因素很多"
+        },
+        {
+          "idx": 70,
+          "gold": "affirmed",
+          "pred": "conditional",
+          "entity": "或有糖尿病",
+          "text": "早射的发生诱因，主要包括这些，其中较为常见的就是心理因素，比如，当代男性的压力是比较大的，所以长期处于高度紧张的状态，此外，和男性对性知识的漠视，长期观看不良视频就会引发早泄，当然，除了以上几点，男性如果得病了也会容易发生早泄，包括前列腺和泌尿系的一些炎症感染，或有糖尿病或是骨折等，所以疾病的发生和生活中很多方面都有关"
+        },
+        {
+          "idx": 168,
+          "gold": "affirmed",
+          "pred": "negated",
+          "entity": "中药治疗调养",
+          "text": "如果确认是慢性前列腺炎症，一般是无菌性炎症，可以口服中药治疗调养，症状逐渐获得压制。"
+        },
+        {
+          "idx": 187,
+          "gold": "affirmed",
+          "pred": "speculated",
+          "entity": "服用补肾益气药",
+          "text": "根据你的情况有频繁的性交，目前再次出现阳痿早泄考虑性交导致的肾经巨亏引来的，戒掉或者增加性交次数是前提，服用补肾益气药物救治。"
+        },
+        {
+          "idx": 188,
+          "gold": "affirmed",
+          "pred": "speculated",
+          "entity": "补肾益气药物救治",
+          "text": "根据你的情况有频繁的性交，目前再次出现阳痿早泄考虑性交导致的肾经巨亏引来的，戒掉或者增加性交次数是前提，服用补肾益气药物救治。"
+        }
+      ]
+    },
+    "delta_tiny_minus_rule": -0.0042
+  },
+  "synthetic_full": {
+    "rule_only": {
+      "total": 3170,
+      "accuracy": 0.7722,
+      "elapsed_sec": 0.032,
+      "rows_per_sec": 97682.7,
+      "per_label": {
+        "affirmed": {
+          "precision": 0.6813,
+          "recall": 0.6875,
+          "f1": 0.6844,
+          "support": 656
+        },
+        "negated": {
+          "precision": 0.7559,
+          "recall": 0.8936,
+          "f1": 0.819,
+          "support": 752
+        },
+        "speculated": {
+          "precision": 0.8221,
+          "recall": 0.8282,
+          "f1": 0.8251,
+          "support": 547
+        },
+        "conditional": {
+          "precision": 0.8562,
+          "recall": 0.9603,
+          "f1": 0.9053,
+          "support": 403
+        },
+        "historical": {
+          "precision": 0.7936,
+          "recall": 0.6212,
+          "f1": 0.6969,
+          "support": 520
+        },
+        "family_history": {
+          "precision": 0.7751,
+          "recall": 0.5548,
+          "f1": 0.6467,
+          "support": 292
+        }
+      },
+      "confusion": {
+        "affirmed": {
+          "affirmed": 451,
+          "historical": 52,
+          "speculated": 86,
+          "conditional": 58,
+          "negated": 7,
+          "family_history": 2
+        },
+        "negated": {
+          "negated": 672,
+          "family_history": 44,
+          "affirmed": 14,
+          "speculated": 7,
+          "historical": 12,
+          "conditional": 3
+        },
+        "speculated": {
+          "speculated": 453,
+          "negated": 57,
+          "family_history": 1,
+          "affirmed": 36
+        },
+        "conditional": {
+          "conditional": 387,
+          "affirmed": 8,
+          "speculated": 4,
+          "negated": 4
+        },
+        "historical": {
+          "historical": 323,
+          "affirmed": 59,
+          "negated": 134,
+          "speculated": 1,
+          "conditional": 3
+        },
+        "family_history": {
+          "historical": 20,
+          "family_history": 162,
+          "affirmed": 94,
+          "conditional": 1,
+          "negated": 15
+        }
+      },
+      "first_errors": [
+        {
+          "idx": 22,
+          "gold": "negated",
+          "pred": "family_history",
+          "entity": "糖尿病",
+          "text": "患者否认糖尿病家族史。"
+        },
+        {
+          "idx": 49,
+          "gold": "conditional",
+          "pred": "affirmed",
+          "entity": "ACEI",
+          "text": "若出现干咳，可将ACEI更换为ARB。"
+        },
+        {
+          "idx": 61,
+          "gold": "historical",
+          "pred": "affirmed",
+          "entity": "冠状动脉支架植入术",
+          "text": "3年前行冠状动脉支架植入术。"
+        },
+        {
+          "idx": 65,
+          "gold": "historical",
+          "pred": "affirmed",
+          "entity": "甲状腺功能减退",
+          "text": "10年前确诊甲状腺功能减退。"
+        },
+        {
+          "idx": 67,
+          "gold": "historical",
+          "pred": "affirmed",
+          "entity": "胆囊切除术",
+          "text": "患者5年前行胆囊切除术。"
+        },
+        {
+          "idx": 71,
+          "gold": "historical",
+          "pred": "affirmed",
+          "entity": "房颤",
+          "text": "患者曾诊断为房颤，后自行停药。"
+        },
+        {
+          "idx": 72,
+          "gold": "family_history",
+          "pred": "historical",
+          "entity": "冠心病",
+          "text": "其父有冠心病病史。"
+        },
+        {
+          "idx": 76,
+          "gold": "family_history",
+          "pred": "affirmed",
+          "entity": "乳腺癌",
+          "text": "其母因乳腺癌去世。"
+        }
+      ]
+    },
+    "tinybert_rule_guard": {
+      "total": 3170,
+      "accuracy": 0.7779,
+      "elapsed_sec": 0.901,
+      "rows_per_sec": 3517.0,
+      "per_label": {
+        "affirmed": {
+          "precision": 0.7244,
+          "recall": 0.6692,
+          "f1": 0.6957,
+          "support": 656
+        },
+        "negated": {
+          "precision": 0.7404,
+          "recall": 0.8949,
+          "f1": 0.8104,
+          "support": 752
+        },
+        "speculated": {
+          "precision": 0.8211,
+          "recall": 0.8812,
+          "f1": 0.8501,
+          "support": 547
+        },
+        "conditional": {
+          "precision": 0.8562,
+          "recall": 0.9603,
+          "f1": 0.9053,
+          "support": 403
+        },
+        "historical": {
+          "precision": 0.7936,
+          "recall": 0.6212,
+          "f1": 0.6969,
+          "support": 520
+        },
+        "family_history": {
+          "precision": 0.7751,
+          "recall": 0.5548,
+          "f1": 0.6467,
+          "support": 292
+        }
+      },
+      "confusion": {
+        "affirmed": {
+          "affirmed": 439,
+          "historical": 52,
+          "negated": 19,
+          "speculated": 86,
+          "conditional": 58,
+          "family_history": 2
+        },
+        "negated": {
+          "negated": 673,
+          "family_history": 44,
+          "affirmed": 7,
+          "speculated": 13,
+          "historical": 12,
+          "conditional": 3
+        },
+        "speculated": {
+          "speculated": 482,
+          "negated": 59,
+          "family_history": 1,
+          "affirmed": 5
+        },
+        "conditional": {
+          "conditional": 387,
+          "affirmed": 8,
+          "speculated": 4,
+          "negated": 4
+        },
+        "historical": {
+          "historical": 323,
+          "affirmed": 57,
+          "negated": 136,
+          "speculated": 1,
+          "conditional": 3
+        },
+        "family_history": {
+          "historical": 20,
+          "family_history": 162,
+          "affirmed": 90,
+          "conditional": 1,
+          "speculated": 1,
+          "negated": 18
+        }
+      },
+      "first_errors": [
+        {
+          "idx": 22,
+          "gold": "negated",
+          "pred": "family_history",
+          "entity": "糖尿病",
+          "text": "患者否认糖尿病家族史。"
+        },
+        {
+          "idx": 49,
+          "gold": "conditional",
+          "pred": "affirmed",
+          "entity": "ACEI",
+          "text": "若出现干咳，可将ACEI更换为ARB。"
+        },
+        {
+          "idx": 61,
+          "gold": "historical",
+          "pred": "affirmed",
+          "entity": "冠状动脉支架植入术",
+          "text": "3年前行冠状动脉支架植入术。"
+        },
+        {
+          "idx": 65,
+          "gold": "historical",
+          "pred": "affirmed",
+          "entity": "甲状腺功能减退",
+          "text": "10年前确诊甲状腺功能减退。"
+        },
+        {
+          "idx": 67,
+          "gold": "historical",
+          "pred": "affirmed",
+          "entity": "胆囊切除术",
+          "text": "患者5年前行胆囊切除术。"
+        },
+        {
+          "idx": 71,
+          "gold": "historical",
+          "pred": "affirmed",
+          "entity": "房颤",
+          "text": "患者曾诊断为房颤，后自行停药。"
+        },
+        {
+          "idx": 72,
+          "gold": "family_history",
+          "pred": "historical",
+          "entity": "冠心病",
+          "text": "其父有冠心病病史。"
+        },
+        {
+          "idx": 76,
+          "gold": "family_history",
+          "pred": "affirmed",
+          "entity": "乳腺癌",
+          "text": "其母因乳腺癌去世。"
+        }
+      ]
+    },
+    "delta_tiny_minus_rule": 0.0057
+  }
+}

@@ -1,0 +1,15 @@
+{
+  "total": 0,
+  "labels": {
+    "affirmed": 0,
+    "negated": 0,
+    "speculated": 0,
+    "conditional": 0,
+    "historical": 0,
+    "family_history": 0
+  },
+  "weak_label_changed": 0,
+  "skipped": {
+    "missing_gold_label": 300
+  }
+}
