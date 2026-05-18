@@ -1,348 +1,316 @@
 # Agentic Graph RAG
 
-**Skeleton Indexing + VectorCypher + Agentic Router with Self-Correction + Typed API**
+Agentic Graph RAG is a medical-oriented Graph RAG project that combines skeleton graph extraction, dual-layer graph modeling, multi-channel retrieval, and self-correcting answer verification.
 
-A production-ready Graph RAG system combining recent retrieval techniques into a unified pipeline with full provenance and a typed API contract (FastAPI REST + MCP).
+The system is designed for document-scale medical knowledge retrieval where plain vector search is not enough: relation queries, multi-hop questions, evidence tracing, and hallucination control all need explicit graph structure and a verifiable retrieval loop.
 
-## Benchmark Results (v14)
+## Highlights
 
-Evaluated on **30 bilingual questions** (15 Doc1 Russian + 15 Doc2 English) across the active retrieval modes:
-
-| Mode | Total | Delta vs v12 | Description |
-|------|-------|-------------|-------------|
-| **Vector** | **30/30 (100%)** | +2 | Embedding similarity search |
-| **Cypher** | **27/30 (90%)** | -1 | Graph traversal via VectorCypher (3-hop) |
-| **Hybrid** | **30/30 (100%)** | +2 | Vector + Graph with cross-encoder re-ranking |
-| **Agent (pattern)** | **28/30 (93%)** | 0 | Auto-routing via regex patterns + self-correction |
-| **Agent (LLM)** | **29/30 (96%)** | +1 | Auto-routing via GPT-4o-mini |
-
-Accuracy by query type (across all modes):
-
-| Type | Accuracy | Delta vs v12 |
-|------|----------|-------------|
-| relation | 42/42 (100%) | — |
-| simple | 41/42 (97%) | -1 |
-| temporal | 23/24 (95%) | -1 |
-| multi_hop | 34/36 (94%) | +3 (was 86%) |
-| global | 34/36 (94%) | +5 (was 80%) |
-
-Current supported agent modes are `agent_pattern` and `agent_llm`.
-
-<details>
-<summary>Benchmark history (v3 → v14)</summary>
-
-| Version | Questions | Overall | Key Changes |
-|---------|-----------|---------|-------------|
-| v3 | 15 | 34/90 (38%) | Baseline (lang=en, pre-improvements) |
-| v4 | 15 | 60/90 (67%) | lang=ru, cosine ranking, synthesis prompt, temporal boost |
-| v5 | 15 | 66/90 (73%) | comprehensive_search, completeness check, retry query, max_hops=3 |
-| v7 | 20 | 87/120 (73%) | Dual-document (Doc1 RU + Doc2 EN), RELATED_TO edges |
-| v9 | 20 | 84/120 (70%) | Hybrid re-ranking |
-| v10 | 30 | 118/180 (65%) | 15 new Doc2 questions, co-occurrence expansion restored |
-| v11 | 30 | 144/180 (80%) | Enumeration prompt, global query detection, judge 2K |
-| v12 | 30 | 168/180 (93%) | Hybrid judge, smart mention routing, cross-doc detection, LiteLLM |
-| v14 | 30 | 174/180 (96.7%) | Semantic judge, cross-language retrieval routing, Q27 fixed |
-
-</details>
-
-## Key Techniques
-
-| Technique | Source | What It Does |
-|-----------|--------|-------------|
-| **Skeleton Indexing** | KET-RAG (KDD 2025) | KNN graph -> PageRank -> selective entity extraction (10x cost savings) |
-| **Dual Node Structure** | HippoRAG 2 (ICML 2025) | Phrase nodes + passage nodes + Personalized PageRank |
-| **VectorCypher** | Neo4j / GraphRAG | Vector entry points -> Cypher traversal -> context assembly |
-| **Agentic Router** | Custom | Hard rules + pattern/LLM classification -> tool selection -> self-correction loop |
+- **Skeleton graph extraction**: ranks document chunks with KNN + PageRank, then applies selective LLM extraction to reduce full-document extraction cost.
+- **Dual-layer graph model**: stores `PhaseNode`/phrase-level entities and `PassageNode` evidence passages with `MENTIONED_IN` and `RELATED_TO` relationships.
+- **Multi-channel retrieval**: combines vector search, BM25, graph traversal, hybrid search, and query-type routing.
+- **Self-correction loop**: uses LangGraph workflow state to evaluate retrieval quality, retry with a better tool, rewrite queries, and verify final claims against evidence.
+- **Typed API contract**: exposes FastAPI REST endpoints and MCP tools for querying, trace inspection, graph stats, and intent resolution.
+- **Evaluation assets**: includes medical benchmark questions, trace evaluation outputs, assertion-classifier metrics, and unit tests.
 
 ## Architecture
 
-```
+```text
 Ingestion:
-  Document -> Docling -> Chunker -> Enricher -> Embedder
-           -> Skeleton Indexer (PageRank top-B)
-           -> Dual Node Builder (phrase + passage nodes)
-           -> Neo4j (Vector Index + Knowledge Graph)
+  Document
+    -> Loader / Chunker
+    -> Context enrichment
+    -> Embedding
+    -> Skeleton indexer: KNN -> PageRank -> selective extraction
+    -> Dual node builder: PhaseNode + PassageNode
+    -> Neo4j vector index + knowledge graph
 
 Retrieval:
-  Query -> Router (simple/relation/multi_hop/global/temporal)
-           Router cascade: Hard rules -> optional LLM -> Pattern fallback
-        -> Tool Selection (vector/cypher/hybrid/comprehensive/full_read/temporal)
-        -> Self-Correction Loop (reflect -> rerank or retry with targeted tool/provider upgrades)
-        -> Graph Verifier (contradiction detection)
-        -> Generator (LLM synthesis + citations)
+  Query
+    -> Query signal extraction
+    -> Router: deterministic / pattern / optional LLM
+    -> Tool selection: vector / BM25 / graph / hybrid / comprehensive
+    -> Reflection and retry planning
+    -> Evidence contract generation
+    -> Claim verification
+    -> Answer with citations and trace
 ```
 
 ## Project Structure
 
-```
+```text
 agentic-graph-rag/
-├── packages/rag-core/        # Shared pip package (models, config, ingestion, retrieval)
-│   └── rag_core/
-│       ├── models.py          # Chunk, Entity, SearchResult, QAResult, QueryType
-│       ├── config.py          # Pydantic Settings (nested: Neo4j, OpenAI, Indexing, Agent)
-│       ├── loader.py          # Docling: PDF/DOCX/PPTX + GPU
-│       ├── chunker.py         # Table-aware chunking
-│       ├── enricher.py        # Contextual enrichment (OpenAI)
-│       ├── embedder.py        # text-embedding-3-small batch processing
-│       ├── vector_store.py    # Neo4j Vector Index CRUD
-│       ├── kg_client.py       # Graphiti wrapper + Cypher
-│       ├── generator.py       # LLM answer synthesis
-│       ├── reflector.py       # Verdict-based retrieval evaluation + completeness check
-│       └── reranker.py        # Cross-encoder reranking
-│
-├── agentic_graph_rag/         # Graph RAG components
-│   ├── indexing/
-│   │   ├── skeleton.py        # KET-RAG: KNN -> PageRank -> skeletal extraction
-│   │   └── dual_node.py       # HippoRAG 2: phrase + passage nodes + PPR
-│   ├── retrieval/
-│   │   └── vector_cypher.py   # Vector entry -> Cypher traversal -> context
-│   ├── agent/
-│   │   ├── router.py          # Query classifier (hard rules + pattern + LLM)
-│   │   ├── retrieval_agent.py # Orchestrator + self-correction loop + provenance
-│   │   └── tools.py           # 7 tools: vector, cypher, community, hybrid, temporal, full_read, comprehensive
-│   ├── generation/
-│   │   └── claim_verifier.py  # Chain-of-Verification: extract claims + graph-based verification
-│   ├── optimization/
-│   │   ├── cache.py           # LRU SubgraphCache + CommunityCache
-│   │   └── monitor.py         # QueryMonitor + PageRank tuning suggestions
-│   └── service.py             # PipelineService — typed internal contract
-│
-├── api/                       # v6: Typed API contract
-│   ├── app.py                 # FastAPI factory with lifespan
-│   ├── routes.py              # REST endpoints (query, trace, health, graph_stats)
-│   ├── deps.py                # Dependency injection (PipelineService singleton)
-│   └── mcp_server.py          # MCP tools (resolve_intent, search_graph, explain_trace)
-│
-├── benchmark/
-│   ├── questions.json         # 30 test questions (5 types, EN/RU, 2 documents)
-│   ├── runner.py              # Benchmark runner
-│   └── compare.py             # Comparison table generator
-│
-├── scripts/
-│   └── ingest.py              # CLI ingestion: python scripts/ingest.py <file>
-│
-├── data/
-│   ├── sample_graph_rag.txt                # Doc1 (RU benchmark Q1-Q15): Graph RAG overview
-│   └── sample_semantic_companion_layer.txt # Doc2 (EN benchmark Q16-Q30): SCL / MeaningHub architecture
-│
-├── docker-compose.yml         # Neo4j 5.x (docker compose up -d)
-├── run_api.py                 # API launcher (uvicorn, port 8507)
-└── tests/                     # Unit tests
+├── agentic_graph_rag/
+│   ├── agent/                 # Router, LangGraph workflow, retry planner, tools
+│   ├── generation/            # Claim verification
+│   ├── indexing/              # Skeleton extraction and dual-node graph modeling
+│   ├── optimization/          # Cache and monitoring utilities
+│   ├── retrieval/             # VectorCypher and fusion retrieval
+│   ├── service.py             # PipelineService
+│   └── trace_*.py             # Trace storage and explanation
+├── api/                       # FastAPI REST + MCP server
+├── benchmark/                 # Benchmark runner and metric adapters
+├── data/                      # Small sample data and assertion evaluation assets
+├── docs/                      # Design notes and benchmark documentation
+├── packages/rag-core/         # Shared RAG core package
+├── scripts/                   # Ingestion, benchmark, export, and evaluation scripts
+├── test/medical_benchmark/    # Medical benchmark questions and result files
+├── tests/                     # Project-level tests
+├── docker-compose.yml         # Neo4j service
+├── pyproject.toml
+├── requirements.txt
+└── run_api.py
 ```
+
+## Current Evaluation Snapshot
+
+These numbers come from committed result files in `test/medical_benchmark/results/` and `data/assertion/`. They are useful as a reproducible snapshot, not as a universal claim across all medical corpora.
+
+### Retrieval Benchmark
+
+Source: `test/medical_benchmark/results/benchmark_results.json`
+
+| Metric | Vector | Cypher |
+|---|---:|---:|
+| Questions | 30 | 30 |
+| Overall accuracy | 73.33% | 80.00% |
+| Gain vs vector | - | +6.67 pp |
+| Multi-hop accuracy | 50.00% | 50.00% |
+| Global-query accuracy | 66.67% | 100.00% |
+| Average latency | 39,512 ms | 29,771 ms |
+
+### Self-Correction And Verification
+
+Source: `test/medical_benchmark/results/trace_eval_fixed_questions.json`
+
+| Metric | Value |
+|---|---:|
+| QA cases | 10 |
+| Verified answers | 10 / 10 |
+| Verified rate | 100.00% |
+| Cases with retrieval retry/tool switch | 4 / 10 |
+| Retry rate | 40.00% |
+| Atomic claims | 22 |
+| Supported claims | 22 / 22 |
+| Incorrect claims | 0 |
+| Hallucination proxy rate | 0.00% |
+
+### Assertion Guard
+
+Source: `data/assertion/dialogue_eval_metrics.json` and `data/assertion/dialogue_eval_metrics_after_guard.json`
+
+| Dataset | Before guard | After guard | Absolute gain | Relative error reduction |
+|---|---:|---:|---:|---:|
+| dialogue assertion | 90.17% | 99.58% | +9.41 pp | 95.73% |
+
+## Requirements
+
+- Python 3.12+
+- Neo4j 5.x
+- Docker or a reachable Neo4j instance
+- LLM API credentials compatible with the project's `.env` configuration
+
+The current project declares Python 3.12+ in `pyproject.toml`. Some local test runs may fail on Python 3.10 because dependencies such as LangGraph are required by the runtime workflow.
 
 ## Quick Start
 
-### Prerequisites
-
-- Python 3.12+
-- Docker — [Docker Desktop](https://www.docker.com/products/docker-desktop/) for Windows/Mac, or `docker-ce` for Linux ([install guide](https://docs.docker.com/engine/install/))
-- OpenAI API key ([get one here](https://platform.openai.com/api-keys))
-
-### 1. Install
+### 1. Clone
 
 ```bash
-git clone https://github.com/vpakspace/agentic-graph-rag.git
-cd agentic-graph-rag
+git clone https://github.com/shawns-yao/Graph-RAG.git
+cd Graph-RAG
+```
 
-pip install -e packages/rag-core --no-deps
+### 2. Create Environment
+
+```bash
+python -m venv .venv
+
+# Windows PowerShell
+.venv\Scripts\Activate.ps1
+
+# macOS / Linux
+source .venv/bin/activate
+```
+
+### 3. Install Dependencies
+
+```bash
+python -m pip install --upgrade pip
 pip install -r requirements.txt
 ```
 
-> **Note on Docling**: The first time you load a PDF or DOCX document, Docling will download
-> its ML models (~1-2 GB). This is a one-time download. If you only plan to ingest `.txt` files,
-> no model download is needed.
-
-### 2. Configure
+### 4. Configure Environment
 
 ```bash
 cp .env.example .env
 ```
 
-Edit `.env` — at minimum set these two values:
-- `OPENAI_API_KEY` — your OpenAI API key
-- `NEO4J_PASSWORD` — password you want for the Neo4j database
+Set at least:
 
-### 3. Start Neo4j
+```text
+LLM_API_KEY=...
+LLM_BASE_URL=...
+LLM_MODEL=...
+EMBEDDING_API_KEY=...
+EMBEDDING_BASE_URL=...
+EMBEDDING_MODEL=...
+NEO4J_URI=bolt://localhost:7687
+NEO4J_USER=neo4j
+NEO4J_PASSWORD=...
+```
 
-Using Docker Compose (recommended):
+Do not commit `.env`.
+
+### 5. Start Neo4j
 
 ```bash
 docker compose up -d
 ```
 
-Or manually:
+Check connectivity:
 
 ```bash
-docker run -d \
-  --name agentic-graph-rag-neo4j \
-  -p 7474:7474 -p 7687:7687 \
-  -e NEO4J_AUTH=neo4j/your_password \
-  neo4j:5
+python -c "from dotenv import load_dotenv; load_dotenv(); from rag_core.config import get_settings; print(get_settings().neo4j.uri)"
 ```
 
-### 4. Ingest a Document
-
-Two sample documents are included for testing (both needed for the full 30-question benchmark):
+### 6. Ingest Documents
 
 ```bash
-# Ingest both documents (required for benchmark reproducibility)
-PYTHONPATH=. python scripts/ingest.py data/
+python scripts/ingest.py data/
 ```
 
-Or ingest individually:
+For a single document:
 
 ```bash
-PYTHONPATH=. python scripts/ingest.py data/sample_graph_rag.txt                # Doc1: Graph RAG (RU, Q1-Q15)
-PYTHONPATH=. python scripts/ingest.py data/sample_semantic_companion_layer.txt # Doc2: SCL (EN, Q16-Q30)
+python scripts/ingest.py path/to/document.pdf
+python scripts/ingest.py path/to/document.docx
+python scripts/ingest.py path/to/document.txt
 ```
 
-This runs the full pipeline: load → chunk → enrich → embed → store → skeleton indexing → dual-node graph.
+Useful options:
 
-Options:
-- `--skip-enrichment` — skip LLM contextual enrichment (faster, fewer OpenAI calls)
-- `--skip-skeleton` — skip skeleton indexing (vector store only, no knowledge graph)
-- `--use-gpu` — enable GPU acceleration for Docling
+- `--skip-enrichment`: skip LLM contextual enrichment.
+- `--skip-skeleton`: skip skeleton graph extraction.
+- `--use-gpu`: enable GPU acceleration when supported by the document loader stack.
 
-You can also ingest your own documents (PDF, DOCX, TXT):
+### 7. Run API
 
 ```bash
-PYTHONPATH=. python scripts/ingest.py /path/to/your/document.pdf
-PYTHONPATH=. python scripts/ingest.py /path/to/documents/  # entire directory
+python run_api.py
 ```
 
-### 5. Run the System
+Default local API:
 
-Start the API server:
+```text
+http://localhost:8507
+```
+
+Main REST endpoints:
+
+- `POST /api/v1/query`: run a RAG query.
+- `GET /api/v1/trace/{id}`: inspect a pipeline trace.
+- `GET /api/v1/health`: service and Neo4j health check.
+- `GET /api/v1/graph/stats`: graph statistics.
+
+MCP tools are mounted at `/mcp`:
+
+- `resolve_intent`
+- `search_graph`
+- `explain_trace`
+
+## Running Tests
 
 ```bash
-PYTHONPATH=. python run_api.py  # http://localhost:8507
+pytest -q
 ```
 
-The API is the supported runtime for demo and programmatic access.
-Use the HTTP endpoints or MCP mount on port `8507`.
-
-> **Why PYTHONPATH?** Setting `PYTHONPATH=.` makes the local project packages importable
-> when running scripts directly from the repository.
-
-### Run Tests
+Focused tests:
 
 ```bash
-PYTHONPATH=. pytest tests/ packages/rag-core/tests/ -x -q
+pytest -q tests
+pytest -q packages/rag-core/tests
 ```
 
-### API Endpoints
+Lint, when `ruff` is installed:
 
-REST (port 8507):
-- `POST /api/v1/query` — Query the pipeline (returns answer + trace)
-- `GET /api/v1/trace/{id}` — Retrieve a pipeline trace by ID
-- `GET /api/v1/health` — Health check (Neo4j connectivity)
-- `GET /api/v1/graph/stats` — Graph node/edge statistics
-
-MCP tools (SSE at `/mcp`):
-- `resolve_intent` — Classify query type and select tool
-- `search_graph` — Execute full pipeline search
-- `explain_trace` — Explain a pipeline trace
-
-### Run Benchmark
-
-```python
-from benchmark.runner import run_benchmark
-from benchmark.compare import compare_modes
-
-# Requires Neo4j running + documents ingested
-results = run_benchmark(driver, openai_client)  # lang="ru" by default
-print(compare_modes(results))
+```bash
+ruff check .
 ```
 
-## Retrieval Modes
+## Running Benchmarks
 
-| Mode | Description | Best For |
-|------|-------------|----------|
-| **Vector** | Cosine similarity on embeddings | Simple factual queries |
-| **Cypher** | Graph traversal via VectorCypher | Relationship queries |
-| **Hybrid** | Vector + BM25 + Graph priority merge, then cross-encoder rerank | Multi-hop queries |
-| **Agent (pattern)** | Auto-routing via regex patterns | General use (fast) |
-| **Agent (LLM)** | Auto-routing via GPT-4o-mini | General use (accurate) |
+The benchmark path depends on Neo4j, ingested documents, and configured LLM/embedding providers.
 
-## Pipeline Provenance (v6)
+Three-mode medical benchmark:
 
-Every query produces a `PipelineTrace` — a structured record of the full pipeline execution:
-
-```json
-{
-  "trace_id": "tr_abc123def456",
-  "timestamp": "2026-02-17T12:00:00Z",
-  "query": "Какие методы используются?",
-  "router_step": {"method": "hard_rule", "decision": {"query_type": "simple", "suggested_tool": "vector_search"}},
-  "tool_steps": [{"tool_name": "vector_search", "results_count": 10, "relevance_score": 3.2, "duration_ms": 150}],
-  "escalation_steps": [],
-  "generator_step": {"model": "gpt-4o-mini", "prompt_tokens": 1200, "completion_tokens": 350},
-  "total_duration_ms": 1800
-}
+```bash
+python test/medical_benchmark/run_benchmark_3modes.py
 ```
 
-Traces are cached (LRU, 100 entries) and retrievable via `GET /api/v1/trace/{id}` or the MCP `explain_trace` tool.
+General benchmark runner:
 
-## Self-Correction Loop
-
-The agent treats reflection as a policy decision, not a numeric score. Each
-reflection step returns a discrete action:
-
-``` 
-answer | rerank | retry
+```bash
+python -m benchmark.runner \
+  --questions test/medical_benchmark/questions_master.json \
+  --modes vector_only,graph_only,hybrid_rerank,vector_chain,graph_chain
 ```
 
-Retries are not a fixed linear escalation chain. The workflow combines:
+Existing result files:
 
-- deterministic query heuristics
-- reflection-recommended tools/providers
-- a fallback matrix per current tool
+- `test/medical_benchmark/results/benchmark_results.json`
+- `test/medical_benchmark/results/trace_eval_fixed_questions.json`
+- `data/assertion/*metrics*.json`
 
-The loop can refresh only part of `hybrid_search`, rewrite the query when
-broader recall is justified, or stop early when reflection is repeating covered
-gaps. For `GLOBAL` queries, the top-level workflow may run one additional
-`comprehensive_search` pass when evidence status suggests the first answer is
-incomplete. Cross-language internal alias queries can still route directly to
-`full_document_read`, but that is a router choice, not the default top-level
-retry path.
+## Core Concepts
 
-Hybrid retrieval does not use numeric channel weights. It chooses a channel
-priority by query type, dedupes repeated chunks, appends lower-priority channel
-results as supplements, then reranks the final candidate pool.
+### Skeleton Extraction
 
-## Configuration
+Full-document LLM extraction is expensive and noisy. This project first builds a chunk similarity graph, scores chunks with PageRank, and runs deeper extraction only on high-value chunks. Long-tail chunks still stay searchable through passage storage and vector/BM25 retrieval.
 
-All settings via `.env` or environment variables:
+### Dual-Layer Graph
 
-| Setting | Default | Description |
-|---------|---------|-------------|
-| `OPENAI_API_KEY` | — | OpenAI API key |
-| `NEO4J_URI` | `bolt://localhost:7687` | Neo4j connection |
-| `INDEXING_SKELETON_BETA` | `0.25` | Fraction of chunks for full extraction |
-| `INDEXING_KNN_K` | `5` | KNN graph neighbors |
-| `INDEXING_PAGERANK_DAMPING` | `0.85` | PageRank damping factor |
-| `RETRIEVAL_TOP_K_VECTOR` | `10` | Vector search results count |
-| `RETRIEVAL_TOP_K_FINAL` | `10` | Final results after priority merge/rerank |
-| `RETRIEVAL_VECTOR_THRESHOLD` | `0.5` | Minimum similarity score |
-| `RETRIEVAL_MAX_HOPS` | `2` | Max graph traversal depth |
-| `AGENT_MAX_RETRIES` | `1` | Self-correction retries |
+The graph separates entity-level structure from passage-level evidence:
 
-## Tech Stack
+- `PhaseNode`: entity or phrase node.
+- `PassageNode`: source text passage.
+- `MENTIONED_IN`: connects an entity to the passage where it appears.
+- `RELATED_TO`: connects entities with extracted semantic relationships.
 
-- **LLM**: OpenAI GPT-4o / GPT-4o-mini
-- **Embeddings**: text-embedding-3-small (1536 dim)
-- **Graph DB**: Neo4j 5.x (Vector Index + Cypher)
-- **Doc Parsing**: Docling (PDF/DOCX/PPTX + GPU)
-- **Graph Algorithms**: NetworkX (PageRank, KNN, PPR)
-- **API**: FastAPI (REST + MCP via FastMCP)
-- **Testing**: pytest + ruff
+This keeps graph traversal grounded in evidence and makes answer citations traceable.
 
-## References
+### Retrieval Fusion
 
-- [KET-RAG: Cost-Efficient Graph RAG](https://arxiv.org/abs/2502.09304) (KDD 2025)
-- [HippoRAG 2: Agentic Retrieval](https://arxiv.org/abs/2502.14802) (ICML 2025)
-- [VectorCypher: Neo4j Graph Retrieval](https://neo4j.com/docs/)
-- [Agentic RAG: Self-Correcting Retrieval](https://arxiv.org/abs/2401.15884)
+Different query types need different retrieval behavior:
+
+- factual queries: vector or BM25 can be enough.
+- relation queries: graph traversal is preferred.
+- multi-hop queries: hybrid retrieval and rerank are more useful.
+- global questions: broader recall and comprehensive search are needed.
+
+The agent can retry with another tool when reflection detects missing entities, missing relationships, weak evidence, or off-topic context.
+
+### Verification Loop
+
+The generation layer creates an evidence contract and verifies answer claims. Unsupported or incorrect claims can be blocked, downgraded, or trigger additional retrieval depending on the workflow state and budget.
+
+## Documentation
+
+Design notes are under `docs/`:
+
+- `docs/01-骨架图谱抽取.md`
+- `docs/02-双节点图谱建模.md`
+- `docs/03-三路融合检索.md`
+- `docs/04-检索自纠循环.md`
+- `docs/08-Benchmark与评估体系.md`
+- `docs/09-项目难点与踩坑.md`
+
+## Security Notes
+
+- `.env` is ignored and must not be committed.
+- Do not commit local model checkpoints, raw private medical data, or generated large corpora unless they are intentionally sanitized.
+- Treat LLM provider keys, Neo4j credentials, and benchmark patient data as sensitive.
+
 ## License
 
 MIT
