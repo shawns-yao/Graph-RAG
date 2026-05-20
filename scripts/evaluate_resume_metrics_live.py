@@ -1,8 +1,8 @@
 """Live resume metrics evaluation using Neo4j plus real LLM calls.
 
-This script is intentionally separate from evaluate_resume_metrics.py.
-It is slower and calls external services:
+This is the canonical resume-metric evaluator. It is slower and calls external services:
 - Neo4j reads for chunks, graph, and retrieval
+- Neo4j structural checks for relation false positives and multi-hop paths
 - LLM entity extraction
 - LLM answer generation through PipelineService / retrieval agent
 - LLM answer judge against the gold answers
@@ -24,7 +24,6 @@ from neo4j import GraphDatabase
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-from agentic_graph_rag.agent.retrieval_agent import run as agent_run
 from agentic_graph_rag.agent.tools import bm25_search, cypher_traverse, hybrid_search, vector_search
 from agentic_graph_rag.indexing.skeleton import (
     _rank_chunks_for_skeleton_selection,
@@ -107,6 +106,196 @@ def _load_graph_counts(session: Any) -> dict[str, int]:
         row = session.run(f"MATCH ()-[r:{rel}]->() RETURN count(r) AS count").single()
         counts[key] = int(row["count"] if row else 0)
     return counts
+
+
+def _load_graph_structure(session: Any) -> dict[str, list[dict[str, str]]]:
+    phrases = [
+        {
+            "name": str(row["name"] or ""),
+            "entity_type": str(row["entity_type"] or ""),
+            "aliases": " ".join(str(alias) for alias in row["aliases"] or []),
+        }
+        for row in session.run(
+            """
+            MATCH (p:PhraseNode)
+            RETURN p.name AS name, p.entity_type AS entity_type, coalesce(p.aliases, []) AS aliases
+            """
+        )
+    ]
+    rels = [
+        {
+            "source": str(row["source"] or ""),
+            "relation_type": str(row["relation_type"] or ""),
+            "target": str(row["target"] or ""),
+        }
+        for row in session.run(
+            """
+            MATCH (a:PhraseNode)-[r:RELATED_TO]->(b:PhraseNode)
+            RETURN a.name AS source, coalesce(r.relation_type, "") AS relation_type, b.name AS target
+            """
+        )
+    ]
+    passages = [
+        {
+            "id": str(row["id"] or ""),
+            "text": str(row["text"] or ""),
+        }
+        for row in session.run(
+            """
+            MATCH (p:PassageNode)
+            RETURN p.id AS id, coalesce(p.text, "") AS text
+            """
+        )
+    ]
+    return {"phrases": phrases, "relationships": rels, "passages": passages}
+
+
+def _entity_coverage(gold_entities: list[dict[str, Any]], graph_phrases: list[dict[str, str]]) -> dict[str, Any]:
+    phrase_texts = [" ".join([phrase["name"], phrase.get("aliases", "")]) for phrase in graph_phrases]
+    hits = []
+    misses = []
+    for entity in gold_entities:
+        found = any(_contains_any_surface(text, _entity_surfaces(entity)) for text in phrase_texts)
+        (hits if found else misses).append(entity["name"])
+    return {
+        "hits": len(hits),
+        "total": len(gold_entities),
+        "coverage": _pct(len(hits), len(gold_entities)),
+        "misses": misses,
+    }
+
+
+def _baseline_entity_coverage(gold_entities: list[dict[str, Any]], skeletal_chunks: list[Chunk]) -> dict[str, Any]:
+    text = "\n".join(chunk.enriched_content for chunk in skeletal_chunks)
+    hits = [entity["name"] for entity in gold_entities if _contains_any_surface(text, _entity_surfaces(entity))]
+    return {
+        "hits": len(hits),
+        "total": len(gold_entities),
+        "coverage": _pct(len(hits), len(gold_entities)),
+    }
+
+
+def _rel_matches(rel: dict[str, str], source: str, target: str, relation: str | None = None) -> bool:
+    source_hit = _norm(source) in _norm(rel["source"]) or _norm(rel["source"]) in _norm(source)
+    target_hit = _norm(target) in _norm(rel["target"]) or _norm(rel["target"]) in _norm(target)
+    if not (source_hit and target_hit):
+        return False
+    if relation is None:
+        return True
+    rel_type = _norm(rel["relation_type"])
+    gold_type = _norm(relation)
+    return bool(rel_type and (rel_type == gold_type or rel_type in gold_type or gold_type in rel_type))
+
+
+def _relation_recall(gold_relations: list[dict[str, Any]], graph_rels: list[dict[str, str]]) -> dict[str, Any]:
+    hits = []
+    misses = []
+    for item in gold_relations:
+        label = f"{item['source']} --{item.get('relation', '')}--> {item['target']}"
+        matched = any(_rel_matches(rel, item["source"], item["target"], item.get("relation")) for rel in graph_rels)
+        (hits if matched else misses).append(label)
+    return {"hits": len(hits), "total": len(gold_relations), "recall": _pct(len(hits), len(gold_relations)), "misses": misses}
+
+
+def _passage_cooccurs(passages: list[dict[str, str]], source: str, target: str) -> bool:
+    return any(_norm(source) in _norm(passage["text"]) and _norm(target) in _norm(passage["text"]) for passage in passages)
+
+
+def _false_positive_rates(
+    negative_relations: list[dict[str, Any]],
+    graph_rels: list[dict[str, str]],
+    passages: list[dict[str, str]],
+) -> dict[str, Any]:
+    baseline_fp = []
+    graph_fp = []
+    for item in negative_relations:
+        label = f"{item['source']} --X--> {item['target']}"
+        if _passage_cooccurs(passages, item["source"], item["target"]):
+            baseline_fp.append(label)
+        if any(_rel_matches(rel, item["source"], item["target"]) for rel in graph_rels):
+            graph_fp.append(label)
+
+    total = len(negative_relations)
+    baseline_rate = _pct(len(baseline_fp), total)
+    graph_rate = _pct(len(graph_fp), total)
+    return {
+        "baseline_false_positives": len(baseline_fp),
+        "graph_false_positives": len(graph_fp),
+        "total": total,
+        "baseline_false_positive_rate": baseline_rate,
+        "graph_false_positive_rate": graph_rate,
+        "absolute_reduction_pp": round(baseline_rate - graph_rate, 2),
+        "relative_reduction_percent": round((baseline_rate - graph_rate) / baseline_rate * 100.0, 2)
+        if baseline_rate
+        else 0.0,
+        "baseline_fp_items": baseline_fp,
+        "graph_fp_items": graph_fp,
+    }
+
+
+def _has_path(session: Any, source: str, target: str, max_hops: int) -> bool:
+    row = session.run(
+        f"""
+        MATCH (a:PhraseNode), (b:PhraseNode)
+        WHERE a.name CONTAINS $source AND b.name CONTAINS $target
+        MATCH path = (a)-[:RELATED_TO*1..{max_hops}]-(b)
+        RETURN count(path) > 0 AS found
+        LIMIT 1
+        """,
+        source=source,
+        target=target,
+    ).single()
+    return bool(row and row["found"])
+
+
+def _multi_hop_metrics(session: Any, tasks: list[dict[str, Any]]) -> dict[str, Any]:
+    baseline_hits = []
+    graph_hits = []
+    misses = []
+    for task in tasks:
+        one_hop = _has_path(session, task["source"], task["target"], 1)
+        three_hop = _has_path(session, task["source"], task["target"], 3)
+        if one_hop:
+            baseline_hits.append(task["id"])
+        if three_hop:
+            graph_hits.append(task["id"])
+        else:
+            misses.append(task["id"])
+    total = len(tasks)
+    baseline_rate = _pct(len(baseline_hits), total)
+    graph_rate = _pct(len(graph_hits), total)
+    return {
+        "baseline_1hop_hits": len(baseline_hits),
+        "graph_3hop_hits": len(graph_hits),
+        "total": total,
+        "baseline_1hop_accuracy": baseline_rate,
+        "graph_3hop_accuracy": graph_rate,
+        "absolute_gain_pp": round(graph_rate - baseline_rate, 2),
+        "misses": misses,
+    }
+
+
+def _run_graph_structure_metrics(
+    session: Any,
+    gold: dict[str, Any],
+    skeletal_chunks: list[Chunk],
+) -> dict[str, Any]:
+    graph = _load_graph_structure(session)
+    graph_entity = _entity_coverage(gold.get("entities", []), graph["phrases"])
+    skeleton_entity = _baseline_entity_coverage(gold.get("entities", []), skeletal_chunks)
+    relation_recall = _relation_recall(gold.get("positive_relations", []), graph["relationships"])
+    relation_fp = _false_positive_rates(gold.get("negative_relations", []), graph["relationships"], graph["passages"])
+    multi_hop = _multi_hop_metrics(session, gold.get("multi_hop_tasks", []))
+    return {
+        "entities": {
+            "graph": graph_entity,
+            "skeleton_only_baseline": skeleton_entity,
+            "coverage_gain_pp": round(graph_entity["coverage"] - skeleton_entity["coverage"], 2),
+        },
+        "relation_recall": relation_recall,
+        "relation_false_positive": relation_fp,
+        "multi_hop": multi_hop,
+    }
 
 
 def _select_skeleton(chunks: list[Chunk]) -> tuple[list[Chunk], list[Chunk], dict[str, Any]]:
@@ -507,30 +696,27 @@ def _safe_gain(after: float, before: float) -> float:
 
 
 def _build_resume_fill(payload: dict[str, Any]) -> dict[str, Any]:
-    offline = payload.get("offline_resume_metrics", {})
     live = payload.get("live_extraction", {})
+    graph_structure = payload.get("graph_structure", {})
     qa_summary = payload.get("qa", {}).get("summary", {})
     by_mode = qa_summary.get("by_mode", {})
     by_type = qa_summary.get("by_mode_type", {})
 
     vector = by_mode.get("vector_search") or by_mode.get("vector") or {}
     fusion = by_mode.get("agent_pattern") or by_mode.get("hybrid_search") or {}
-    graph = by_mode.get("cypher_traverse") or by_mode.get("cypher") or {}
     multi_vector = (by_type.get("vector_search") or by_type.get("vector") or {}).get("multi_hop", {})
     multi_fusion = (by_type.get("agent_pattern") or by_type.get("hybrid_search") or {}).get("multi_hop", {})
 
     extraction_cost = live.get("prompt_token_cost_reduction")
-    if extraction_cost is None:
-        extraction_cost = offline.get("metrics", {}).get("skeleton_deep_extraction_cost_reduction", {}).get("value")
-    graph_coverage = live.get("coverage_retained_vs_full")
-    if graph_coverage is None:
-        graph_coverage = offline.get("metrics", {}).get("graph_entity_coverage", {}).get("value")
+    graph_coverage = graph_structure.get("entities", {}).get("graph", {}).get("coverage")
     entity_accuracy = live.get("skeleton_llm", {}).get("score", {}).get("accuracy")
     entity_gain = live.get("entity_accuracy_gain_pp")
+    entity_coverage_gain = graph_structure.get("entities", {}).get("coverage_gain_pp")
 
-    relation_fp = offline.get("metrics", {}).get("relation_false_positive_rate", {}).get("value")
-    graph_3hop = offline.get("metrics", {}).get("graph_3hop_accuracy", {}).get("value")
-    graph_3hop_gain = offline.get("metrics", {}).get("graph_3hop_gain_vs_1hop_pp", {}).get("value")
+    relation_fp = graph_structure.get("relation_false_positive", {}).get("graph_false_positive_rate")
+    relation_fp_reduction = graph_structure.get("relation_false_positive", {}).get("absolute_reduction_pp")
+    graph_3hop = graph_structure.get("multi_hop", {}).get("graph_3hop_accuracy")
+    graph_3hop_gain = graph_structure.get("multi_hop", {}).get("absolute_gain_pp")
 
     fusion_acc = fusion.get("judge_accuracy")
     vector_acc = vector.get("judge_accuracy")
@@ -558,9 +744,11 @@ def _build_resume_fill(payload: dict[str, Any]) -> dict[str, Any]:
             "cost_reduction_percent": extraction_cost,
             "entity_accuracy_percent": entity_accuracy,
             "entity_accuracy_gain_pp": entity_gain,
+            "entity_coverage_gain_pp": entity_coverage_gain,
         },
         "dual_layer_graph": {
             "relation_false_positive_rate_percent": relation_fp,
+            "relation_false_positive_reduction_pp": relation_fp_reduction,
             "graph_3hop_accuracy_percent": graph_3hop,
             "graph_3hop_gain_pp": graph_3hop_gain,
         },
@@ -611,14 +799,13 @@ def main() -> None:
     payload: dict[str, Any] = {}
     if args.output.exists():
         payload = _load_json(args.output)
-    offline_path = ROOT / "test" / "medical_benchmark" / "results" / "resume_metrics.json"
-    if offline_path.exists():
-        payload["offline_resume_metrics"] = _load_json(offline_path)
 
     started = time.perf_counter()
     with driver.session(database=cfg.neo4j.database) as session:
         chunks = _load_chunks(session)
+        skeletal, _, _ = _select_skeleton(chunks)
         payload["graph_counts"] = _load_graph_counts(session)
+        payload["graph_structure"] = _run_graph_structure_metrics(session, gold, skeletal)
 
     if "extraction" in sections and not (args.skip_existing and payload.get("live_extraction")):
         payload["live_extraction"] = _run_live_extraction(client, cfg.openai.llm_model_mini, chunks, gold)

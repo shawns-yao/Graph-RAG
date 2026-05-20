@@ -64,19 +64,17 @@ agentic-graph-rag/
 
 ## Current Evaluation Snapshot
 
-These numbers come from committed result files in `test/medical_benchmark/results/`, `test/medical_benchmark/eval_gold/`, and `data/assertion/`. They are useful as a reproducible snapshot, not as a universal claim across all medical corpora. Metrics with tiny denominators or 100% values are kept in JSON for auditing but should not be used as headline claims.
+These numbers come from the committed gold set in `test/medical_benchmark/eval_gold/`, committed benchmark outputs in `test/medical_benchmark/results/`, and the canonical live evaluator in `scripts/evaluate_resume_metrics_live.py`. They are useful as a reproducible local benchmark snapshot, not as a universal claim across all medical corpora. Metrics with tiny denominators, proxy-only values, or 100% results should not be used as headline claims.
 
 ### Resume-Oriented Metrics
 
-Source: `test/medical_benchmark/results/resume_metrics.json`
+Source: `docs/resume_metrics_fill.md` and `scripts/evaluate_resume_metrics_live.py`.
 
 | Metric | Value | Denominator | Resume use |
 |---|---:|---:|---|
-| Skeleton deep-extraction cost proxy reduction | 68.75% | 16 chunks | No: small corpus |
-| Skeleton cost proxy reduction, bootstrap mean | 66.67% | 200 subsample runs | No: same corpus stability only |
-| Skeleton-only entity coverage, bootstrap mean | 79.52% | 200 subsample runs | No: same corpus stability only |
-| Entity coverage gain vs skeleton-only baseline | +4.17 pp | 48 entities | Yes |
-| Entity extraction judged accuracy | 74.36% | 78 positive/negative entities | Yes |
+| Live LLM prompt token cost reduction | 69.68% | 16 chunks | Yes, local benchmark only |
+| Entity graph coverage gain vs skeleton-only baseline | +4.17 pp | 48 entities | Yes |
+| Skeleton-only LLM entity accuracy | 65.38% | 78 positive/negative entities | No: lower than full-document LLM |
 | Positive relation recall | 95.00% | 20 relations | Yes |
 | Relation false-positive rate | 33.33% | 30 hard negatives | Yes |
 | Relation false-positive reduction vs co-occurrence baseline | +33.34 pp | 30 hard negatives | Yes |
@@ -87,10 +85,10 @@ Source: `test/medical_benchmark/results/resume_metrics.json`
 Run it locally:
 
 ```bash
-python scripts/evaluate_resume_metrics.py --bootstrap-runs 200
+python scripts/evaluate_resume_metrics_live.py --sections extraction,qa --modes vector_search,cypher_traverse,hybrid_search,agent_pattern --output test/medical_benchmark/results/resume_live_metrics.json
 ```
 
-The skeleton chunks are not manually selected. The evaluator calls the project selection code: KNN graph -> PageRank -> blended score using PageRank, entity density, medical section prior, and hard-fact signal -> greedy diversity selection. Bootstrap rows are repeated subsamples from the same corpus, so they measure stability of the selector, not independent 10k-document scalability.
+The skeleton chunks are not manually selected. The evaluator calls the project selection code: KNN graph -> PageRank -> blended score using PageRank, entity density, medical section prior, and hard-fact signal -> greedy diversity selection. QA and hallucination metrics require live LLM judge completion; do not fill them from proxy or cooldown-interrupted runs.
 
 ### Retrieval Benchmark
 
