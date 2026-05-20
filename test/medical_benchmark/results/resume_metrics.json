@@ -1,0 +1,610 @@
+{
+  "metadata": {
+    "gold_path": "C:\\Document\\Python\\agentic-graph-rag\\test\\medical_benchmark\\eval_gold\\medical_resume_gold.json",
+    "benchmark_path": "C:\\Document\\Python\\agentic-graph-rag\\test\\medical_benchmark\\results\\benchmark_results.json",
+    "questions_path": "C:\\Document\\Python\\agentic-graph-rag\\test\\medical_benchmark\\questions_master.json",
+    "corpus_chunks": 16,
+    "graph_phrase_nodes": 2787,
+    "graph_related_to_edges": 235,
+    "graph_passages": 1316
+  },
+  "metrics": {
+    "skeleton_deep_extraction_cost_reduction": {
+      "value": 68.75,
+      "denominator": 16,
+      "resume_recommended": false,
+      "reason": "small corpus; report only with corpus size"
+    },
+    "graph_entity_coverage": {
+      "value": 100.0,
+      "denominator": 48,
+      "resume_recommended": false,
+      "reason": "100% metric is likely too brittle for resume copy"
+    },
+    "entity_extraction_judged_accuracy": {
+      "value": 74.36,
+      "denominator": 78,
+      "resume_recommended": true,
+      "reason": ""
+    },
+    "entity_coverage_gain_vs_skeleton_only_pp": {
+      "value": 4.17,
+      "denominator": 48,
+      "resume_recommended": true,
+      "reason": ""
+    },
+    "relation_recall": {
+      "value": 95.0,
+      "denominator": 20,
+      "resume_recommended": true,
+      "reason": ""
+    },
+    "relation_false_positive_rate": {
+      "value": 33.33,
+      "denominator": 30,
+      "resume_recommended": true,
+      "reason": ""
+    },
+    "relation_false_positive_reduction_vs_cooccurrence_pp": {
+      "value": 33.34,
+      "denominator": 30,
+      "resume_recommended": true,
+      "reason": ""
+    },
+    "graph_3hop_accuracy": {
+      "value": 75.0,
+      "denominator": 24,
+      "resume_recommended": true,
+      "reason": ""
+    },
+    "graph_3hop_gain_vs_1hop_pp": {
+      "value": 29.17,
+      "denominator": 24,
+      "resume_recommended": true,
+      "reason": ""
+    },
+    "fusion_answerability_gain_vs_best_single_pp": {
+      "value": 6.66,
+      "denominator": 30,
+      "resume_recommended": true,
+      "reason": ""
+    },
+    "multi_hop_fusion_answerability_gain_vs_vector_pp": {
+      "value": 0.0,
+      "denominator": 8,
+      "resume_recommended": false,
+      "reason": "denominator below 20"
+    }
+  },
+  "details": {
+    "skeleton": {
+      "total_chunks": 16,
+      "skeletal_chunks": 5,
+      "peripheral_chunks": 11,
+      "deep_extraction_cost_reduction": 68.75
+    },
+    "entities": {
+      "baseline_skeleton_only": {
+        "hits": 46,
+        "total": 48,
+        "coverage": 95.83,
+        "candidate_count": 736,
+        "precision_proxy": 6.25,
+        "f1_proxy": 11.73
+      },
+      "graph": {
+        "hits": 48,
+        "total": 48,
+        "coverage": 100.0,
+        "misses": []
+      },
+      "judged_accuracy": {
+        "true_positives": 48,
+        "false_negatives": 0,
+        "true_negatives": 10,
+        "false_positives": 20,
+        "total": 78,
+        "accuracy": 74.36,
+        "precision": 70.59,
+        "recall": 100.0,
+        "false_positive_items": [
+          "aliases",
+          "第一秒用力呼气容",
+          "一秒用力呼气容",
+          "第一秒用力呼气",
+          "秒用力呼气容积",
+          "分提示症状负担较",
+          "提示症状负担较",
+          "分提示症状负担",
+          "且嗜酸性粒细胞",
+          "级且嗜酸性粒细",
+          "且嗜酸性粒细",
+          "入糖皮质激素",
+          "吸入糖皮质激",
+          "示症状负担较重",
+          "力活动轻度受限",
+          "用长效支气管舒张",
+          "效支气管舒张剂",
+          "张素受体拮抗剂",
+          "固酮受体拮抗剂",
+          "必要"
+        ],
+        "false_negative_items": []
+      },
+      "coverage_gain_pp": 4.17
+    },
+    "relations": {
+      "graph_recall": {
+        "hits": 19,
+        "total": 20,
+        "recall": 95.0,
+        "misses": [
+          "沙丁胺醇 --Category--> SABA"
+        ]
+      },
+      "false_positive": {
+        "baseline_false_positives": 20,
+        "graph_false_positives": 10,
+        "total": 30,
+        "baseline_false_positive_rate": 66.67,
+        "graph_false_positive_rate": 33.33,
+        "absolute_reduction_pp": 33.34,
+        "relative_reduction": 50.01,
+        "baseline_fp_items": [
+          "ACEI --X--> SABA",
+          "ACEI --X--> 华法林",
+          "ARB --X--> INR",
+          "二甲双胍 --X--> 干咳",
+          "二甲双胍 --X--> 沙丁胺醇",
+          "SGLT-2抑制剂 --X--> 房室传导阻滞",
+          "噻托溴铵 --X--> 2型糖尿病",
+          "NT-proBNP --X--> 青霉素过敏",
+          "社区获得性肺炎 --X--> HbA1c",
+          "β受体阻滞剂 --X--> OGTT",
+          "受体阻滞剂 --X--> ACEI",
+          "受体阻滞剂 --X--> ARB",
+          "干咳 --X--> ACEI",
+          "干咳 --X--> ARB",
+          "18 μg --X--> LAMA",
+          "100-200 μg/次 --X--> SABA",
+          "沙丁胺醇 --X--> SABA",
+          "噻托溴铵 --X--> LAMA",
+          "格隆溴铵 --X--> LAMA",
+          "ACEI --X--> 受体阻滞剂"
+        ],
+        "graph_fp_items": [
+          "受体阻滞剂 --X--> ACEI",
+          "受体阻滞剂 --X--> ARB",
+          "干咳 --X--> ACEI",
+          "干咳 --X--> ARB",
+          "18 μg --X--> LAMA",
+          "100-200 μg/次 --X--> SABA",
+          "沙丁胺醇 --X--> SABA",
+          "噻托溴铵 --X--> LAMA",
+          "格隆溴铵 --X--> LAMA",
+          "ACEI --X--> 受体阻滞剂"
+        ]
+      }
+    },
+    "multi_hop": {
+      "baseline_1hop_hits": 11,
+      "graph_3hop_hits": 18,
+      "total": 24,
+      "baseline_1hop_accuracy": 45.83,
+      "graph_3hop_accuracy": 75.0,
+      "absolute_gain_pp": 29.17,
+      "misses": [
+        "mh_006",
+        "mh_012",
+        "mh_021",
+        "mh_022",
+        "mh_023",
+        "mh_024"
+      ]
+    },
+    "local_retrieval_answerability": {
+      "single_channel_top_k": 3,
+      "fusion_top_k_budget": 9,
+      "mode_summary": {
+        "vector_like": {
+          "hits": 17,
+          "total": 30,
+          "answerability": 56.67
+        },
+        "bm25_like": {
+          "hits": 17,
+          "total": 30,
+          "answerability": 56.67
+        },
+        "graph_like": {
+          "hits": 13,
+          "total": 30,
+          "answerability": 43.33
+        },
+        "fusion": {
+          "hits": 19,
+          "total": 30,
+          "answerability": 63.33
+        }
+      },
+      "type_summary": {
+        "vector_like": {
+          "simple": {
+            "hits": 7,
+            "total": 10,
+            "answerability": 70.0
+          },
+          "relation": {
+            "hits": 6,
+            "total": 8,
+            "answerability": 75.0
+          },
+          "multi_hop": {
+            "hits": 2,
+            "total": 8,
+            "answerability": 25.0
+          },
+          "global": {
+            "hits": 1,
+            "total": 3,
+            "answerability": 33.33
+          },
+          "temporal": {
+            "hits": 1,
+            "total": 1,
+            "answerability": 100.0
+          }
+        },
+        "bm25_like": {
+          "simple": {
+            "hits": 7,
+            "total": 10,
+            "answerability": 70.0
+          },
+          "relation": {
+            "hits": 6,
+            "total": 8,
+            "answerability": 75.0
+          },
+          "multi_hop": {
+            "hits": 2,
+            "total": 8,
+            "answerability": 25.0
+          },
+          "global": {
+            "hits": 1,
+            "total": 3,
+            "answerability": 33.33
+          },
+          "temporal": {
+            "hits": 1,
+            "total": 1,
+            "answerability": 100.0
+          }
+        },
+        "graph_like": {
+          "simple": {
+            "hits": 8,
+            "total": 10,
+            "answerability": 80.0
+          },
+          "relation": {
+            "hits": 4,
+            "total": 8,
+            "answerability": 50.0
+          },
+          "multi_hop": {
+            "hits": 0,
+            "total": 8,
+            "answerability": 0.0
+          },
+          "global": {
+            "hits": 1,
+            "total": 3,
+            "answerability": 33.33
+          },
+          "temporal": {
+            "hits": 0,
+            "total": 1,
+            "answerability": 0.0
+          }
+        },
+        "fusion": {
+          "simple": {
+            "hits": 9,
+            "total": 10,
+            "answerability": 90.0
+          },
+          "relation": {
+            "hits": 6,
+            "total": 8,
+            "answerability": 75.0
+          },
+          "multi_hop": {
+            "hits": 2,
+            "total": 8,
+            "answerability": 25.0
+          },
+          "global": {
+            "hits": 1,
+            "total": 3,
+            "answerability": 33.33
+          },
+          "temporal": {
+            "hits": 1,
+            "total": 1,
+            "answerability": 100.0
+          }
+        }
+      },
+      "fusion_gain_vs_best_single_pp": 6.66,
+      "multi_hop_fusion_answerability": 25.0,
+      "multi_hop_gain_vs_vector_pp": 0.0,
+      "rows": [
+        {
+          "id": "Q001",
+          "query_type": "simple",
+          "vector_like": true,
+          "bm25_like": true,
+          "graph_like": false,
+          "fusion": true
+        },
+        {
+          "id": "Q002",
+          "query_type": "relation",
+          "vector_like": true,
+          "bm25_like": true,
+          "graph_like": false,
+          "fusion": true
+        },
+        {
+          "id": "Q003",
+          "query_type": "simple",
+          "vector_like": false,
+          "bm25_like": false,
+          "graph_like": true,
+          "fusion": true
+        },
+        {
+          "id": "Q004",
+          "query_type": "multi_hop",
+          "vector_like": false,
+          "bm25_like": false,
+          "graph_like": false,
+          "fusion": false
+        },
+        {
+          "id": "Q005",
+          "query_type": "relation",
+          "vector_like": true,
+          "bm25_like": true,
+          "graph_like": true,
+          "fusion": true
+        },
+        {
+          "id": "Q006",
+          "query_type": "multi_hop",
+          "vector_like": true,
+          "bm25_like": true,
+          "graph_like": false,
+          "fusion": true
+        },
+        {
+          "id": "Q007",
+          "query_type": "simple",
+          "vector_like": false,
+          "bm25_like": false,
+          "graph_like": false,
+          "fusion": false
+        },
+        {
+          "id": "Q008",
+          "query_type": "multi_hop",
+          "vector_like": false,
+          "bm25_like": false,
+          "graph_like": false,
+          "fusion": false
+        },
+        {
+          "id": "Q009",
+          "query_type": "simple",
+          "vector_like": true,
+          "bm25_like": true,
+          "graph_like": true,
+          "fusion": true
+        },
+        {
+          "id": "Q010",
+          "query_type": "simple",
+          "vector_like": true,
+          "bm25_like": true,
+          "graph_like": true,
+          "fusion": true
+        },
+        {
+          "id": "Q011",
+          "query_type": "relation",
+          "vector_like": true,
+          "bm25_like": true,
+          "graph_like": true,
+          "fusion": true
+        },
+        {
+          "id": "Q012",
+          "query_type": "relation",
+          "vector_like": false,
+          "bm25_like": false,
+          "graph_like": false,
+          "fusion": false
+        },
+        {
+          "id": "Q013",
+          "query_type": "simple",
+          "vector_like": true,
+          "bm25_like": true,
+          "graph_like": true,
+          "fusion": true
+        },
+        {
+          "id": "Q014",
+          "query_type": "simple",
+          "vector_like": false,
+          "bm25_like": false,
+          "graph_like": true,
+          "fusion": true
+        },
+        {
+          "id": "Q015",
+          "query_type": "simple",
+          "vector_like": true,
+          "bm25_like": true,
+          "graph_like": true,
+          "fusion": true
+        },
+        {
+          "id": "Q016",
+          "query_type": "multi_hop",
+          "vector_like": true,
+          "bm25_like": true,
+          "graph_like": false,
+          "fusion": true
+        },
+        {
+          "id": "Q017",
+          "query_type": "global",
+          "vector_like": true,
+          "bm25_like": true,
+          "graph_like": true,
+          "fusion": true
+        },
+        {
+          "id": "Q018",
+          "query_type": "simple",
+          "vector_like": true,
+          "bm25_like": true,
+          "graph_like": true,
+          "fusion": true
+        },
+        {
+          "id": "Q019",
+          "query_type": "relation",
+          "vector_like": false,
+          "bm25_like": false,
+          "graph_like": false,
+          "fusion": false
+        },
+        {
+          "id": "Q020",
+          "query_type": "relation",
+          "vector_like": true,
+          "bm25_like": true,
+          "graph_like": true,
+          "fusion": true
+        },
+        {
+          "id": "Q021",
+          "query_type": "relation",
+          "vector_like": true,
+          "bm25_like": true,
+          "graph_like": false,
+          "fusion": true
+        },
+        {
+          "id": "Q022",
+          "query_type": "relation",
+          "vector_like": true,
+          "bm25_like": true,
+          "graph_like": true,
+          "fusion": true
+        },
+        {
+          "id": "Q023",
+          "query_type": "simple",
+          "vector_like": true,
+          "bm25_like": true,
+          "graph_like": true,
+          "fusion": true
+        },
+        {
+          "id": "Q024",
+          "query_type": "global",
+          "vector_like": false,
+          "bm25_like": false,
+          "graph_like": false,
+          "fusion": false
+        },
+        {
+          "id": "Q025",
+          "query_type": "multi_hop",
+          "vector_like": false,
+          "bm25_like": false,
+          "graph_like": false,
+          "fusion": false
+        },
+        {
+          "id": "Q026",
+          "query_type": "multi_hop",
+          "vector_like": false,
+          "bm25_like": false,
+          "graph_like": false,
+          "fusion": false
+        },
+        {
+          "id": "Q027",
+          "query_type": "multi_hop",
+          "vector_like": false,
+          "bm25_like": false,
+          "graph_like": false,
+          "fusion": false
+        },
+        {
+          "id": "Q028",
+          "query_type": "multi_hop",
+          "vector_like": false,
+          "bm25_like": false,
+          "graph_like": false,
+          "fusion": false
+        },
+        {
+          "id": "Q029",
+          "query_type": "temporal",
+          "vector_like": true,
+          "bm25_like": true,
+          "graph_like": false,
+          "fusion": true
+        },
+        {
+          "id": "Q030",
+          "query_type": "global",
+          "vector_like": false,
+          "bm25_like": false,
+          "graph_like": false,
+          "fusion": false
+        }
+      ]
+    },
+    "benchmark_snapshot": {
+      "available": true,
+      "modes": {
+        "cypher": {
+          "passed": 24,
+          "total": 30,
+          "accuracy": 80.0,
+          "errors": 0
+        },
+        "vector": {
+          "passed": 22,
+          "total": 30,
+          "accuracy": 73.33,
+          "errors": 0
+        }
+      },
+      "cypher_vs_vector_gain_pp": 6.67
+    }
+  },
+  "resume_copy_guardrails": [
+    "Do not claim production-scale or 10k-document performance from this corpus.",
+    "Do not report 100% metrics in resume copy; use them only as smoke-test evidence.",
+    "Use 'evidence answerability' unless generation and judge were actually run."
+  ]
+}

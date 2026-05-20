@@ -7,7 +7,7 @@ The system is designed for document-scale medical knowledge retrieval where plai
 ## Highlights
 
 - **Skeleton graph extraction**: ranks document chunks with KNN + PageRank, then applies selective LLM extraction to reduce full-document extraction cost.
-- **Dual-layer graph model**: stores `PhaseNode`/phrase-level entities and `PassageNode` evidence passages with `MENTIONED_IN` and `RELATED_TO` relationships.
+- **Dual-layer graph model**: stores `PhraseNode` entity nodes and `PassageNode` evidence passages with `MENTIONED_IN` and `RELATED_TO` relationships.
 - **Multi-channel retrieval**: combines vector search, BM25, graph traversal, hybrid search, and query-type routing.
 - **Self-correction loop**: uses LangGraph workflow state to evaluate retrieval quality, retry with a better tool, rewrite queries, and verify final claims against evidence.
 - **Typed API contract**: exposes FastAPI REST endpoints and MCP tools for querying, trace inspection, graph stats, and intent resolution.
@@ -22,7 +22,7 @@ Ingestion:
     -> Context enrichment
     -> Embedding
     -> Skeleton indexer: KNN -> PageRank -> selective extraction
-    -> Dual node builder: PhaseNode + PassageNode
+    -> Dual node builder: PhraseNode + PassageNode
     -> Neo4j vector index + knowledge graph
 
 Retrieval:
@@ -64,7 +64,29 @@ agentic-graph-rag/
 
 ## Current Evaluation Snapshot
 
-These numbers come from committed result files in `test/medical_benchmark/results/` and `data/assertion/`. They are useful as a reproducible snapshot, not as a universal claim across all medical corpora.
+These numbers come from committed result files in `test/medical_benchmark/results/`, `test/medical_benchmark/eval_gold/`, and `data/assertion/`. They are useful as a reproducible snapshot, not as a universal claim across all medical corpora. Metrics with tiny denominators or 100% values are kept in JSON for auditing but should not be used as headline claims.
+
+### Resume-Oriented Metrics
+
+Source: `test/medical_benchmark/results/resume_metrics.json`
+
+| Metric | Value | Denominator | Resume use |
+|---|---:|---:|---|
+| Skeleton deep-extraction cost proxy reduction | 68.75% | 16 chunks | No: small corpus |
+| Entity coverage gain vs skeleton-only baseline | +4.17 pp | 48 entities | Yes |
+| Entity extraction judged accuracy | 74.36% | 78 positive/negative entities | Yes |
+| Positive relation recall | 95.00% | 20 relations | Yes |
+| Relation false-positive rate | 33.33% | 30 hard negatives | Yes |
+| Relation false-positive reduction vs co-occurrence baseline | +33.34 pp | 30 hard negatives | Yes |
+| 3-hop graph accuracy | 75.00% | 24 multi-hop tasks | Yes |
+| 3-hop gain vs 1-hop baseline | +29.17 pp | 24 multi-hop tasks | Yes |
+| Fusion evidence answerability gain vs best single channel | +6.66 pp | 30 questions | Yes |
+
+Run it locally:
+
+```bash
+python scripts/evaluate_resume_metrics.py
+```
 
 ### Retrieval Benchmark
 
@@ -76,7 +98,6 @@ Source: `test/medical_benchmark/results/benchmark_results.json`
 | Overall accuracy | 73.33% | 80.00% |
 | Gain vs vector | - | +6.67 pp |
 | Multi-hop accuracy | 50.00% | 50.00% |
-| Global-query accuracy | 66.67% | 100.00% |
 | Average latency | 39,512 ms | 29,771 ms |
 
 ### Self-Correction And Verification
@@ -86,14 +107,10 @@ Source: `test/medical_benchmark/results/trace_eval_fixed_questions.json`
 | Metric | Value |
 |---|---:|
 | QA cases | 10 |
-| Verified answers | 10 / 10 |
-| Verified rate | 100.00% |
 | Cases with retrieval retry/tool switch | 4 / 10 |
 | Retry rate | 40.00% |
 | Atomic claims | 22 |
 | Supported claims | 22 / 22 |
-| Incorrect claims | 0 |
-| Hallucination proxy rate | 0.00% |
 
 ### Assertion Guard
 
@@ -272,7 +289,7 @@ Full-document LLM extraction is expensive and noisy. This project first builds a
 
 The graph separates entity-level structure from passage-level evidence:
 
-- `PhaseNode`: entity or phrase node.
+- `PhraseNode`: entity or phrase node.
 - `PassageNode`: source text passage.
 - `MENTIONED_IN`: connects an entity to the passage where it appears.
 - `RELATED_TO`: connects entities with extracted semantic relationships.
