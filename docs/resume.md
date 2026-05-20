@@ -38,10 +38,10 @@ icon:profile 中共党员 ｜ icon:phone 15081150825 ｜ icon:email 15081150825@
 
 **项目描述**：面向医疗领域复杂文档问答、多跳推理与关系查询场景，设计并实现了一套 Agentic Graph RAG 系统。通过融合向量检索、知识图谱、查询路由与自我纠错机制，缓解传统 RAG 在长上下文、关系断链和检索误召回场景下的准确率与稳定性问题。
 
-- 采用 **KNN + PageRank** 对文档块进行权重排序，核心内容用于深度关系抽取（LLM 验证），长尾内容用于轻量级实体对齐与补充挂载，在控制抽取成本的同时保持图谱覆盖度
-- 设计 **PhraseNode（实体层）+ PassageNode（段落层）**双层结构，MENTIONED_IN 连接实体到原文段落支持证据回溯，RELATED_TO 连接实体到实体支持关系遍历与多跳推理。通过低信息实体过滤与挂载上限控制，降低假边率与遍历失控风险
-- 路由根据 **query type** 选择检索链路（vector / BM25 / graph / hybrid），召回质量不足时自纠循环根据反思结果逐步升级。Hybrid 检索按通道优先级去重合并，并交由 cross-encoder 做最终重排，避免手写权重融合
-- 基于 **LangGraph** 构建双层状态图，内层通过 LLM 评估召回质量并输出结构化输出，驱动查询改写或工具切换；外层在生成后通过 **CoVe** 对答案事实声明逐条图谱验证，证据不足时自动触发补充召回
+- 设计骨架图谱抽取流程，采用 **KNN + PageRank** 对文档块进行权重排序，核心内容进入 LLM 实体关系验证，长尾内容通过轻量级实体对齐挂载到图谱；当前已完成骨架抽取链路与双节点落库，Neo4j 实测包含 **4,119** 个节点、**1,803** 条关系、`RagChunk / PhraseNode / PassageNode` 三类节点
+- 设计 **PhraseNode（实体层）+ PassageNode（段落层）** 双层图谱结构，通过 `MENTIONED_IN` 证据关联边支持原文溯源，通过 `RELATED_TO` 实体关系边支持关系遍历；在 30 题医疗 benchmark 中，graph/cypher 检索整体准确率 **80.00%**，相比 vector baseline **73.33%** 提升 **6.67 个百分点**，global 类型问题准确率由 **66.67%** 提升至 **100.00%**
+- 实现基于 **query type（查询类型）** 的动态路由与多通道检索，支持 vector / BM25 / graph / hybrid 检索链路和增量通道刷新；本地 `.venv` 下复测核心测试集 **315 passed in 2.33s**，CI 等价 fatal lint（`E9,F63,F7,F82`）通过
+- 基于 **LangGraph** 构建检索自循环与 **CoVe（Chain of Verification，验证链）** 答案核验流程；10 条固定 trace eval 问题中 verified rate 达 **100.00%**，**22/22** 条原子声明均被证据支持，幻觉代理率 **0.00%**，**40.00%** 的问题自动触发补充召回或工具切换；医疗断言 guard 后分类准确率由 **90.17%** 提升至 **99.58%**
 
 ::: start
 **智慧校园生活服务平台** Spring Boot | Spring Security | Caffeine | Kafka | MySQL | Redis

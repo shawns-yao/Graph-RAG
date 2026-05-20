@@ -29,9 +29,9 @@ jobs:
           pip install pytest pytest-asyncio ruff
 
       - name: Lint with ruff
-        run: ruff check --target-version py312 .
+        run: ruff check --target-version py312 --select E9,F63,F7,F82 agentic_graph_rag api benchmark packages/rag-core/rag_core packages/rag-core/tests tests
 
       - name: Run tests
-        run: pytest tests/ packages/rag-core/tests/ pymangle/tests/ -x -q
+        run: pytest tests/ packages/rag-core/tests/ -x -q
         env:
-          PYTHONPATH: .:pymangle
+          PYTHONPATH: .

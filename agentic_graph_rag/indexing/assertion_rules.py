@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import asdict, dataclass
-from typing import Literal
+from typing import Iterable, Literal
 
 AssertionLabel = Literal[
     "affirmed",
