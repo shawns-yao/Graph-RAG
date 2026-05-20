@@ -6,7 +6,9 @@
     "corpus_chunks": 16,
     "graph_phrase_nodes": 2787,
     "graph_related_to_edges": 235,
-    "graph_passages": 1316
+    "graph_passages": 1316,
+    "bootstrap_runs": 200,
+    "bootstrap_seed": 20260520
   },
   "metrics": {
     "skeleton_deep_extraction_cost_reduction": {
@@ -81,7 +83,238 @@
       "total_chunks": 16,
       "skeletal_chunks": 5,
       "peripheral_chunks": 11,
-      "deep_extraction_cost_reduction": 68.75
+      "deep_extraction_cost_reduction": 68.75,
+      "selection_trace": {
+        "selection_method": "formula: KNN graph -> PageRank -> blended score (PageRank + entity density + medical section prior + hard-fact signal) -> greedy diversity selection",
+        "manual_selection": false,
+        "beta": 0.35,
+        "formula": "n_skeletal = max(1, int(total_chunks * beta)); small docs may keep at least 2",
+        "selected_count": 5,
+        "selected": [
+          {
+            "rank": 1,
+            "index": 11,
+            "chunk_id": "c9ea1599",
+            "score": 0.839914,
+            "selected": true
+          },
+          {
+            "rank": 2,
+            "index": 5,
+            "chunk_id": "7a25e64c",
+            "score": 0.820122,
+            "selected": true
+          },
+          {
+            "rank": 3,
+            "index": 2,
+            "chunk_id": "2b47a9f8",
+            "score": 0.777661,
+            "selected": true
+          },
+          {
+            "rank": 4,
+            "index": 8,
+            "chunk_id": "a29f33f2",
+            "score": 0.753451,
+            "selected": true
+          },
+          {
+            "rank": 5,
+            "index": 12,
+            "chunk_id": "ccc2b977",
+            "score": 0.732499,
+            "selected": true
+          },
+          {
+            "rank": 6,
+            "index": 3,
+            "chunk_id": "569993a4",
+            "score": 0.693306,
+            "selected": false
+          },
+          {
+            "rank": 7,
+            "index": 14,
+            "chunk_id": "e273db16",
+            "score": 0.687933,
+            "selected": false
+          },
+          {
+            "rank": 8,
+            "index": 6,
+            "chunk_id": "9467e563",
+            "score": 0.650678,
+            "selected": false
+          },
+          {
+            "rank": 9,
+            "index": 10,
+            "chunk_id": "c7b84efe",
+            "score": 0.618669,
+            "selected": false
+          },
+          {
+            "rank": 10,
+            "index": 4,
+            "chunk_id": "759b0768",
+            "score": 0.592024,
+            "selected": false
+          },
+          {
+            "rank": 11,
+            "index": 13,
+            "chunk_id": "db11ead1",
+            "score": 0.519765,
+            "selected": false
+          },
+          {
+            "rank": 12,
+            "index": 0,
+            "chunk_id": "22fb2d7e",
+            "score": 0.488511,
+            "selected": false
+          },
+          {
+            "rank": 13,
+            "index": 9,
+            "chunk_id": "c656706e",
+            "score": 0.356935,
+            "selected": false
+          },
+          {
+            "rank": 14,
+            "index": 7,
+            "chunk_id": "a0b336aa",
+            "score": 0.333118,
+            "selected": false
+          },
+          {
+            "rank": 15,
+            "index": 1,
+            "chunk_id": "28080b21",
+            "score": 0.271178,
+            "selected": false
+          },
+          {
+            "rank": 16,
+            "index": 15,
+            "chunk_id": "fb37f433",
+            "score": 0.246666,
+            "selected": false
+          }
+        ]
+      },
+      "bootstrap_stability": {
+        "enabled": true,
+        "method": "bootstrap subsampling without replacement from the current Neo4j chunk set",
+        "runs": 200,
+        "seed": 20260520,
+        "sample_size": 12,
+        "source_chunk_count": 16,
+        "independent_corpus": false,
+        "warning": "Repeated runs measure selection stability on the current corpus, not production-scale generalization.",
+        "cost_reduction": {
+          "mean": 66.67,
+          "stdev": 0.0,
+          "min": 66.67,
+          "p05": 66.67,
+          "median": 66.67,
+          "p95": 66.67,
+          "max": 66.67
+        },
+        "skeleton_entity_coverage": {
+          "mean": 79.52,
+          "stdev": 12.07,
+          "min": 45.83,
+          "p05": 62.5,
+          "median": 79.17,
+          "p95": 95.83,
+          "max": 100.0
+        },
+        "first_10_runs": [
+          {
+            "run": 1,
+            "sample_chunks": 12,
+            "skeletal_chunks": 4,
+            "peripheral_chunks": 8,
+            "cost_reduction": 66.67,
+            "skeleton_entity_coverage": 62.5
+          },
+          {
+            "run": 2,
+            "sample_chunks": 12,
+            "skeletal_chunks": 4,
+            "peripheral_chunks": 8,
+            "cost_reduction": 66.67,
+            "skeleton_entity_coverage": 89.58
+          },
+          {
+            "run": 3,
+            "sample_chunks": 12,
+            "skeletal_chunks": 4,
+            "peripheral_chunks": 8,
+            "cost_reduction": 66.67,
+            "skeleton_entity_coverage": 95.83
+          },
+          {
+            "run": 4,
+            "sample_chunks": 12,
+            "skeletal_chunks": 4,
+            "peripheral_chunks": 8,
+            "cost_reduction": 66.67,
+            "skeleton_entity_coverage": 93.75
+          },
+          {
+            "run": 5,
+            "sample_chunks": 12,
+            "skeletal_chunks": 4,
+            "peripheral_chunks": 8,
+            "cost_reduction": 66.67,
+            "skeleton_entity_coverage": 89.58
+          },
+          {
+            "run": 6,
+            "sample_chunks": 12,
+            "skeletal_chunks": 4,
+            "peripheral_chunks": 8,
+            "cost_reduction": 66.67,
+            "skeleton_entity_coverage": 66.67
+          },
+          {
+            "run": 7,
+            "sample_chunks": 12,
+            "skeletal_chunks": 4,
+            "peripheral_chunks": 8,
+            "cost_reduction": 66.67,
+            "skeleton_entity_coverage": 79.17
+          },
+          {
+            "run": 8,
+            "sample_chunks": 12,
+            "skeletal_chunks": 4,
+            "peripheral_chunks": 8,
+            "cost_reduction": 66.67,
+            "skeleton_entity_coverage": 68.75
+          },
+          {
+            "run": 9,
+            "sample_chunks": 12,
+            "skeletal_chunks": 4,
+            "peripheral_chunks": 8,
+            "cost_reduction": 66.67,
+            "skeleton_entity_coverage": 89.58
+          },
+          {
+            "run": 10,
+            "sample_chunks": 12,
+            "skeletal_chunks": 4,
+            "peripheral_chunks": 8,
+            "cost_reduction": 66.67,
+            "skeleton_entity_coverage": 79.17
+          }
+        ]
+      }
     },
     "entities": {
       "baseline_skeleton_only": {
@@ -605,6 +838,7 @@
   "resume_copy_guardrails": [
     "Do not claim production-scale or 10k-document performance from this corpus.",
     "Do not report 100% metrics in resume copy; use them only as smoke-test evidence.",
-    "Use 'evidence answerability' unless generation and judge were actually run."
+    "Use 'evidence answerability' unless generation and judge were actually run.",
+    "Bootstrap rows are repeated subsamples from the same corpus; use them for stability, not as independent documents."
   ]
 }

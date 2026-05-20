@@ -73,6 +73,8 @@ Source: `test/medical_benchmark/results/resume_metrics.json`
 | Metric | Value | Denominator | Resume use |
 |---|---:|---:|---|
 | Skeleton deep-extraction cost proxy reduction | 68.75% | 16 chunks | No: small corpus |
+| Skeleton cost proxy reduction, bootstrap mean | 66.67% | 200 subsample runs | No: same corpus stability only |
+| Skeleton-only entity coverage, bootstrap mean | 79.52% | 200 subsample runs | No: same corpus stability only |
 | Entity coverage gain vs skeleton-only baseline | +4.17 pp | 48 entities | Yes |
 | Entity extraction judged accuracy | 74.36% | 78 positive/negative entities | Yes |
 | Positive relation recall | 95.00% | 20 relations | Yes |
@@ -85,8 +87,10 @@ Source: `test/medical_benchmark/results/resume_metrics.json`
 Run it locally:
 
 ```bash
-python scripts/evaluate_resume_metrics.py
+python scripts/evaluate_resume_metrics.py --bootstrap-runs 200
 ```
+
+The skeleton chunks are not manually selected. The evaluator calls the project selection code: KNN graph -> PageRank -> blended score using PageRank, entity density, medical section prior, and hard-fact signal -> greedy diversity selection. Bootstrap rows are repeated subsamples from the same corpus, so they measure stability of the selector, not independent 10k-document scalability.
 
 ### Retrieval Benchmark
 

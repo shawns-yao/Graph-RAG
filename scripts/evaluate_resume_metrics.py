@@ -21,6 +21,7 @@ from __future__ import annotations
 import argparse
 import json
 import math
+import random
 import re
 import sys
 from collections import defaultdict
@@ -34,8 +35,10 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
 from agentic_graph_rag.indexing.skeleton import (
+    _rank_chunks_for_skeleton_selection,
     build_knn_graph,
     compute_pagerank,
+    resolve_skeleton_beta,
     select_skeletal_chunks,
 )
 from rag_core.config import get_settings
@@ -45,6 +48,8 @@ DEFAULT_GOLD = ROOT / "test" / "medical_benchmark" / "eval_gold" / "medical_resu
 DEFAULT_BENCHMARK = ROOT / "test" / "medical_benchmark" / "results" / "benchmark_results.json"
 DEFAULT_QUESTIONS = ROOT / "test" / "medical_benchmark" / "questions_master.json"
 DEFAULT_OUTPUT = ROOT / "test" / "medical_benchmark" / "results" / "resume_metrics.json"
+DEFAULT_BOOTSTRAP_RUNS = 200
+DEFAULT_BOOTSTRAP_SEED = 20260520
 
 
 def _norm(text: object) -> str:
@@ -186,6 +191,126 @@ def _select_skeleton(chunks: list[Chunk]) -> tuple[list[Chunk], list[Chunk]]:
     graph = build_knn_graph(chunks, embeddings)
     pagerank = compute_pagerank(graph)
     return select_skeletal_chunks(chunks, pagerank)
+
+
+def _skeleton_selection_trace(chunks: list[Chunk]) -> dict[str, Any]:
+    embeddings = [chunk.embedding for chunk in chunks]
+    if not chunks or any(not emb for emb in embeddings):
+        return {
+            "selection_method": "unavailable: missing embeddings",
+            "beta": 0.0,
+            "formula": "not applied",
+            "selected": [],
+        }
+
+    graph = build_knn_graph(chunks, embeddings)
+    pagerank = compute_pagerank(graph)
+    beta = resolve_skeleton_beta(chunks)
+    ranked_scores = _rank_chunks_for_skeleton_selection(chunks, pagerank)
+    skeletal, _ = select_skeletal_chunks(chunks, pagerank, beta=beta)
+    selected_ids = {chunk.id for chunk in skeletal}
+    ranked = sorted(ranked_scores.items(), key=lambda item: item[1], reverse=True)
+    return {
+        "selection_method": (
+            "formula: KNN graph -> PageRank -> blended score "
+            "(PageRank + entity density + medical section prior + hard-fact signal) "
+            "-> greedy diversity selection"
+        ),
+        "manual_selection": False,
+        "beta": round(beta, 4),
+        "formula": "n_skeletal = max(1, int(total_chunks * beta)); small docs may keep at least 2",
+        "selected_count": len(skeletal),
+        "selected": [
+            {
+                "rank": rank + 1,
+                "index": index,
+                "chunk_id": chunks[index].id,
+                "score": round(score, 6),
+                "selected": chunks[index].id in selected_ids,
+            }
+            for rank, (index, score) in enumerate(ranked)
+        ],
+    }
+
+
+def _percentile(values: list[float], percentile: float) -> float:
+    if not values:
+        return 0.0
+    ordered = sorted(values)
+    position = (len(ordered) - 1) * percentile
+    lower = math.floor(position)
+    upper = math.ceil(position)
+    if lower == upper:
+        return round(ordered[int(position)], 2)
+    weight = position - lower
+    return round(ordered[lower] * (1 - weight) + ordered[upper] * weight, 2)
+
+
+def _summarize_distribution(values: list[float]) -> dict[str, float]:
+    if not values:
+        return {"mean": 0.0, "stdev": 0.0, "min": 0.0, "p05": 0.0, "median": 0.0, "p95": 0.0, "max": 0.0}
+    mean = sum(values) / len(values)
+    variance = sum((value - mean) ** 2 for value in values) / len(values)
+    return {
+        "mean": round(mean, 2),
+        "stdev": round(math.sqrt(variance), 2),
+        "min": round(min(values), 2),
+        "p05": _percentile(values, 0.05),
+        "median": _percentile(values, 0.5),
+        "p95": _percentile(values, 0.95),
+        "max": round(max(values), 2),
+    }
+
+
+def _bootstrap_skeleton_stability(
+    chunks: list[Chunk],
+    gold_entities: list[dict[str, Any]],
+    *,
+    runs: int = DEFAULT_BOOTSTRAP_RUNS,
+    seed: int = DEFAULT_BOOTSTRAP_SEED,
+) -> dict[str, Any]:
+    valid_chunks = [chunk for chunk in chunks if chunk.embedding]
+    if len(valid_chunks) < 4 or runs <= 0:
+        return {"enabled": False, "reason": "not enough chunks with embeddings"}
+
+    rng = random.Random(seed)
+    sample_size = max(4, int(round(len(valid_chunks) * 0.75)))
+    sample_size = min(sample_size, len(valid_chunks))
+    rows: list[dict[str, Any]] = []
+    cost_reductions: list[float] = []
+    entity_coverages: list[float] = []
+
+    for run_index in range(runs):
+        sample = rng.sample(valid_chunks, sample_size)
+        skeletal, peripheral = _select_skeleton(sample)
+        coverage = _baseline_entity_coverage(gold_entities, skeletal)["coverage"]
+        cost_reduction = _pct(len(sample) - len(skeletal), len(sample))
+        rows.append(
+            {
+                "run": run_index + 1,
+                "sample_chunks": len(sample),
+                "skeletal_chunks": len(skeletal),
+                "peripheral_chunks": len(peripheral),
+                "cost_reduction": cost_reduction,
+                "skeleton_entity_coverage": coverage,
+            }
+        )
+        cost_reductions.append(cost_reduction)
+        entity_coverages.append(coverage)
+
+    return {
+        "enabled": True,
+        "method": "bootstrap subsampling without replacement from the current Neo4j chunk set",
+        "runs": runs,
+        "seed": seed,
+        "sample_size": sample_size,
+        "source_chunk_count": len(valid_chunks),
+        "independent_corpus": False,
+        "warning": "Repeated runs measure selection stability on the current corpus, not production-scale generalization.",
+        "cost_reduction": _summarize_distribution(cost_reductions),
+        "skeleton_entity_coverage": _summarize_distribution(entity_coverages),
+        "first_10_runs": rows[:10],
+    }
 
 
 def _baseline_entity_candidates(skeletal_chunks: list[Chunk]) -> set[str]:
@@ -571,7 +696,14 @@ def _load_benchmark_snapshot(path: Path) -> dict[str, Any]:
     return out
 
 
-def evaluate(gold_path: Path, benchmark_path: Path, questions_path: Path) -> dict[str, Any]:
+def evaluate(
+    gold_path: Path,
+    benchmark_path: Path,
+    questions_path: Path,
+    *,
+    bootstrap_runs: int = DEFAULT_BOOTSTRAP_RUNS,
+    bootstrap_seed: int = DEFAULT_BOOTSTRAP_SEED,
+) -> dict[str, Any]:
     load_dotenv(ROOT / ".env")
     gold = _load_gold(gold_path)
     cfg = get_settings()
@@ -581,6 +713,13 @@ def evaluate(gold_path: Path, benchmark_path: Path, questions_path: Path) -> dic
         chunks = _load_chunks(session)
         graph = _load_graph(session)
         skeletal, peripheral = _select_skeleton(chunks)
+        skeleton_trace = _skeleton_selection_trace(chunks)
+        bootstrap = _bootstrap_skeleton_stability(
+            chunks,
+            gold["entities"],
+            runs=bootstrap_runs,
+            seed=bootstrap_seed,
+        )
         questions = _load_questions(questions_path)
 
         entity_graph = _entity_coverage(gold["entities"], graph["phrases"])
@@ -613,6 +752,8 @@ def evaluate(gold_path: Path, benchmark_path: Path, questions_path: Path) -> dic
             "graph_phrase_nodes": len(graph["phrases"]),
             "graph_related_to_edges": len(graph["relationships"]),
             "graph_passages": len(graph["passages"]),
+            "bootstrap_runs": bootstrap_runs,
+            "bootstrap_seed": bootstrap_seed,
         },
         "metrics": {
             "skeleton_deep_extraction_cost_reduction": _metric(
@@ -661,6 +802,8 @@ def evaluate(gold_path: Path, benchmark_path: Path, questions_path: Path) -> dic
                 "skeletal_chunks": skeletal_count,
                 "peripheral_chunks": len(peripheral),
                 "deep_extraction_cost_reduction": cost_reduction,
+                "selection_trace": skeleton_trace,
+                "bootstrap_stability": bootstrap,
             },
             "entities": {
                 "baseline_skeleton_only": entity_baseline,
@@ -680,6 +823,7 @@ def evaluate(gold_path: Path, benchmark_path: Path, questions_path: Path) -> dic
             "Do not claim production-scale or 10k-document performance from this corpus.",
             "Do not report 100% metrics in resume copy; use them only as smoke-test evidence.",
             "Use 'evidence answerability' unless generation and judge were actually run.",
+            "Bootstrap rows are repeated subsamples from the same corpus; use them for stability, not as independent documents.",
         ],
     }
 
@@ -690,9 +834,17 @@ def main() -> None:
     parser.add_argument("--benchmark-results", type=Path, default=DEFAULT_BENCHMARK)
     parser.add_argument("--questions", type=Path, default=DEFAULT_QUESTIONS)
     parser.add_argument("--output", type=Path, default=DEFAULT_OUTPUT)
+    parser.add_argument("--bootstrap-runs", type=int, default=DEFAULT_BOOTSTRAP_RUNS)
+    parser.add_argument("--bootstrap-seed", type=int, default=DEFAULT_BOOTSTRAP_SEED)
     args = parser.parse_args()
 
-    payload = evaluate(args.gold, args.benchmark_results, args.questions)
+    payload = evaluate(
+        args.gold,
+        args.benchmark_results,
+        args.questions,
+        bootstrap_runs=args.bootstrap_runs,
+        bootstrap_seed=args.bootstrap_seed,
+    )
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
     print(json.dumps(payload["metrics"], ensure_ascii=False, indent=2))
